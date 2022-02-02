@@ -19,20 +19,17 @@ enum GateKind {
 struct Gate {
     kind: GateKind,
     output: usize,
-    inputs: Vec<usize>
+    inputs: Vec<usize>,
 }
 
-
-struct Circuit
-{
+struct Circuit {
     gates: Vec<Gate>,
     num_inputs: usize,
     num_outputs: usize,
-    num_wires : usize,
+    num_wires: usize,
 }
 
-impl Circuit
-{
+impl Circuit {
     fn evaluate(&self, input: Vec<bool>) -> Vec<bool> {
         let mut wires = vec![false; self.num_wires];
 
@@ -45,28 +42,25 @@ impl Circuit
             wires[gate.output] = match gate.kind {
                 GateKind::NOT => !wires[gate.inputs[0]],
                 GateKind::AND => wires[gate.inputs[0]] && wires[gate.inputs[1]],
-                GateKind::XOR => wires[gate.inputs[0]]  ^ wires[gate.inputs[1]],
-                GateKind::OR  => wires[gate.inputs[0]] || wires[gate.inputs[1]],
-                _ => false
+                GateKind::XOR => wires[gate.inputs[0]] ^ wires[gate.inputs[1]],
+                GateKind::OR => wires[gate.inputs[0]] || wires[gate.inputs[1]],
+                _ => false,
             };
         }
 
-        return wires[(wires.len() - self.num_outputs)..wires.len()].to_vec()
+        return wires[(wires.len() - self.num_outputs)..wires.len()].to_vec();
     }
 }
 
 // -------------------------------------------------------------------------------------------------
 // Yao stuff
 
-
 const SECURITY_BYTES: usize = 16;
 type Primitive = [u8; SECURITY_BYTES];
 
-
 type Primitives = [Primitive; 2];
 
-fn xor(left: Primitive, right: Primitive) -> Primitive
-{
+fn xor(left: Primitive, right: Primitive) -> Primitive {
     let mut result = [0u8; SECURITY_BYTES];
     for i in 0..SECURITY_BYTES {
         result[i] = left[i] ^ right[i];
@@ -76,8 +70,7 @@ fn xor(left: Primitive, right: Primitive) -> Primitive
 }
 
 use sha2ni::Digest;
-fn G(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive)
-{
+fn G(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive) {
     // TODO(frm): This is probably not the best way to do it!
     let mut sha = sha2ni::Sha256::new();
     sha.input(left);
@@ -99,10 +92,9 @@ fn G(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive)
     return (l_result, r_result);
 }
 
-use ring::rand::SystemRandom;
 use ring::rand::SecureRandom;
-fn random_primitives() -> [Primitive; 2]
-{
+use ring::rand::SystemRandom;
+fn random_primitives() -> [Primitive; 2] {
     let random = SystemRandom::new();
 
     let mut left = [0u8; SECURITY_BYTES];
@@ -114,8 +106,7 @@ fn random_primitives() -> [Primitive; 2]
     return [left, right];
 }
 
-fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>)
-{
+fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>) {
     let mut k: Vec<Primitives> = Vec::with_capacity(circuit.num_wires);
 
     // 1. Pick key pairs for the inputs wires
@@ -133,15 +124,21 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>)
         // Binary gates
         // TODO(frm): Magic many input gates?
         let mut c: [Primitives; 4] = [[[0u8; SECURITY_BYTES]; 2]; 4];
-        let combinations = [(0,0), (0,1), (1,0), (1,1)];
+        let combinations = [(0, 0), (0, 1), (1, 0), (1, 1)];
         for j in 0..combinations.len() {
             let (left, right) = combinations[j];
-            let gate_value= match gate.kind {
-                GateKind::NOT => if left == 1 { 0 } else { 1},
+            let gate_value = match gate.kind {
+                GateKind::NOT => {
+                    if left == 1 {
+                        0
+                    } else {
+                        1
+                    }
+                }
                 GateKind::AND => left & right,
                 GateKind::XOR => left ^ right,
-                GateKind::OR  => left | right,
-                _ => 0
+                GateKind::OR => left | right,
+                _ => 0,
             };
             let garbled_value = k[gate.output][gate_value];
             let (g_left, g_right) = G(k[gate.inputs[0]][left], k[gate.inputs[1]][right], i);
@@ -155,42 +152,30 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>)
     return (e, d);
 }
 
-fn yao_encode(circuit: &Circuit)
-{
+fn yao_encode(circuit: &Circuit) {}
 
-}
+fn yao_evaluate(circuit: &Circuit) {}
 
-fn yao_evaluate(circuit: &Circuit)
-{
-
-}
-
-fn yao_decode(circuit: &Circuit)
-{
-
-}
-
-
-
+fn yao_decode(circuit: &Circuit) {}
 
 // -------------------------------------------------------------------------------------------------
 // fun times ahead
 fn main() {
     let circuit = Circuit {
-        gates: vec!(Gate {
+        gates: vec![Gate {
             kind: GateKind::AND,
-            inputs: vec!(0, 1),
-            output: 2
-        }),
-        num_inputs:  2,
+            inputs: vec![0, 1],
+            output: 2,
+        }],
+        num_inputs: 2,
         num_outputs: 1,
-        num_wires:   3,
+        num_wires: 3,
     };
 
     let (e, d) = yao_garble(&circuit);
     println!("IT IS NOW IN USE! {}", e.len() + d.len());
 
-    let result = circuit.evaluate(vec!(true, true));
+    let result = circuit.evaluate(vec![true, true]);
 
     println!("Result is {}", result[0]);
 }
