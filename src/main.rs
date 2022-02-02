@@ -1,4 +1,4 @@
-use std;
+#![allow(dead_code)]
 
 // -------------------------------------------------------------------------------------------------
 // Circuit stuff
@@ -59,6 +59,116 @@ impl Circuit
 // Yao stuff
 
 
+const SECURITY_BYTES: usize = 16;
+type Primitive = [u8; SECURITY_BYTES];
+
+
+type Primitives = [Primitive; 2];
+
+fn xor(left: Primitive, right: Primitive) -> Primitive
+{
+    let mut result = [0u8; SECURITY_BYTES];
+    for i in 0..SECURITY_BYTES {
+        result[i] = left[i] ^ right[i];
+    }
+
+    return result;
+}
+
+use sha2ni::Digest;
+fn G(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive)
+{
+    // TODO(frm): This is probably not the best way to do it!
+    let mut sha = sha2ni::Sha256::new();
+    sha.input(left);
+    sha.input(right);
+
+    use std::mem::transmute;
+    let index: [u8; 4] = unsafe { transmute((index as u32).to_be()) };
+    sha.input(index);
+
+    // TODO(frm): What if the sizes are out of bounds?
+    let digest = sha.result();
+    let mut l_result = [0u8; SECURITY_BYTES];
+    let mut r_result = [0u8; SECURITY_BYTES];
+    for i in 0..SECURITY_BYTES {
+        l_result[i] = digest[i];
+        r_result[i] = digest[16 - i];
+    }
+
+    return (l_result, r_result);
+}
+
+use ring::rand::SystemRandom;
+use ring::rand::SecureRandom;
+fn random_primitives() -> [Primitive; 2]
+{
+    let random = SystemRandom::new();
+
+    let mut left = [0u8; SECURITY_BYTES];
+    let _ = random.fill(&mut left);
+
+    let mut right = [0u8; SECURITY_BYTES];
+    let _ = random.fill(&mut right);
+
+    return [left, right];
+}
+
+fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>)
+{
+    let mut k: Vec<Primitives> = Vec::with_capacity(circuit.num_wires);
+
+    // 1. Pick key pairs for the inputs wires
+    for _ in 0..circuit.num_wires {
+        k.push(random_primitives());
+    }
+    let e = k[..circuit.num_inputs].to_vec();
+
+    // 2. Gooble garble
+    for i in 0..circuit.gates.len() {
+        let gate = &circuit.gates[i];
+
+        // TODO(frm): NOT gates are special
+
+        // Binary gates
+        // TODO(frm): Magic many input gates?
+        let mut c: [Primitives; 4] = [[[0u8; SECURITY_BYTES]; 2]; 4];
+        let combinations = [(0,0), (0,1), (1,0), (1,1)];
+        for j in 0..combinations.len() {
+            let (left, right) = combinations[j];
+            let gate_value= match gate.kind {
+                GateKind::NOT => if left == 1 { 0 } else { 1},
+                GateKind::AND => left & right,
+                GateKind::XOR => left ^ right,
+                GateKind::OR  => left | right,
+                _ => 0
+            };
+            let garbled_value = k[gate.output][gate_value];
+            let (g_left, g_right) = G(k[gate.inputs[0]][left], k[gate.inputs[1]][right], i);
+            c[1 * left + 2 * right] = [xor(g_left, garbled_value), g_right];
+        }
+    }
+    // TODO(frm): Return something with F
+
+    // 3. Decoding information
+    let d = k[(circuit.num_wires - circuit.num_outputs)..].to_vec();
+    return (e, d);
+}
+
+fn yao_encode(circuit: &Circuit)
+{
+
+}
+
+fn yao_evaluate(circuit: &Circuit)
+{
+
+}
+
+fn yao_decode(circuit: &Circuit)
+{
+
+}
 
 
 
@@ -76,6 +186,9 @@ fn main() {
         num_outputs: 1,
         num_wires:   3,
     };
+
+    let (e, d) = yao_garble(&circuit);
+    println!("IT IS NOW IN USE! {}", e.len() + d.len());
 
     let result = circuit.evaluate(vec!(true, true));
 
