@@ -1,58 +1,13 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-// -------------------------------------------------------------------------------------------------
-// Circuit stuff
-#[derive(PartialEq)]
-enum GateKind {
-    // Unary
-    NOT,
-
-    // Binary
-    AND,
-    OR,
-    XOR,
-
-}
-
-struct Gate {
-    kind: GateKind,
-    output: usize,
-    inputs: Vec<usize>,
-}
-
-struct Circuit {
-    gates: Vec<Gate>,
-    num_inputs: usize,
-    num_outputs: usize,
-    num_wires: usize,
-}
-
-impl Circuit {
-    fn evaluate(&self, input: Vec<bool>) -> Vec<bool> {
-        let mut wires = vec![false; self.num_wires];
-
-        for i in 0..input.len() {
-            wires[i] = input[i];
-        }
-
-        // TODO: Support magic several input gates
-        for gate in &self.gates {
-            wires[gate.output] = match gate.kind {
-                GateKind::NOT => !wires[gate.inputs[0]],
-                GateKind::AND => wires[gate.inputs[0]] && wires[gate.inputs[1]],
-                GateKind::XOR => wires[gate.inputs[0]] ^ wires[gate.inputs[1]],
-                GateKind::OR => wires[gate.inputs[0]] || wires[gate.inputs[1]],
-                _ => false,
-            };
-        }
-
-        return wires[(wires.len() - self.num_outputs)..wires.len()].to_vec();
-    }
-}
+mod arith;
+mod circuits;
+use crate::circuits::{Circuit, GateKind, Gate};
 
 // -------------------------------------------------------------------------------------------------
 // Yao stuff
+//
 
 const SECURITY_BYTES: usize = 16;
 type Primitive = [u8; SECURITY_BYTES];
@@ -126,6 +81,8 @@ fn random_primitives() -> [Primitive; 2] {
     return [left, right];
 }
 
+
+
 fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Primitives; 4]>) {
     let mut k: Vec<Primitives> = vec![[[0; SECURITY_BYTES]; 2]; circuit.num_wires];
 
@@ -156,7 +113,6 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Prim
                 GateKind::AND => left && right,
                 GateKind::XOR => left ^ right,
                 GateKind::OR => left || right,
-                _ => false,
             };
             let garbled_value = k[gate.output as usize][gate_value as usize];
             let (g_left, g_right) = prf(
@@ -250,88 +206,6 @@ fn yao_decode(circuit: &Circuit, d: &Vec<Primitives>, z: &Vec<Primitive>) -> (bo
     }
 
     return (success, y);
-}
-
-// -------------------------------------------------------------------------------------------------
-//
-//
-struct NewCircuit {
-    wiredomains: Vec<u64>,
-    inputdomains : Vec<u64>,
-    num_inputs : usize,
-    gates : Vec<NewGate>
-}
-
-#[derive(PartialEq)]
-enum NewGateKind {
-    ADD,
-    MULT(u64),
-    PROJ(u64, fn(u64) -> u64),
-}
-
-struct NewGate {
-    kind: NewGateKind,
-    output: usize,
-    inputs: Vec<usize>,
-}
-
-
-fn log2(x : u64) -> u64 {
-    (std::mem::size_of::<u64>() as u64) * 8 - (x.leading_zeros() as u64)
-}
-
-fn hash(a : u64, b : u64) -> u64 {
-    // This is super nice 😎
-    use ring::digest::SHA256;
-    use ring::digest::Context;
-    let mut digest = Context::new(&SHA256);
-    digest.update(&a.to_be_bytes());
-    digest.update(&b.to_be_bytes());
-    return u64::from_be_bytes(digest.finish().as_ref().try_into().unwrap());
-}
-
-fn garble(k : u64, circuit : NewCircuit) {
-    fn rng(max : u64) -> u64 {
-        rand::thread_rng().gen_range(0..4)
-    }
-    fn lsb(a : u64) -> u64 {
-        (a & 1 == 1) as u64
-    }
-    let mut lambda = Vec::new();
-    let mut delta = Vec::new();
-    for (i,&m) in circuit.wiredomains.iter().enumerate() {
-        lambda.push(k / log2(m));
-        delta.push(rng(lambda[i] + 1) | 0b1 );
-    }
-    let mut domains = Vec::new();
-    let mut wires = Vec::new();
-    for (i,dom) in circuit.inputdomains.iter().enumerate() {
-        domains.push(dom);
-        wires.push(rng(lambda[i] + 1)); // 5 is randomly chosen
-    }
-    let encoding = (&wires[..circuit.num_inputs], &delta[..circuit.num_inputs]);
-    for (i, gate) in circuit.gates.iter().enumerate() {
-        let domain = 999; //gate.domain;
-        match gate.kind {
-            NewGateKind::ADD => {
-                wires[i] = gate.inputs.iter()
-                    .map(|&x| wires[x])
-                    .fold(0, |acc, x| acc + x % domain);
-            },
-            NewGateKind::MULT(c) => {
-                let a = gate.inputs[0];
-                wires[i] = c * wires[a];
-            },
-            _ => {}
-            // NewGateKind::PROJ(range, phi) => {
-            //     let a = gate.inputs[0];
-            //     let tau = lsb(wires[a]);
-            //     wires[i] -= hash(i as u64, wires[a] + (tau * delta[i]));
-            //     wires[i] -= phi( -(tau as i64) as u64)*delta[a];
-            //     for x 
-            // }
-        }
-    }
 }
 
 
