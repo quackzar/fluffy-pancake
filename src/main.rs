@@ -252,7 +252,7 @@ fn yao_decode(circuit: &Circuit, d: &Vec<Primitives>, z: &Vec<Primitive>) -> (bo
 // -------------------------------------------------------------------------------------------------
 // fun times ahead
 fn main() {
-
+    /*
     let circuit = Circuit {
         gates: vec![Gate {
             kind: GateKind::NOT,
@@ -267,6 +267,7 @@ fn main() {
     let (e, d, f) = yao_garble(&circuit);
     test_circuit_with_input(&circuit, vec![false], &e, &d, &f);
     test_circuit_with_input(&circuit, vec![ true], &e, &d, &f);
+    */
 
     /*
     let circuit = Circuit {
@@ -287,6 +288,32 @@ fn main() {
     test_circuit_with_input(&circuit, vec![ true, false], &e, &d, &f);
     test_circuit_with_input(&circuit, vec![ true,  true], &e, &d, &f);
     */
+
+    let circuit = Circuit {
+        gates: vec![Gate {
+            kind: GateKind::XOR,
+            inputs: vec![0, 1],
+            output: 3,
+        }, Gate {
+            kind: GateKind::XOR,
+            inputs: vec![2, 3],
+            output: 4,
+        }],
+        num_inputs: 3,
+        num_outputs: 1,
+        num_wires: 5,
+    };
+
+    let (e, d, f) = yao_garble(&circuit);
+
+    test_circuit_with_input(&circuit, vec![false, false, false], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![false, false,  true], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![false,  true, false], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![false,  true,  true], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![true,  false, false], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![true,  false,  true], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![true,   true, false], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![true,   true,  true], &e, &d, &f);
 }
 
 fn test_circuit_with_input(circuit: &Circuit, input: Vec<bool>, e: &Vec<Primitives>, d: &Vec<Primitives>, f: &Vec<[Primitives; 4]>) {
