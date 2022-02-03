@@ -75,6 +75,17 @@ fn eq(left: Primitive, right: Primitive) -> bool {
     return true;
 }
 
+fn zero(p: Primitive) -> bool {
+    for i in 0..SECURITY_BYTES {
+        if p[i] != 0x00 {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+use std::vec;
 use sha2ni::Digest;
 fn prf(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive) {
     // TODO(frm): This is probably not the best way to do it!
@@ -113,19 +124,17 @@ fn random_primitives() -> [Primitive; 2] {
 }
 
 fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Primitives; 4]>) {
-    let mut k: Vec<Primitives> = Vec::with_capacity(circuit.num_wires);
+    let mut k: Vec<Primitives> = vec![[[0; SECURITY_BYTES]; 2]; circuit.num_wires];
 
     // 1. Pick key pairs for the inputs wires
-    for _ in 0..circuit.num_wires {
-        k.push(random_primitives());
+    for i in 0..circuit.num_wires {
+        k[i] = random_primitives();
     }
     let e = k[..circuit.num_inputs].to_vec();
 
     // 2. Gooble garble
-    let mut f: Vec<[Primitives; 4]> = Vec::with_capacity(circuit.gates.len());
-    for i in 0..circuit.gates.len() {
-        let gate = &circuit.gates[i];
-
+    let mut f: Vec<[Primitives; 4]> = vec![[[[0; SECURITY_BYTES]; 2]; 4]; circuit.num_wires];
+    for gate in &circuit.gates {
         // TODO(frm): We can optimize NOT gates
 
         // Binary gates
@@ -144,13 +153,13 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Prim
             let (g_left, g_right) = prf(
                 k[gate.inputs[0]][left as usize],
                 k[gate.inputs[1]][right as usize],
-                i
+                gate.output
             );
             c[j] = [xor(g_left, garbled_value), g_right];
         }
 
         // TODO(frm): Permute c !!!
-        f.push(c);
+        f[gate.output] = c;
     }
     // TODO(frm): Return something with F
 
@@ -163,7 +172,7 @@ fn yao_encode(circuit: &Circuit, e: Vec<Primitives>, x: Vec<bool>) -> Vec<Primit
     assert_eq!(x.len(), circuit.num_inputs);
     assert_eq!(e.len(), circuit.num_inputs);
 
-    let mut z: Vec<Primitive> = Vec::with_capacity(circuit.num_inputs);
+    let mut z: Vec<Primitive> = vec![[0; SECURITY_BYTES]; circuit.num_inputs];
     for i in 0..circuit.num_inputs {
         z[i] = e[i][if x[i] { 1 } else { 0 }];
     }
@@ -171,13 +180,49 @@ fn yao_encode(circuit: &Circuit, e: Vec<Primitives>, x: Vec<bool>) -> Vec<Primit
     return z;
 }
 
-fn yao_evaluate(circuit: &Circuit) {}
+fn yao_evaluate(circuit: &Circuit, f: Vec<[Primitives; 4]>, x: Vec<Primitive>) -> Vec<Primitive> {
+    assert_eq!(x.len(), circuit.num_inputs);
+
+    // 1. Set the inputs
+    let mut wire: Vec<Primitive> = vec![[0; SECURITY_BYTES]; circuit.num_wires];
+    for i in 0..circuit.num_inputs {
+        wire[i] = x[i];
+    }
+
+    // 2. Compute gates
+    for gate in &circuit.gates {
+        // TODO(frm): What about NOT gates?
+        let (gate_left, gate_right) = prf(wire[gate.inputs[0]], wire[gate.inputs[1]], gate.output);
+
+        let mut found = false;
+        for j in 0..4 {
+            let c = f[gate.output][j];
+            let (c_left, c_right) = (c[0], c[1]);
+
+            let k = xor(gate_left, c_left);
+            let t = xor(gate_right, c_right);
+            if zero(t) {
+                wire[gate.output] = k;
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            eprintln!("Cannot find solution for gate {}, no match with table!", gate.output);
+        }
+    }
+
+    // 3. Result
+    let z = wire[(circuit.num_wires - circuit.num_outputs)..].to_vec();
+    return z;
+}
 
 fn yao_decode(circuit: &Circuit, d: Vec<Primitives>, z: Vec<Primitive>) -> Vec<bool> {
     assert_eq!(z.len(), circuit.num_outputs);
     assert_eq!(d.len(), circuit.num_outputs);
 
-    let mut y: Vec<bool> = Vec::with_capacity(circuit.num_outputs);
+    let mut y: Vec<bool> = vec![false; circuit.num_outputs];
     for i in 0..circuit.num_outputs {
         if eq(d[i][0], z[i]) {
             y[i] = false;
@@ -208,10 +253,16 @@ fn main() {
         num_wires: 3,
     };
 
+    let input = vec![true, true];
+    let expected = circuit.evaluate(input.clone());
+
     let (e, d, f) = yao_garble(&circuit);
-    println!("IT IS NOW IN USE! {}", e.len() + d.len());
+    let x = yao_encode(&circuit, e, input);
+    let z = yao_evaluate(&circuit, f, x);
+    let y = yao_decode(&circuit, d, z);
 
-    let result = circuit.evaluate(vec![true, true]);
-
-    println!("Result is {}", result[0]);
+    assert_eq!(y.len(), expected.len());
+    for i in 0..y.len() {
+        println!("Output {}> {} ?= {} => {}", i, y[i], expected[i], y[i] == expected[i]);
+    }
 }
