@@ -86,6 +86,7 @@ fn zero(p: Primitive) -> bool {
 }
 
 use std::vec;
+use rand::Rng;
 use sha2ni::Digest;
 fn prf(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive) {
     // TODO(frm): This is probably not the best way to do it!
@@ -133,13 +134,18 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Prim
     let e = k[..circuit.num_inputs].to_vec();
 
     // 2. Gooble garble
+    let rand = SystemRandom::new();
     let mut f: Vec<[Primitives; 4]> = vec![[[[0; SECURITY_BYTES]; 2]; 4]; circuit.num_wires];
     for gate in &circuit.gates {
-        // TODO(frm): We can optimize NOT gates
+        if gate.kind == GateKind::NOT {
+            k[gate.output] = [k[gate.inputs[0]][1], k[gate.inputs[0]][0]];
+            continue;
+        }
 
         // Binary gates
         // TODO(frm): Magic many input gates?
         let mut c: [Primitives; 4] = [[[0u8; SECURITY_BYTES]; 2]; 4];
+        let permutation = rand::thread_rng().gen_range(0..4);
         let combinations = [(false, false), (false, true), (true, false), (true, true)];
         for j in 0..combinations.len() {
             let (left, right) = combinations[j];
@@ -155,13 +161,11 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Prim
                 k[gate.inputs[1]][right as usize],
                 gate.output
             );
-            c[j] = [xor(g_left, garbled_value), g_right];
+            c[(j + permutation) % 4] = [xor(g_left, garbled_value), g_right];
         }
 
-        // TODO(frm): Permute c !!!
         f[gate.output] = c;
     }
-    // TODO(frm): Return something with F
 
     // 3. Decoding information
     let d = k[(circuit.num_wires - circuit.num_outputs)..].to_vec();
@@ -191,6 +195,11 @@ fn yao_evaluate(circuit: &Circuit, f: &Vec<[Primitives; 4]>, x: &Vec<Primitive>)
 
     // 2. Compute gates
     for gate in &circuit.gates {
+        if gate.kind == GateKind::NOT {
+            wire[gate.output] = wire[gate.inputs[0]];
+            continue;
+        }
+
         // TODO(frm): What about NOT gates?
         let (gate_left, gate_right) = prf(wire[gate.inputs[0]], wire[gate.inputs[1]], gate.output);
 
@@ -218,10 +227,11 @@ fn yao_evaluate(circuit: &Circuit, f: &Vec<[Primitives; 4]>, x: &Vec<Primitive>)
     return z;
 }
 
-fn yao_decode(circuit: &Circuit, d: &Vec<Primitives>, z: &Vec<Primitive>) -> Vec<bool> {
+fn yao_decode(circuit: &Circuit, d: &Vec<Primitives>, z: &Vec<Primitive>) -> (bool, Vec<bool>) {
     assert_eq!(z.len(), circuit.num_outputs);
     assert_eq!(d.len(), circuit.num_outputs);
 
+    let mut success = true;
     let mut y: Vec<bool> = vec![false; circuit.num_outputs];
     for i in 0..circuit.num_outputs {
         if eq(d[i][0], z[i]) {
@@ -231,17 +241,34 @@ fn yao_decode(circuit: &Circuit, d: &Vec<Primitives>, z: &Vec<Primitive>) -> Vec
             y[i] = true;
         }
         else {
-            eprintln!("Error decoding output {}, no match with decoding information!", i)
+            eprintln!("Error decoding output {}, no match with decoding information!", i);
+            success = false;
         }
     }
 
-    // TODO(frm): We would like some way to be able to reflect an error case!
-    return y;
+    return (success, y);
 }
 
 // -------------------------------------------------------------------------------------------------
 // fun times ahead
 fn main() {
+
+    let circuit = Circuit {
+        gates: vec![Gate {
+            kind: GateKind::NOT,
+            inputs: vec![0],
+            output: 1,
+        }],
+        num_inputs: 1,
+        num_outputs: 1,
+        num_wires: 2,
+    };
+
+    let (e, d, f) = yao_garble(&circuit);
+    test_circuit_with_input(&circuit, vec![false], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![ true], &e, &d, &f);
+
+    /*
     let circuit = Circuit {
         gates: vec![Gate {
             kind: GateKind::XOR,
@@ -259,12 +286,16 @@ fn main() {
     test_circuit_with_input(&circuit, vec![false,  true], &e, &d, &f);
     test_circuit_with_input(&circuit, vec![ true, false], &e, &d, &f);
     test_circuit_with_input(&circuit, vec![ true,  true], &e, &d, &f);
+    */
 }
 
 fn test_circuit_with_input(circuit: &Circuit, input: Vec<bool>, e: &Vec<Primitives>, d: &Vec<Primitives>, f: &Vec<[Primitives; 4]>) {
     let x = yao_encode(&circuit, e, &input);
     let z = yao_evaluate(&circuit, f, &x);
-    let y = yao_decode(&circuit, d, &z);
+    let (success, y) = yao_decode(&circuit, d, &z);
+    if !success {
+        println!("\x1b[31mError decoding, no match found!\x1b[0m");
+    }
 
     let expected = circuit.evaluate(input);
 

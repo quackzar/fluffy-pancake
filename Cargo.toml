@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 sha2ni = "0.8.5"
+rand = "0.8.4"
 ring = "0.16.20"
