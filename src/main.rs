@@ -168,7 +168,7 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Prim
     return (e, d, f);
 }
 
-fn yao_encode(circuit: &Circuit, e: Vec<Primitives>, x: Vec<bool>) -> Vec<Primitive> {
+fn yao_encode(circuit: &Circuit, e: &Vec<Primitives>, x: &Vec<bool>) -> Vec<Primitive> {
     assert_eq!(x.len(), circuit.num_inputs);
     assert_eq!(e.len(), circuit.num_inputs);
 
@@ -180,7 +180,7 @@ fn yao_encode(circuit: &Circuit, e: Vec<Primitives>, x: Vec<bool>) -> Vec<Primit
     return z;
 }
 
-fn yao_evaluate(circuit: &Circuit, f: Vec<[Primitives; 4]>, x: Vec<Primitive>) -> Vec<Primitive> {
+fn yao_evaluate(circuit: &Circuit, f: &Vec<[Primitives; 4]>, x: &Vec<Primitive>) -> Vec<Primitive> {
     assert_eq!(x.len(), circuit.num_inputs);
 
     // 1. Set the inputs
@@ -218,7 +218,7 @@ fn yao_evaluate(circuit: &Circuit, f: Vec<[Primitives; 4]>, x: Vec<Primitive>) -
     return z;
 }
 
-fn yao_decode(circuit: &Circuit, d: Vec<Primitives>, z: Vec<Primitive>) -> Vec<bool> {
+fn yao_decode(circuit: &Circuit, d: &Vec<Primitives>, z: &Vec<Primitive>) -> Vec<bool> {
     assert_eq!(z.len(), circuit.num_outputs);
     assert_eq!(d.len(), circuit.num_outputs);
 
@@ -244,7 +244,7 @@ fn yao_decode(circuit: &Circuit, d: Vec<Primitives>, z: Vec<Primitive>) -> Vec<b
 fn main() {
     let circuit = Circuit {
         gates: vec![Gate {
-            kind: GateKind::AND,
+            kind: GateKind::XOR,
             inputs: vec![0, 1],
             output: 2,
         }],
@@ -253,16 +253,33 @@ fn main() {
         num_wires: 3,
     };
 
-    let input = vec![true, true];
-    let expected = circuit.evaluate(input.clone());
-
     let (e, d, f) = yao_garble(&circuit);
-    let x = yao_encode(&circuit, e, input);
-    let z = yao_evaluate(&circuit, f, x);
-    let y = yao_decode(&circuit, d, z);
+
+    test_circuit_with_input(&circuit, vec![false, false], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![false,  true], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![ true, false], &e, &d, &f);
+    test_circuit_with_input(&circuit, vec![ true,  true], &e, &d, &f);
+}
+
+fn test_circuit_with_input(circuit: &Circuit, input: Vec<bool>, e: &Vec<Primitives>, d: &Vec<Primitives>, f: &Vec<[Primitives; 4]>) {
+    let x = yao_encode(&circuit, e, &input);
+    let z = yao_evaluate(&circuit, f, &x);
+    let y = yao_decode(&circuit, d, &z);
+
+    let expected = circuit.evaluate(input);
 
     assert_eq!(y.len(), expected.len());
+    let mut success = true;
     for i in 0..y.len() {
-        println!("Output {}> {} ?= {} => {}", i, y[i], expected[i], y[i] == expected[i]);
+        let matches = y[i] == expected[i];
+        success &= matches;
+        println!("Output {}> {} ?= {} => {}{}\x1b[0m", i, y[i], expected[i], if matches {"\x1b[32m"} else {"\x1b[31m"}, matches);
+    }
+
+    if success {
+        println!("\x1b[32mTest passed :)\x1b[0m");
+    }
+    else {
+        println!("\x1b[31mTest failed :)\x1b[0m");
     }
 }
