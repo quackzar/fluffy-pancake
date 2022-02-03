@@ -65,6 +65,16 @@ fn xor(left: Primitive, right: Primitive) -> Primitive {
     return result;
 }
 
+fn eq(left: Primitive, right: Primitive) -> bool {
+    for i in 0..SECURITY_BYTES {
+        if left[i] != right[i] {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 use sha2ni::Digest;
 fn prf(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive) {
     // TODO(frm): This is probably not the best way to do it!
@@ -149,9 +159,9 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Prim
     return (e, d, f);
 }
 
-fn yao_encode(circuit: &Circuit, e: Vec<Primitives>, x: Vec<bool>) -> Vec<Primitive>
-{
+fn yao_encode(circuit: &Circuit, e: Vec<Primitives>, x: Vec<bool>) -> Vec<Primitive> {
     assert_eq!(x.len(), circuit.num_inputs);
+    assert_eq!(e.len(), circuit.num_inputs);
 
     let mut z: Vec<Primitive> = Vec::with_capacity(circuit.num_inputs);
     for i in 0..circuit.num_inputs {
@@ -163,7 +173,26 @@ fn yao_encode(circuit: &Circuit, e: Vec<Primitives>, x: Vec<bool>) -> Vec<Primit
 
 fn yao_evaluate(circuit: &Circuit) {}
 
-fn yao_decode(circuit: &Circuit) {}
+fn yao_decode(circuit: &Circuit, d: Vec<Primitives>, z: Vec<Primitive>) -> Vec<bool> {
+    assert_eq!(z.len(), circuit.num_outputs);
+    assert_eq!(d.len(), circuit.num_outputs);
+
+    let mut y: Vec<bool> = Vec::with_capacity(circuit.num_outputs);
+    for i in 0..circuit.num_outputs {
+        if eq(d[i][0], z[i]) {
+            y[i] = false;
+        }
+        else if eq(d[i][1], z[i]) {
+            y[i] = true;
+        }
+        else {
+            eprintln!("Error decoding output {}, no match with decoding information!", i)
+        }
+    }
+
+    // TODO(frm): We would like some way to be able to reflect an error case!
+    return y;
+}
 
 // -------------------------------------------------------------------------------------------------
 // fun times ahead
