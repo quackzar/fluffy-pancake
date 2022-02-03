@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+#![allow(unused_variables)]
+
 
 // -------------------------------------------------------------------------------------------------
 // Circuit stuff
@@ -11,9 +13,6 @@ enum GateKind {
     AND,
     OR,
     XOR,
-
-    // Special
-    IN,
 }
 
 struct Gate {
@@ -44,7 +43,6 @@ impl Circuit {
                 GateKind::AND => wires[gate.inputs[0]] && wires[gate.inputs[1]],
                 GateKind::XOR => wires[gate.inputs[0]] ^ wires[gate.inputs[1]],
                 GateKind::OR => wires[gate.inputs[0]] || wires[gate.inputs[1]],
-                _ => false,
             };
         }
 
@@ -70,7 +68,7 @@ fn xor(left: Primitive, right: Primitive) -> Primitive {
 }
 
 use sha2ni::Digest;
-fn G(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive) {
+fn prf(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive) {
     // TODO(frm): This is probably not the best way to do it!
     let mut sha = sha2ni::Sha256::new();
     sha.input(left);
@@ -92,8 +90,7 @@ fn G(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive) 
     return (l_result, r_result);
 }
 
-use ring::rand::SecureRandom;
-use ring::rand::SystemRandom;
+use ring::rand::{SecureRandom, SystemRandom};
 fn random_primitives() -> [Primitive; 2] {
     let random = SystemRandom::new();
 
@@ -124,25 +121,22 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>) {
         // Binary gates
         // TODO(frm): Magic many input gates?
         let mut c: [Primitives; 4] = [[[0u8; SECURITY_BYTES]; 2]; 4];
-        let combinations = [(0, 0), (0, 1), (1, 0), (1, 1)];
+        let combinations = [(false, false), (false, true), (true, false), (true, true)];
         for j in 0..combinations.len() {
             let (left, right) = combinations[j];
             let gate_value = match gate.kind {
-                GateKind::NOT => {
-                    if left == 1 {
-                        0
-                    } else {
-                        1
-                    }
-                }
-                GateKind::AND => left & right,
+                GateKind::NOT => !left,
+                GateKind::AND => left && right,
                 GateKind::XOR => left ^ right,
-                GateKind::OR => left | right,
-                _ => 0,
+                GateKind::OR => left || right,
             };
-            let garbled_value = k[gate.output][gate_value];
-            let (g_left, g_right) = G(k[gate.inputs[0]][left], k[gate.inputs[1]][right], i);
-            c[1 * left + 2 * right] = [xor(g_left, garbled_value), g_right];
+            let garbled_value = k[gate.output as usize][gate_value as usize];
+            let (g_left, g_right) = prf(
+                k[gate.inputs[0]][left as usize],
+                k[gate.inputs[1]][right as usize],
+                i
+            );
+            c[j] = [xor(g_left, garbled_value), g_right];
         }
     }
     // TODO(frm): Return something with F
