@@ -26,7 +26,7 @@ fn log2(x : u64) -> u64 {
     (std::mem::size_of::<u64>() as u64) * 8 - (x.leading_zeros() as u64)
 }
 
-fn hash(a : u64, b : u64) -> u64 {
+fn hash(a: u64, b: u64, w: &Wire) -> u64 {
     // This is super nice 😎
     use ring::digest::SHA256;
     use ring::digest::Context;
@@ -34,28 +34,16 @@ fn hash(a : u64, b : u64) -> u64 {
     let mut context = Context::new(&SHA256);
     context.update(&a.to_be_bytes());
     context.update(&b.to_be_bytes());
+    context.update(&w.lambda.to_be_bytes());
+    context.update(&w.domain.to_be_bytes());
+    for v in &w.values {
+        context.update(&v.to_be_bytes());
+    }
+
     let digest = context.finish();
     let bytes = digest.as_ref();
     let num = u64::from_be_bytes(bytes[..8].try_into().unwrap());
     return num;
-}
-
-macro_rules! hash {
-    () =>
-    {
-        0
-    };
-    ($a:expr) =>
-    {
-        hash($a, 0)
-    };
-    ($a:expr, $b:expr) =>
-    {
-        hash($a, $b)
-    };
-    ( $x:expr $( , $more:expr )* ) => (
-        hash($x, hash!( $( $more ),* ))
-    )
 }
 
 struct GarbledGadget {
@@ -66,6 +54,86 @@ struct GarbledGadget {
 
 }
 
+#[derive(Clone)]
+struct Wire {
+    lambda: u64,
+    values : Vec<u64>,
+    domain : u64,
+}
+
+use core::ops;
+use std::iter;
+use std::iter::Sum;
+
+impl ops::Add<&Wire> for &Wire {
+    type Output = Wire;
+    fn add(self, _rhs : &Wire) -> Wire {
+        assert_eq!(self.lambda, _rhs.lambda);
+        assert_eq!(self.domain, _rhs.domain);
+        let domain = self.domain;
+        let lambda = self.lambda;
+        let values = self.values.iter()
+            .zip(_rhs.values.iter())
+            .map(|(a, b)| a + b % domain).collect();
+        return Wire {domain, values, lambda};
+    }
+}
+
+impl ops::Mul<u64> for Wire {
+    type Output = Wire;
+    fn mul(self, _rhs : u64) -> Wire {
+        let domain = self.domain;
+        let lambda = self.lambda;
+        let values = self.values.iter()
+            .map(|x| x * _rhs % domain).collect();
+        return Wire {domain, values, lambda};
+    }
+}
+
+impl ops::Mul<u64> for &Wire {
+    type Output = Wire;
+    fn mul(self, _rhs : u64) -> Wire {
+        let domain = self.domain;
+        let lambda = self.lambda;
+        let values = self.values.iter()
+            .map(|x| x * _rhs % domain).collect();
+        return Wire {domain, values, lambda};
+    }
+}
+
+
+impl iter::Sum for Wire {
+    fn sum<I: Iterator<Item=Self>>(mut iter: I) -> Self {
+        let mut acc = iter.next().unwrap();
+        iter.fold(acc, |acc, w| &acc + w)
+    }
+}
+
+impl Wire {
+    fn new(domain : u64, lambda: u64) -> Wire {
+        let mut values = vec![0u64; lambda as usize];
+        for i in 0..lambda {
+            values[i as usize] = rng((1 << (domain + 1)) + 1);
+        }
+        return Wire{values, lambda, domain};
+    }
+
+    fn delta(domain : u64, lambda: u64) -> Wire {
+        let mut values = vec![0u64; lambda as usize];
+        for i in 0..lambda {
+            values[i as usize] = (rng((1 << (domain + 1))) << 1) | 0b1;
+        }
+        return Wire{values, lambda, domain};
+    }
+
+    fn empty() -> Wire {
+        return Wire{
+            values : vec![],
+            domain : 0,
+            lambda : 0,
+        }
+    }
+}
 
 use math::round::ceil;
 use rand::Rng;
@@ -84,26 +152,25 @@ fn lsb(a : u64) -> u64 {
     (a & 1 == 1) as u64
 }
 
-fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, (Vec<u64>, Vec<u64>), Vec<Vec<u64>>) {
-    // 1. For each wire
-    // TODO(frm): Don't do push?
-    let mut delta  = Vec::with_capacity(circuit.num_inputs);
-    for i in 0..circuit.num_wires {
-        let bits = ceil((k as f64) / (WIREDOMAIN as f64), 0) as u64;
-        // TODO(frm): We might want to not add an additional bit here (consider using first bit).
-        delta.push(rng((1 << bits) + 1) | 0x01);
+fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, (Vec<Wire>, Vec<Wire>), Vec<Vec<u64>>) {
+    // 1. For each domain (we only have one)
+    let lambda = ceil((k as f64) / (WIREDOMAIN as f64), 0) as u64;
+
+    let mut delta = Vec::new();
+    for i in 0..lambda {
+        delta.push(Wire::delta(1 << WIREDOMAIN as u64, lambda));
     }
 
     // 2. For each input
-    let mut wires = vec![0u64; circuit.num_wires];
+    let mut wires = Vec::new();
     for i in 0..circuit.num_inputs {
-        wires[i] = rng((1 << (WIREDOMAIN + 1)) + 1);
+        wires.push(Wire::new(1 << WIREDOMAIN as u64, lambda));
     }
 
     // 3. Encoding
     let e = (
         wires[..circuit.num_inputs].to_vec(),
-        delta[..circuit.num_inputs].to_vec(),
+        delta,
     );
 
     // 4. For each gate
@@ -113,9 +180,9 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, (Vec<u64>, Vec<u64>), Vec<
             NewGateKind::ADD => {
                 wires[gate.output] = gate.inputs.iter()
                     .map(|&x| wires[x])
-                    .fold(0, |acc, x| acc + x) % (1 << GATEDOMAIN);
+                    .sum();
             },
-            NewGateKind::MUL(c) => wires[gate.output] = (c * wires[gate.inputs[0]]) % (1 << GATEDOMAIN),
+            NewGateKind::MUL(c) => wires[gate.output] = &wires[gate.inputs[0]] * c,
             // NewGateKind::PROJ(range, phi) => {
             //     let a = gate.inputs[0];
             //     let tau = lsb(wires[a]);
@@ -132,9 +199,8 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, (Vec<u64>, Vec<u64>), Vec<
     for i in (circuit.num_wires - circuit.num_outputs)..circuit.num_wires {
         let mut values = vec![0; (1 << OUTPUTDOMAIN)];
         for k in 0..(1 << OUTPUTDOMAIN) {
-            let hash = hash!(i as u64, k as u64, wires[i] + k as u64 * delta[i]);
-            println!("DECODE INFO: i: {}, k: {}, w: {}, d: {} --> {} --> {}", i, k, wires[i], delta[i], wires[i] + k as u64 * delta[i], hash);
-            values[k] = hash;
+            let hash = hash(i as u64, k as u64, &(&wires[i] + &delta[i] * k));
+            values[k as usize] = hash;
         }
 
         d.push(values);
@@ -143,8 +209,8 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, (Vec<u64>, Vec<u64>), Vec<
     return (f, e, d);
 }
 
-fn evaluate(circuit: &NewCircuit, f: &Vec<u64>, x: &Vec<u64>) -> Vec<u64> {
-    let mut wires = vec![0u64; circuit.num_wires];
+fn evaluate(circuit: &NewCircuit, f: &Vec<u64>, x: &Vec<Wire>) -> Vec<Wire> {
+    let mut wires = vec![Wire::empty(); circuit.num_wires];
     for i in 0..circuit.num_inputs {
         wires[i] = x[i];
     }
@@ -154,37 +220,30 @@ fn evaluate(circuit: &NewCircuit, f: &Vec<u64>, x: &Vec<u64>) -> Vec<u64> {
             NewGateKind::ADD => {
                 wires[gate.output] = gate.inputs.iter()
                     .map(|&x| wires[x])
-                    .fold(0u64, |acc, x| acc + x) % (1 << GATEDOMAIN);
+                    .sum();
             },
             NewGateKind::MUL(c) => wires[gate.output] = wires[gate.inputs[0]] * c,
             // TODO(frm): Projections! Yay!
             _ => {}
         }
     }
-
-    let mut z = Vec::with_capacity(circuit.num_outputs);
-    for i in (circuit.num_wires - circuit.num_outputs)..circuit.num_wires {
-        z.push(wires[i]);
-    }
-
-    return z;
+    return wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec()
 }
 
-fn encode(e: &(Vec<u64>, Vec<u64>), x: &Vec<u64>) -> Vec<u64> {
+fn encode(e: &(Vec<Wire>, Vec<Wire>), x: &Vec<u64>) -> Vec<Wire> {
     let (w, d) = e;
     assert_eq!(w.len(), d.len());
     assert_eq!(w.len(), x.len());
 
-    let mut z = vec![0u64; w.len()];
+    let mut z = Vec::with_capacity(w.len());
     for i in 0..w.len() {
-        z[i] = w[i] + x[i] * d[i];
-        println!("Encoding input {} with value {} as {} where d: {} and w: {}", i, x[i], z[i], d[i], w[i]);
+        z.push(w[i] +  d[i] * x[i]);
     }
 
     return z;
 }
 
-fn decode(circuit: &NewCircuit, d: &Vec<Vec<u64>>, z: &Vec<u64>) -> (bool, Vec<u64>) {
+fn decode(circuit: &NewCircuit, d: &Vec<Vec<u64>>, z: &Vec<Wire>) -> (bool, Vec<u64>) {
     assert_eq!(d.len(), z.len());
 
     let mut success = false;
@@ -193,12 +252,8 @@ fn decode(circuit: &NewCircuit, d: &Vec<Vec<u64>>, z: &Vec<u64>) -> (bool, Vec<u
         let g = circuit.num_wires - circuit.num_outputs + i;
         let h = &d[i];
         let mut found = false;
-        println!("Decoding output {} with label {}", i, z[i]);
         for k in 0..(1 << OUTPUTDOMAIN) {
-
-            let hash = hash!(g as u64, k, z[i]);
-            println!("DECODE AS: i: {}, k: {} --> {} --> {} (expecting {})", g, k, z[i], hash, h[k as usize]);
-
+            let hash = hash(g as u64, k, &z[i]);
             if hash == h[k as usize] {
                 y[i] = k;
                 success = true;
