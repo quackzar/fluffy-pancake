@@ -69,6 +69,8 @@ fn prf(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive
 }
 
 use ring::rand::{SecureRandom, SystemRandom};
+use crate::arith::funfunfunfun;
+
 fn random_primitives() -> [Primitive; 2] {
     let random = SystemRandom::new();
 
@@ -249,6 +251,7 @@ fn main() {
     test_circuit_with_input(&circuit, vec![ true,  true], &e, &d, &f);
     */
 
+    /*
     let circuit = Circuit {
         gates: vec![Gate {
             kind: GateKind::XOR,
@@ -274,6 +277,9 @@ fn main() {
     test_circuit_with_input(&circuit, vec![true,  false,  true], &e, &d, &f);
     test_circuit_with_input(&circuit, vec![true,   true, false], &e, &d, &f);
     test_circuit_with_input(&circuit, vec![true,   true,  true], &e, &d, &f);
+    */
+
+    funfunfunfun();
 }
 
 
