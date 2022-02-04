@@ -71,9 +71,9 @@ use math::round::ceil;
 use rand::Rng;
 
 // Domains (in bits, 2^n) for inputs and wires
-const INPUTDOMAIN:  u32 =  1;
-const WIREDOMAIN:   u32 = 16;
-const OUTPUTDOMAIN: u32 = 16;
+const INPUTDOMAIN:  u32 = 4;
+const WIREDOMAIN:   u32 = 8;
+const OUTPUTDOMAIN: u32 = 8;
 const GATEDOMAIN:   u32 = WIREDOMAIN;
 // TODO(frm): Gate domain?
 
@@ -86,20 +86,18 @@ fn lsb(a : u64) -> u64 {
 
 fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, (Vec<u64>, Vec<u64>), Vec<Vec<u64>>) {
     // 1. For each wire
-    let mut lambda = Vec::with_capacity(circuit.num_inputs);
+    // TODO(frm): Don't do push?
     let mut delta  = Vec::with_capacity(circuit.num_inputs);
     for i in 0..circuit.num_wires {
         let bits = ceil((k as f64) / (WIREDOMAIN as f64), 0) as u64;
-        lambda.push((1 << bits) + 1);
-
         // TODO(frm): We might want to not add an additional bit here (consider using first bit).
-        delta.push(rng(bits + 1) | 0b1);
+        delta.push(rng((1 << bits) + 1) | 0x01);
     }
 
     // 2. For each input
     let mut wires = vec![0u64; circuit.num_wires];
     for i in 0..circuit.num_inputs {
-        wires.push(rng(lambda[i]));
+        wires[i] = rng((1 << (WIREDOMAIN + 1)) + 1);
     }
 
     // 3. Encoding
@@ -134,7 +132,9 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, (Vec<u64>, Vec<u64>), Vec<
     for i in (circuit.num_wires - circuit.num_outputs)..circuit.num_wires {
         let mut values = vec![0; (1 << OUTPUTDOMAIN)];
         for k in 0..(1 << OUTPUTDOMAIN) {
-            values[k] = hash!(i as u64, k as u64, wires[i] + k as u64 * delta[i]);
+            let hash = hash!(i as u64, k as u64, wires[i] + k as u64 * delta[i]);
+            println!("DECODE INFO: i: {}, k: {}, w: {}, d: {} --> {} --> {}", i, k, wires[i], delta[i], wires[i] + k as u64 * delta[i], hash);
+            values[k] = hash;
         }
 
         d.push(values);
@@ -178,49 +178,42 @@ fn encode(e: &(Vec<u64>, Vec<u64>), x: &Vec<u64>) -> Vec<u64> {
     let mut z = vec![0u64; w.len()];
     for i in 0..w.len() {
         z[i] = w[i] + x[i] * d[i];
+        println!("Encoding input {} with value {} as {} where d: {} and w: {}", i, x[i], z[i], d[i], w[i]);
     }
 
     return z;
 }
 
-fn decode(d: &Vec<Vec<u64>>, z: &Vec<u64>) -> (bool, Vec<u64>) {
+fn decode(circuit: &NewCircuit, d: &Vec<Vec<u64>>, z: &Vec<u64>) -> (bool, Vec<u64>) {
     assert_eq!(d.len(), z.len());
 
-    let mut success = true;
+    let mut success = false;
     let mut y = vec![0u64; d.len()];
     for i in 0..d.len() {
+        let g = circuit.num_wires - circuit.num_outputs + i;
         let h = &d[i];
         let mut found = false;
+        println!("Decoding output {} with label {}", i, z[i]);
         for k in 0..(1 << OUTPUTDOMAIN) {
-            if hash!(i as u64, k, z[i]) == h[i] {
+
+            let hash = hash!(g as u64, k, z[i]);
+            println!("DECODE AS: i: {}, k: {} --> {} --> {} (expecting {})", g, k, z[i], hash, h[k as usize]);
+
+            if hash == h[k as usize] {
                 y[i] = k;
-                found = true;
+                success = true;
+                break;
             }
         }
-
-        success &= found;
     }
 
     return (success, y);
 }
 
 pub fn funfunfunfun() {
-    /*
     let circuit = NewCircuit {
         gates: vec![NewGate {
-            kind: NewGateKind::ADD,
-            inputs: vec![0, 1],
-            output: 2,
-        }],
-        num_inputs: 2,
-        num_outputs: 1,
-        num_wires: 3,
-    };
-    */
-
-    let circuit = NewCircuit {
-        gates: vec![NewGate {
-            kind: NewGateKind::MUL(2),
+            kind: NewGateKind::MUL(1),
             inputs: vec![0],
             output: 1,
         }],
@@ -228,18 +221,19 @@ pub fn funfunfunfun() {
         num_outputs: 1,
         num_wires: 2,
     };
+    let inputs = vec![2];
 
     const SECURITY: u64 = 128;
     let (f, e, d) = garble(&circuit, SECURITY);
 
-    //let inputs = vec![4, 9];
-    let inputs = vec![2];
     let x = encode(&e, &inputs);
     let z = evaluate(&circuit, &f, &x);
-    let (success, y) = decode(&d, &z);
+    let (success, y) = decode(&circuit, &d, &z);
     if !success {
         println!("\x1b[31mError decoding, no match found!\x1b[0m");
     }
 
-    println!("HELLO WORLD !!!");
+    for i in 0..y.len() {
+        println!("Output {} is {}", i, y[i]);
+    }
 }
