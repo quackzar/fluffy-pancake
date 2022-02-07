@@ -3,7 +3,6 @@ struct NewCircuit {
     num_wires: usize,
     num_inputs: usize,
     num_outputs: usize,
-
     gates : Vec<NewGate>,
 }
 
@@ -18,8 +17,8 @@ struct NewGate {
     kind: NewGateKind,
     output: usize,
     inputs: Vec<usize>,
+    domain : u64,
 }
-
 
 
 fn log2(x : u64) -> u64 {
@@ -61,6 +60,7 @@ struct Wire {
 use core::ops;
 use std::iter;
 
+
 impl ops::Add<&Wire> for &Wire {
     type Output = Wire;
     fn add(self, _rhs : &Wire) -> Wire {
@@ -94,6 +94,7 @@ impl iter::Sum for Wire {
     }
 }
 
+
 impl Wire {
     fn new(domain : u64, lambda: u64) -> Wire {
         let mut values = vec![0u64; lambda as usize];
@@ -112,15 +113,16 @@ impl Wire {
     }
 }
 
+use itertools::Itertools;
 use math::round::ceil;
 use rand::Rng;
 
 
 // Domains (in bits, 2^n) for inputs and wires
-const INPUTDOMAIN:  u32 = 4;
-const WIREDOMAIN:   u32 = 8;
-const OUTPUTDOMAIN: u32 = 8;
-const GATEDOMAIN:   u32 = WIREDOMAIN;
+const INPUTDOMAIN:  u64 = 4;
+const WIREDOMAIN:   u64 = 8;
+const OUTPUTDOMAIN: u64 = 8;
+const GATEDOMAIN:   u64 = WIREDOMAIN;
 // TODO(frm): Gate domain?
 
 fn rng(max : u64) -> u64 {
@@ -132,27 +134,43 @@ fn lsb(a : u64) -> u64 {
 
 struct Encoding {
     wires : Vec<Wire>,
-    delta : Vec<Wire>,
+    delta : HashMap<u64, Wire>,
 }
 
 struct Decoding {
     map : Vec<Vec<u64>>,
 }
 
+use std::collections::HashMap;
+
 
 fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     // 1. For each domain (we only have one)
     let lambda = ceil((k as f64) / (WIREDOMAIN as f64), 0) as u64;
+    let outputs = (circuit.num_wires - circuit.num_outputs)..circuit.num_wires;
+    let outputs : Vec<&NewGate> = circuit.gates.iter()
+        .filter(|g| outputs.contains(&g.output))
+        .collect();
 
-    let mut delta = Vec::new();
-    for i in 0..lambda {
-        delta.push(Wire::delta(1 << WIREDOMAIN as u64, lambda));
-    }
+    let inputs = 0..circuit.num_inputs;
+    let _inputs : Vec<&NewGate> = circuit.gates.iter()
+        .filter(|g| 
+            g.inputs.iter()
+                .any(|i| inputs.contains(i))
+        )
+        .collect();
+
+    let delta : HashMap<_,_> = circuit.gates.iter()
+        .map(|g : &NewGate| g.domain)
+        .unique()
+        .map(|d| (d, Wire::delta(d, lambda)))
+        .collect();
+    //delta.insert(Wire::delta(WIREDOMAIN as u64, lambda));
 
     // 2. For each input
-    let mut wires = Vec::new();
-    for i in 0..circuit.num_inputs {
-        wires.push(Wire::new(1 << WIREDOMAIN as u64, lambda));
+    let mut wires = Vec::with_capacity(circuit.num_wires);
+    for _ in 0..circuit.num_inputs {
+        wires.push(Wire::new(WIREDOMAIN as u64, lambda));
     }
 
     // 3. Encoding
@@ -164,13 +182,15 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     // 4. For each gate
     let f = Vec::with_capacity(circuit.num_wires);
     for gate in &circuit.gates {
-        let g = match gate.kind {
+        let w = match gate.kind {
             NewGateKind::ADD => {
-                wires[gate.output] = gate.inputs.iter()
+                gate.inputs.iter()
                     .map(|&x| wires[x].clone())
-                    .sum();
+                    .sum()
             },
-            NewGateKind::MUL(c) => wires[gate.output] = &wires[gate.inputs[0]] * c,
+            NewGateKind::MUL(c) => {
+                &wires[gate.inputs[0]] * c
+            },
             // NewGateKind::PROJ(range, phi) => {
             //     let a = gate.inputs[0];
             //     let tau = lsb(wires[a]);
@@ -178,16 +198,21 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
             //     wires[i] -= phi( -(tau as i64) as u64)*delta[a];
             //     for x 
             // },
-            _ => {}
+            _ => {
+                panic!("Unsupported gate type");
+            }
         };
+        wires.push(w);
     }
 
     // 5. Decoding / outputs
     let mut d = Vec::with_capacity(circuit.num_outputs);
-    for i in (circuit.num_wires - circuit.num_outputs)..circuit.num_wires {
-        let mut values = vec![0; 1 << OUTPUTDOMAIN];
-        for k in 0..(1 << OUTPUTDOMAIN) {
-            let hash = hash(i as u64, k as u64, &(&wires[i] + &(&delta[i] * k)));
+    for gate in outputs {
+        let i = gate.output;
+        let domain = gate.domain;
+        let mut values = vec![0; 1 << domain];
+        for k in 0..(1 << domain) {
+            let hash = hash(i as u64, k as u64, &(&wires[i] + &(&delta[&domain] * k)));
             values[k as usize] = hash;
         }
         d.push(values);
@@ -196,41 +221,57 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     return (f, encoding, decoding);
 }
 
-fn evaluate(circuit: &NewCircuit, f: &Vec<u64>, x: &Vec<Wire>) -> Vec<Wire> {
-    let mut wires = Vec::with_capacity(circuit.num_wires);
+
+fn evaluate(circuit: &NewCircuit, _f: &Vec<u64>, x: &Vec<Wire>) -> Vec<Wire> {
+    use std::mem::{MaybeUninit, transmute};
+    println!("{}", circuit.num_wires);
+    let mut wires : Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);
+    unsafe { wires.set_len(circuit.num_wires); }
     for i in 0..circuit.num_inputs {
-        wires[i] = x[i].clone();
+        wires[i].write(x[i].clone());
     }
     for gate in &circuit.gates {
-        match gate.kind {
+        let w : Wire = match gate.kind {
             NewGateKind::ADD => {
-                wires[gate.output] = gate.inputs.iter()
-                    .map(|&x| wires[x].clone())
-                    .sum::<Wire>();
+                gate.inputs.iter()
+                    .map(|&x| unsafe{ wires[x].assume_init_ref() }.clone())
+                    .sum::<Wire>()
             },
-            NewGateKind::MUL(c) => wires[gate.output] = &wires[gate.inputs[0]] * c,
+            NewGateKind::MUL(c) => unsafe{ wires[gate.inputs[0]].assume_init_ref() * c },
             // TODO(frm): Projections! Yay!
-            _ => {}
-        }
+            _ => {panic!("Unsupported gate type");}
+        };
+        wires[gate.output].write(w);
     }
+    let wires : Vec<Wire> = unsafe{transmute(wires)};
     return wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec()
 }
 
 fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<Wire> {
-    let w = &e.wires;
-    let d = &e.delta;
-    assert_eq!(w.len(), d.len());
-    assert_eq!(w.len(), x.len());
-
-    let mut z = Vec::with_capacity(w.len());
-    for i in 0..w.len() {
-        z.push(&w[i] + &(&d[i] * x[i]));
+    let wires = &e.wires;
+    let delta = &e.delta;
+    assert_eq!(wires.len(), x.len(), "Wire and input vector lengths do not match");
+    let mut z = Vec::with_capacity(wires.len());
+    for (w,&x) in wires.iter().zip(x) {
+        let domain = w.domain;
+        z.push(w + &(&delta[&domain] * x));
     }
-
     return z;
 }
 
-fn decode(circuit: &NewCircuit, decoding: &Decoding, z: &Vec<Wire>) -> (bool, Vec<u64>) {
+use std::error::Error;
+use std::fmt;
+
+#[derive(Debug)]
+struct DecodeError {}
+impl Error for DecodeError {}
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Error decoding result")
+    }
+}
+
+fn decode(circuit: &NewCircuit, decoding: &Decoding, z: &Vec<Wire>) -> Result<Vec<u64>, DecodeError> {
     let d = &decoding.map;
     assert_eq!(d.len(), z.len());
 
@@ -249,7 +290,7 @@ fn decode(circuit: &NewCircuit, decoding: &Decoding, z: &Vec<Wire>) -> (bool, Ve
         }
     }
 
-    return (success, y);
+    if success { Ok(y) } else { Err(DecodeError{}) }
 }
 
 pub fn funfunfunfun() {
@@ -258,6 +299,7 @@ pub fn funfunfunfun() {
             kind: NewGateKind::MUL(1),
             inputs: vec![0],
             output: 1,
+            domain: WIREDOMAIN,
         }],
         num_inputs: 1,
         num_outputs: 1,
@@ -270,12 +312,12 @@ pub fn funfunfunfun() {
 
     let x = encode(&e, &inputs);
     let z = evaluate(&circuit, &f, &x);
-    let (success, y) = decode(&circuit, &d, &z);
-    if !success {
-        println!("\x1b[31mError decoding, no match found!\x1b[0m");
-    }
-
-    for i in 0..y.len() {
-        println!("Output {} is {}", i, y[i]);
+    match decode(&circuit, &d, &z) {
+        Ok(y) => {
+            for i in 0..y.len() {
+                println!("Output {} is {}", i, y[i]);
+            }
+        },
+        Err(_) => println!("\x1b[31mError decoding, no match found!\x1b[0m"),
     }
 }

@@ -1,9 +1,8 @@
 #![allow(dead_code)]
-#![allow(unused_variables)]
 
 mod arith;
 mod circuits;
-use crate::circuits::{Circuit, GateKind, Gate};
+use crate::circuits::{Circuit, GateKind};
 
 // -------------------------------------------------------------------------------------------------
 // Yao stuff
@@ -95,7 +94,6 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Prim
     let e = k[..circuit.num_inputs].to_vec();
 
     // 2. Gooble garble
-    let rand = SystemRandom::new();
     let mut f: Vec<[Primitives; 4]> = vec![[[[0; SECURITY_BYTES]; 2]; 4]; circuit.num_wires];
     for gate in &circuit.gates {
         if gate.kind == GateKind::NOT {
