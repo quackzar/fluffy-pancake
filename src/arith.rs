@@ -4,6 +4,7 @@ pub struct NewCircuit {
     num_inputs: usize,
     num_outputs: usize,
     gates: Vec<NewGate>,
+    input_domains : Vec<u64>,
 }
 
 #[derive(PartialEq)]
@@ -40,13 +41,9 @@ fn hash(a: u64, b: u64, w: &Wire) -> u64 {
     let digest = context.finish();
     let bytes = digest.as_ref();
     let num = u64::from_be_bytes(bytes[..8].try_into().unwrap());
+    println!("{:?}", w);
+    println!("h({a},{b},w) = {num}");
     return num;
-}
-
-struct GarbledGadget {
-    projs: Vec<Vec<u64>>,
-    encoding: (Vec<u64>, Vec<u64>),
-    decoding: Vec<Vec<u64>>,
 }
 
 #[derive(Clone, Debug)]
@@ -70,7 +67,7 @@ impl ops::Add<&Wire> for &Wire {
             .values
             .iter()
             .zip(_rhs.values.iter())
-            .map(|(a, b)| a + b % domain)
+            .map(|(a, b)| (a + b) % domain)
             .collect();
         return Wire {
             domain,
@@ -82,10 +79,11 @@ impl ops::Add<&Wire> for &Wire {
 
 impl ops::Mul<u64> for &Wire {
     type Output = Wire;
+    #[inline]
     fn mul(self, _rhs: u64) -> Wire {
         let domain = self.domain;
         let lambda = self.lambda;
-        let values = self.values.iter().map(|x| x * _rhs % domain).collect();
+        let values = self.values.iter().map(|x| (x * _rhs) % domain).collect();
         return Wire {
             domain,
             values,
@@ -142,6 +140,7 @@ fn rng(max: u64) -> u64 {
     rand::thread_rng().gen_range(0..max)
 }
 
+#[inline]
 fn lsb(a: u64) -> u64 {
     (a & 1 == 1) as u64
 }
@@ -161,19 +160,13 @@ use std::collections::HashMap;
 
 fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     // 1. For each domain (we only have one)
-    let lambda = ceil((k as f64) / (WIREDOMAIN as f64), 0) as u64;
-    let outputs = (circuit.num_wires - circuit.num_outputs)..circuit.num_wires;
-    let outputs: Vec<&NewGate> = circuit
-        .gates
-        .iter()
-        .filter(|g| outputs.contains(&g.output))
-        .collect();
+        
+    ceil((k as f64) / (WIREDOMAIN as f64), 0) as u64;
 
-    let inputs = 0..circuit.num_inputs;
-    let _inputs: Vec<&NewGate> = circuit
-        .gates
-        .iter()
-        .filter(|g| g.inputs.iter().any(|i| inputs.contains(i)))
+    let lambda : HashMap<_,_> = circuit.gates.iter()
+        .map(|g| g.domain)
+        .unique()
+        .map(|m| (m, (k + log2(m) - 1)/ log2(m)))
         .collect();
 
     let delta: HashMap<_, _> = circuit
@@ -181,15 +174,19 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
         .iter()
         .map(|g: &NewGate| g.domain)
         .unique()
-        .map(|d| (d, Wire::delta(d, lambda)))
+        .map(|m| (m, Wire::delta(m, lambda[&m])))
         .collect();
 
-    // 2. For each input
-    let mut wires = Vec::with_capacity(circuit.num_wires);
-    for _ in 0..circuit.num_inputs {
-        wires.push(Wire::new(WIREDOMAIN as u64, lambda));
-    }
 
+    // 2. For each input
+
+    let inputs = 0..circuit.num_inputs;
+    let mut wires = Vec::with_capacity(circuit.num_wires);
+    for i in inputs {
+        let m = circuit.input_domains[i];
+        wires.push(Wire::new(m, lambda[&m]));
+    }
+    
     // 3. Encoding
     let encoding = Encoding {
         wires: wires[..circuit.num_inputs].to_vec(),
@@ -217,6 +214,13 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     }
 
     // 5. Decoding / outputs
+    let outputs = (circuit.num_wires - circuit.num_outputs)..circuit.num_wires;
+    let outputs: Vec<&NewGate> = circuit
+        .gates
+        .iter()
+        .filter(|g| outputs.contains(&g.output))
+        .collect();
+
     let mut d = Vec::with_capacity(circuit.num_outputs);
     let mut ids = Vec::with_capacity(circuit.num_outputs);
     let mut domains = Vec::with_capacity(circuit.num_outputs);
@@ -305,9 +309,9 @@ pub fn decode(
     let domains = &decoding.domains;
     assert_eq!(d.len(), z.len());
     assert_eq!(d.len(), ids.len());
-    let mut success = false;
     let mut y = vec![0u64; d.len()];
     for i in 0..d.len() {
+        let mut success = false;
         let id = ids[i];
         let h = &d[i];
         for k in 0..domains[i] {
@@ -318,53 +322,30 @@ pub fn decode(
                 break;
             }
         }
-    }
-    if success {
-        Ok(y)
-    } else {
-        Err(DecodeError {})
-    }
-}
-
-pub fn funfunfunfun() {
-    let circuit = NewCircuit {
-        gates: vec![NewGate {
-            kind: NewGateKind::ADD,
-            inputs: vec![0,1],
-            output: 2,
-            domain: WIREDOMAIN,
-        }],
-        num_inputs: 2,
-        num_outputs: 1,
-        num_wires: 3,
-    };
-    let inputs = vec![2, 2];
-
-    const SECURITY: u64 = 128;
-    let (f, e, d) = garble(&circuit, SECURITY);
-
-    let x = encode(&e, &inputs);
-    println!("x = {:?}", x);
-    let z = evaluate(&circuit, &f, &x);
-    println!("{:?}", z);
-    match decode(&d, &z) {
-        Ok(y) => {
-            for i in 0..y.len() {
-                println!("Output {} is {}", i, y[i]);
-            }
+        if !success {
+            return Err(DecodeError {});
         }
-        Err(_) => println!("\x1b[31mError decoding, no match found!\x1b[0m"),
     }
+    Ok(y)
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use crate::arith::{Wire, Encoding, encode, decode, Decoding, hash, garble, evaluate};
 
-    use crate::arith::{Wire, Encoding, encode, decode, Decoding, hash};
-    
+    use super::{NewCircuit, NewGateKind, NewGate};
+
+    fn garble_encode_eval_decode(c : &NewCircuit, x : &Vec<u64>) -> Vec<u64> {
+        const SECURITY: u64 = 128;
+        let (f, e, d) = garble(&c, SECURITY);
+        let x = encode(&e, x);
+        let z = evaluate(c, &f, &x);
+        return decode(&d, &z).unwrap()
+    }
+
     #[test]
-    fn test_encode_decode() {
+    fn encode_decode() {
         let id : usize = 0;
         let lambda = 8;
         let domain = 128;
@@ -388,5 +369,45 @@ mod tests {
         let x = encode(&e, &input);
         let y = decode(&d, &x).unwrap();
         assert_eq!(input, y)
+    }
+
+    #[test]
+    fn sum_circuit() {
+        let domain = 2;
+        let circuit = NewCircuit {
+            gates: vec![NewGate {
+                kind: NewGateKind::ADD,
+                inputs: vec![0,1],
+                output: 2,
+                domain: domain,
+            }],
+            num_inputs: 2,
+            num_outputs: 1,
+            num_wires: 3,
+            input_domains: vec![domain, domain],
+        };
+        let inputs = vec![0, 1];
+        let outputs = garble_encode_eval_decode(&circuit, &inputs);
+        assert_eq!(outputs[0], 1);
+    }
+
+    #[test]
+    fn mult_circuit() {
+        let domain = 8;
+        let circuit = NewCircuit {
+            gates: vec![NewGate {
+                kind: NewGateKind::MUL(3),
+                inputs: vec![0],
+                output: 1,
+                domain: domain,
+            }],
+            num_inputs: 1,
+            num_outputs: 1,
+            num_wires: 2,
+            input_domains: vec![domain, domain],
+        };
+        let inputs = vec![2];
+        let outputs = garble_encode_eval_decode(&circuit, &inputs);
+        assert_eq!(outputs[0], 2*3);
     }
 }

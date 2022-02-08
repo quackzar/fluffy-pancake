@@ -67,7 +67,6 @@ fn prf(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive
     return (l_result, r_result);
 }
 
-use crate::arith::funfunfunfun;
 use ring::rand::{SecureRandom, SystemRandom};
 
 fn random_primitives() -> [Primitive; 2] {
@@ -278,7 +277,6 @@ fn main() {
     test_circuit_with_input(&circuit, vec![true,   true,  true], &e, &d, &f);
     */
 
-    funfunfunfun();
 }
 
 fn test_circuit_with_input(
