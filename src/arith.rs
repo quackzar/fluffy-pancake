@@ -4,7 +4,7 @@ pub struct NewCircuit {
     num_inputs: usize,
     num_outputs: usize,
     gates: Vec<NewGate>,
-    input_domains : Vec<u64>,
+    input_domains: Vec<u64>,
 }
 
 #[derive(PartialEq)]
@@ -151,20 +151,22 @@ pub struct Encoding {
 pub struct Decoding {
     map: Vec<Vec<u64>>,
     ids: Vec<usize>,
-    domains : Vec<u64>,
+    domains: Vec<u64>,
 }
 
 use std::collections::HashMap;
 
 fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     // 1. For each domain (we only have one)
-        
+
     ceil((k as f64) / (WIREDOMAIN as f64), 0) as u64;
 
-    let lambda : HashMap<_,_> = circuit.gates.iter()
+    let lambda: HashMap<_, _> = circuit
+        .gates
+        .iter()
         .map(|g| g.domain)
         .unique()
-        .map(|m| (m, (k + log2(m) - 1)/ log2(m)))
+        .map(|m| (m, (k + log2(m) - 1) / log2(m)))
         .collect();
 
     let delta: HashMap<_, _> = circuit
@@ -175,7 +177,6 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
         .map(|m| (m, Wire::delta(m, lambda[&m])))
         .collect();
 
-
     // 2. For each input
 
     let inputs = 0..circuit.num_inputs;
@@ -184,7 +185,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
         let m = circuit.input_domains[i];
         wires.push(Wire::new(m, lambda[&m]));
     }
-    
+
     // 3. Encoding
     let encoding = Encoding {
         wires: wires[..circuit.num_inputs].to_vec(),
@@ -298,10 +299,7 @@ impl fmt::Display for DecodeError {
     }
 }
 
-pub fn decode(
-    decoding: &Decoding,
-    z: &Vec<Wire>,
-) -> Result<Vec<u64>, DecodeError> {
+pub fn decode(decoding: &Decoding, z: &Vec<Wire>) -> Result<Vec<u64>, DecodeError> {
     let d = &decoding.map;
     let ids = &decoding.ids;
     let domains = &decoding.domains;
@@ -329,22 +327,22 @@ pub fn decode(
 
 #[cfg(test)]
 mod tests {
+    use crate::arith::{decode, encode, evaluate, garble, hash, Decoding, Encoding, Wire};
     use std::collections::HashMap;
-    use crate::arith::{Wire, Encoding, encode, decode, Decoding, hash, garble, evaluate};
 
-    use super::{NewCircuit, NewGateKind, NewGate};
+    use super::{NewCircuit, NewGate, NewGateKind};
 
-    fn garble_encode_eval_decode(c : &NewCircuit, x : &Vec<u64>) -> Vec<u64> {
+    fn garble_encode_eval_decode(c: &NewCircuit, x: &Vec<u64>) -> Vec<u64> {
         const SECURITY: u64 = 128;
         let (f, e, d) = garble(&c, SECURITY);
         let x = encode(&e, x);
         let z = evaluate(c, &f, &x);
-        return decode(&d, &z).unwrap()
+        return decode(&d, &z).unwrap();
     }
 
     #[test]
     fn encode_decode() {
-        let id : usize = 0;
+        let id: usize = 0;
         let lambda = 8;
         let domain = 128;
         let mut map = HashMap::new();
@@ -352,16 +350,16 @@ mod tests {
         map.insert(domain, delta.clone());
         let wire = Wire::new(domain, lambda);
         let e = Encoding {
-            wires : vec![wire.clone()],
-            delta : map
+            wires: vec![wire.clone()],
+            delta: map,
         };
-        let hashes : Vec<u64> = (0..domain).map(|k| 
-                hash(id as u64, k, &(&wire + &(&delta*k)))
-            ).collect();
+        let hashes: Vec<u64> = (0..domain)
+            .map(|k| hash(id as u64, k, &(&wire + &(&delta * k))))
+            .collect();
         let d = Decoding {
-            domains : vec![domain],
-            ids : vec![id],
-            map : vec![hashes],
+            domains: vec![domain],
+            ids: vec![id],
+            map: vec![hashes],
         };
         let input = vec![69];
         let x = encode(&e, &input);
@@ -375,7 +373,7 @@ mod tests {
         let circuit = NewCircuit {
             gates: vec![NewGate {
                 kind: NewGateKind::ADD,
-                inputs: vec![0,1],
+                inputs: vec![0, 1],
                 output: 2,
                 domain: domain,
             }],
@@ -406,6 +404,6 @@ mod tests {
         };
         let inputs = vec![57];
         let outputs = garble_encode_eval_decode(&circuit, &inputs);
-        assert_eq!(outputs[0], 9*57);
+        assert_eq!(outputs[0], 9 * 57);
     }
 }

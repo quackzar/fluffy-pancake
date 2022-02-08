@@ -276,7 +276,6 @@ fn main() {
     test_circuit_with_input(&circuit, vec![true,   true, false], &e, &d, &f);
     test_circuit_with_input(&circuit, vec![true,   true,  true], &e, &d, &f);
     */
-
 }
 
 fn test_circuit_with_input(
