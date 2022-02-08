@@ -41,8 +41,6 @@ fn hash(a: u64, b: u64, w: &Wire) -> u64 {
     let digest = context.finish();
     let bytes = digest.as_ref();
     let num = u64::from_be_bytes(bytes[..8].try_into().unwrap());
-    println!("{:?}", w);
-    println!("h({a},{b},w) = {num}");
     return num;
 }
 
@@ -373,7 +371,7 @@ mod tests {
 
     #[test]
     fn sum_circuit() {
-        let domain = 2;
+        let domain = 128;
         let circuit = NewCircuit {
             gates: vec![NewGate {
                 kind: NewGateKind::ADD,
@@ -386,17 +384,17 @@ mod tests {
             num_wires: 3,
             input_domains: vec![domain, domain],
         };
-        let inputs = vec![0, 1];
+        let inputs = vec![33, 66];
         let outputs = garble_encode_eval_decode(&circuit, &inputs);
-        assert_eq!(outputs[0], 1);
+        assert_eq!(outputs[0], 99);
     }
 
     #[test]
     fn mult_circuit() {
-        let domain = 8;
+        let domain = 600;
         let circuit = NewCircuit {
             gates: vec![NewGate {
-                kind: NewGateKind::MUL(3),
+                kind: NewGateKind::MUL(9),
                 inputs: vec![0],
                 output: 1,
                 domain: domain,
@@ -406,8 +404,8 @@ mod tests {
             num_wires: 2,
             input_domains: vec![domain, domain],
         };
-        let inputs = vec![2];
+        let inputs = vec![57];
         let outputs = garble_encode_eval_decode(&circuit, &inputs);
-        assert_eq!(outputs[0], 2*3);
+        assert_eq!(outputs[0], 9*57);
     }
 }
