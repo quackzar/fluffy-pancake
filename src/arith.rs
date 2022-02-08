@@ -1,4 +1,4 @@
-struct NewCircuit {
+pub struct NewCircuit {
     // TODO(frm): usize, u32?
     num_wires: usize,
     num_inputs: usize,
@@ -50,7 +50,7 @@ struct GarbledGadget {
 }
 
 #[derive(Clone, Debug)]
-struct Wire {
+pub struct Wire {
     lambda: u64,
     values: Vec<u64>,
     domain: u64,
@@ -105,7 +105,7 @@ impl Wire {
     fn new(domain: u64, lambda: u64) -> Wire {
         let mut values = vec![0u64; lambda as usize];
         for i in 0..lambda {
-            values[i as usize] = rng((1 << (domain + 1)) + 1);
+            values[i as usize] = rng(domain + 1);
         }
         return Wire {
             values,
@@ -117,7 +117,7 @@ impl Wire {
     fn delta(domain: u64, lambda: u64) -> Wire {
         let mut values = vec![0u64; lambda as usize];
         for i in 0..lambda {
-            values[i as usize] = (rng(1 << domain + 1) << 1) | 0b1;
+            values[i as usize] = (rng(domain + 1)) | 0b1;
         }
         return Wire {
             values,
@@ -141,17 +141,20 @@ const GATEDOMAIN: u64 = WIREDOMAIN;
 fn rng(max: u64) -> u64 {
     rand::thread_rng().gen_range(0..max)
 }
+
 fn lsb(a: u64) -> u64 {
     (a & 1 == 1) as u64
 }
 
-struct Encoding {
+pub struct Encoding {
     wires: Vec<Wire>,
     delta: HashMap<u64, Wire>,
 }
 
-struct Decoding {
+pub struct Decoding {
     map: Vec<Vec<u64>>,
+    ids: Vec<usize>,
+    domains : Vec<u64>,
 }
 
 use std::collections::HashMap;
@@ -180,7 +183,6 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
         .unique()
         .map(|d| (d, Wire::delta(d, lambda)))
         .collect();
-    //delta.insert(Wire::delta(WIREDOMAIN as u64, lambda));
 
     // 2. For each input
     let mut wires = Vec::with_capacity(circuit.num_wires);
@@ -216,17 +218,25 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
 
     // 5. Decoding / outputs
     let mut d = Vec::with_capacity(circuit.num_outputs);
+    let mut ids = Vec::with_capacity(circuit.num_outputs);
+    let mut domains = Vec::with_capacity(circuit.num_outputs);
     for gate in outputs {
-        let i = gate.output;
+        let id = gate.output;
         let domain = gate.domain;
-        let mut values = vec![0; 1 << domain];
-        for k in 0..(1 << domain) {
-            let hash = hash(i as u64, k as u64, &(&wires[i] + &(&delta[&domain] * k)));
+        let mut values = vec![0; domain as usize];
+        for k in 0..domain {
+            let hash = hash(id as u64, k as u64, &(&wires[id] + &(&delta[&domain] * k)));
             values[k as usize] = hash;
         }
         d.push(values);
+        ids.push(id);
+        domains.push(domain);
     }
-    let decoding = Decoding { map: d };
+    let decoding = Decoding {
+        map: d,
+        ids,
+        domains,
+    };
     return (f, encoding, decoding);
 }
 
@@ -258,7 +268,7 @@ fn evaluate(circuit: &NewCircuit, _f: &Vec<u64>, x: &Vec<Wire>) -> Vec<Wire> {
     return wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec();
 }
 
-fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<Wire> {
+pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<Wire> {
     let wires = &e.wires;
     let delta = &e.delta;
     assert_eq!(
@@ -278,7 +288,7 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Debug)]
-struct DecodeError {}
+pub struct DecodeError {}
 impl Error for DecodeError {}
 impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -286,21 +296,22 @@ impl fmt::Display for DecodeError {
     }
 }
 
-fn decode(
-    circuit: &NewCircuit,
+pub fn decode(
     decoding: &Decoding,
     z: &Vec<Wire>,
 ) -> Result<Vec<u64>, DecodeError> {
     let d = &decoding.map;
+    let ids = &decoding.ids;
+    let domains = &decoding.domains;
     assert_eq!(d.len(), z.len());
-
+    assert_eq!(d.len(), ids.len());
     let mut success = false;
     let mut y = vec![0u64; d.len()];
     for i in 0..d.len() {
-        let g = circuit.num_wires - circuit.num_outputs + i;
+        let id = ids[i];
         let h = &d[i];
-        for k in 0..(1 << OUTPUTDOMAIN) {
-            let hash = hash(g as u64, k, &z[i]);
+        for k in 0..domains[i] {
+            let hash = hash(id as u64, k, &z[i]);
             if hash == h[k as usize] {
                 y[i] = k;
                 success = true;
@@ -318,28 +329,64 @@ fn decode(
 pub fn funfunfunfun() {
     let circuit = NewCircuit {
         gates: vec![NewGate {
-            kind: NewGateKind::MUL(1),
-            inputs: vec![0],
-            output: 1,
+            kind: NewGateKind::ADD,
+            inputs: vec![0,1],
+            output: 2,
             domain: WIREDOMAIN,
         }],
-        num_inputs: 1,
+        num_inputs: 2,
         num_outputs: 1,
-        num_wires: 2,
+        num_wires: 3,
     };
-    let inputs = vec![2];
+    let inputs = vec![2, 2];
 
     const SECURITY: u64 = 128;
     let (f, e, d) = garble(&circuit, SECURITY);
 
     let x = encode(&e, &inputs);
+    println!("x = {:?}", x);
     let z = evaluate(&circuit, &f, &x);
-    match decode(&circuit, &d, &z) {
+    println!("{:?}", z);
+    match decode(&d, &z) {
         Ok(y) => {
             for i in 0..y.len() {
                 println!("Output {} is {}", i, y[i]);
             }
         }
         Err(_) => println!("\x1b[31mError decoding, no match found!\x1b[0m"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::arith::{Wire, Encoding, encode, decode, Decoding, hash};
+    
+    #[test]
+    fn test_encode_decode() {
+        let id : usize = 0;
+        let lambda = 8;
+        let domain = 128;
+        let mut map = HashMap::new();
+        let delta = Wire::delta(domain, lambda);
+        map.insert(domain, delta.clone());
+        let wire = Wire::new(domain, lambda);
+        let e = Encoding {
+            wires : vec![wire.clone()],
+            delta : map
+        };
+        let hashes : Vec<u64> = (0..domain).map(|k| 
+                hash(id as u64, k, &(&wire + &(&delta*k)))
+            ).collect();
+        let d = Decoding {
+            domains : vec![domain],
+            ids : vec![id],
+            map : vec![hashes],
+        };
+        let input = vec![69];
+        let x = encode(&e, &input);
+        let y = decode(&d, &x).unwrap();
+        assert_eq!(input, y)
     }
 }
