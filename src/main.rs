@@ -41,9 +41,9 @@ fn zero(p: Primitive) -> bool {
     return true;
 }
 
-use std::vec;
 use rand::Rng;
 use sha2ni::Digest;
+use std::vec;
 fn prf(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive) {
     // TODO(frm): This is probably not the best way to do it!
     let mut sha = sha2ni::Sha256::new();
@@ -67,8 +67,8 @@ fn prf(left: Primitive, right: Primitive, index: usize) -> (Primitive, Primitive
     return (l_result, r_result);
 }
 
-use ring::rand::{SecureRandom, SystemRandom};
 use crate::arith::funfunfunfun;
+use ring::rand::{SecureRandom, SystemRandom};
 
 fn random_primitives() -> [Primitive; 2] {
     let random = SystemRandom::new();
@@ -81,8 +81,6 @@ fn random_primitives() -> [Primitive; 2] {
 
     return [left, right];
 }
-
-
 
 fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Primitives; 4]>) {
     let mut k: Vec<Primitives> = vec![[[0; SECURITY_BYTES]; 2]; circuit.num_wires];
@@ -118,7 +116,7 @@ fn yao_garble(circuit: &Circuit) -> (Vec<Primitives>, Vec<Primitives>, Vec<[Prim
             let (g_left, g_right) = prf(
                 k[gate.inputs[0]][left as usize],
                 k[gate.inputs[1]][right as usize],
-                gate.output
+                gate.output,
             );
             c[(j + permutation) % 4] = [xor(g_left, garbled_value), g_right];
         }
@@ -177,7 +175,10 @@ fn yao_evaluate(circuit: &Circuit, f: &Vec<[Primitives; 4]>, x: &Vec<Primitive>)
         }
 
         if !found {
-            eprintln!("Cannot find solution for gate {}, no match with table!", gate.output);
+            eprintln!(
+                "Cannot find solution for gate {}, no match with table!",
+                gate.output
+            );
         }
     }
 
@@ -195,19 +196,19 @@ fn yao_decode(circuit: &Circuit, d: &Vec<Primitives>, z: &Vec<Primitive>) -> (bo
     for i in 0..circuit.num_outputs {
         if eq(d[i][0], z[i]) {
             y[i] = false;
-        }
-        else if eq(d[i][1], z[i]) {
+        } else if eq(d[i][1], z[i]) {
             y[i] = true;
-        }
-        else {
-            eprintln!("Error decoding output {}, no match with decoding information!", i);
+        } else {
+            eprintln!(
+                "Error decoding output {}, no match with decoding information!",
+                i
+            );
             success = false;
         }
     }
 
     return (success, y);
 }
-
 
 // -------------------------------------------------------------------------------------------------
 // fun times ahead
@@ -280,9 +281,13 @@ fn main() {
     funfunfunfun();
 }
 
-
-
-fn test_circuit_with_input(circuit: &Circuit, input: Vec<bool>, e: &Vec<Primitives>, d: &Vec<Primitives>, f: &Vec<[Primitives; 4]>) {
+fn test_circuit_with_input(
+    circuit: &Circuit,
+    input: Vec<bool>,
+    e: &Vec<Primitives>,
+    d: &Vec<Primitives>,
+    f: &Vec<[Primitives; 4]>,
+) {
     let x = yao_encode(&circuit, e, &input);
     let z = yao_evaluate(&circuit, f, &x);
     let (success, y) = yao_decode(&circuit, d, &z);
@@ -297,13 +302,19 @@ fn test_circuit_with_input(circuit: &Circuit, input: Vec<bool>, e: &Vec<Primitiv
     for i in 0..y.len() {
         let matches = y[i] == expected[i];
         success &= matches;
-        println!("Output {}> {} ?= {} => {}{}\x1b[0m", i, y[i], expected[i], if matches {"\x1b[32m"} else {"\x1b[31m"}, matches);
+        println!(
+            "Output {}> {} ?= {} => {}{}\x1b[0m",
+            i,
+            y[i],
+            expected[i],
+            if matches { "\x1b[32m" } else { "\x1b[31m" },
+            matches
+        );
     }
 
     if success {
         println!("\x1b[32mTest passed :)\x1b[0m");
-    }
-    else {
+    } else {
         println!("\x1b[31mTest failed :)\x1b[0m");
     }
 }

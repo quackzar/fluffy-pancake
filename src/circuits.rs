@@ -9,7 +9,6 @@ pub enum GateKind {
     AND,
     OR,
     XOR,
-
 }
 
 pub struct Gate {
@@ -46,4 +45,3 @@ impl Circuit {
         return wires[(wires.len() - self.num_outputs)..wires.len()].to_vec();
     }
 }
-
