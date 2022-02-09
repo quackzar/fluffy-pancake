@@ -412,4 +412,26 @@ mod tests {
         let outputs = garble_encode_eval_decode(&circuit, &inputs);
         assert_eq!(outputs[0], 9 * 57);
     }
+
+    #[test]
+    fn proj_circuit() {
+        let target_domain = 8;
+        let source_domain = 16;
+        let phi = |x| x;
+        let circuit = NewCircuit {
+            gates: vec![NewGate {
+                kind: NewGateKind::PROJ(target_domain, phi),
+                inputs: vec![0],
+                output: 1,
+                domain: source_domain,
+            }],
+            num_inputs: 1,
+            num_outputs: 1,
+            num_wires: 2,
+            input_domains: vec![source_domain]
+        };
+        let input = vec![5];
+        let output = garble_encode_eval_decode(&circuit, &input);
+        assert_eq!(output[0], 5)
+    }
 }
