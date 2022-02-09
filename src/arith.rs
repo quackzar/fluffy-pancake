@@ -44,6 +44,16 @@ fn hash(a: u64, b: u64, w: &Wire) -> u64 {
     return num;
 }
 
+fn hazh(a: u64, w: &Wire) -> Wire {
+    let h = hash(0, a, w);
+    Wire{
+        domain: w.domain,
+        lambda: w.lambda,
+        values: w.values.iter().map(|x| (x^h) % w.domain ).collect(),
+    }
+
+}
+
 #[derive(Clone, Debug)]
 pub struct Wire {
     lambda: u64,
@@ -56,15 +66,15 @@ use std::iter;
 
 impl ops::Add<&Wire> for &Wire {
     type Output = Wire;
-    fn add(self, _rhs: &Wire) -> Wire {
-        assert_eq!(self.lambda, _rhs.lambda);
-        assert_eq!(self.domain, _rhs.domain);
+    fn add(self, rhs: &Wire) -> Wire {
+        assert_eq!(self.lambda, rhs.lambda);
+        assert_eq!(self.domain, rhs.domain);
         let domain = self.domain;
         let lambda = self.lambda;
         let values = self
             .values
             .iter()
-            .zip(_rhs.values.iter())
+            .zip(rhs.values.iter())
             .map(|(a, b)| (a + b) % domain)
             .collect();
         return Wire {
@@ -74,6 +84,41 @@ impl ops::Add<&Wire> for &Wire {
         };
     }
 }
+
+impl ops::Sub<&Wire> for &Wire {
+    type Output = Wire;
+    fn sub(self, rhs: &Wire) -> Self::Output {
+        // TODO: does this ever go wrong?
+        assert_eq!(self.lambda, rhs.lambda);
+        assert_eq!(self.domain, rhs.domain);
+        let domain = self.domain;
+        let lambda = self.lambda;
+        let values = self
+            .values
+            .iter()
+            .zip(rhs.values.iter())
+            .map(|(a, b)| (a - b) % domain)
+            .collect();
+        return Wire {
+            domain,
+            values,
+            lambda,
+        };
+    }
+}
+
+
+impl ops::Neg for &Wire {
+    type Output = Wire;
+    fn neg(self) -> Wire {
+        return Wire {
+            domain: self.domain,
+            lambda: self.lambda, // this probably works
+            values: self.values.iter().map(|x| self.domain - x).collect(), 
+        }
+    }
+}
+
 
 impl ops::Mul<u64> for &Wire {
     type Output = Wire;
@@ -124,7 +169,6 @@ impl Wire {
 }
 
 use itertools::Itertools;
-use math::round::ceil;
 use rand::Rng;
 
 // Domains (in bits, 2^n) for inputs and wires
@@ -156,7 +200,7 @@ pub struct Decoding {
 
 use std::collections::HashMap;
 
-fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
+fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, Decoding) {
     // 1. For each domain (we only have one)
     let lambda: HashMap<_, _> = circuit
         .gates
@@ -189,27 +233,25 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     };
 
     // 4. For each gate
-    let f = Vec::with_capacity(circuit.num_wires);
+    let mut f = HashMap::new();
     for gate in &circuit.gates {
         let w = match gate.kind {
             NewGateKind::ADD => gate.inputs.iter().map(|&x| wires[x].clone()).sum(),
             NewGateKind::MUL(c) => &wires[gate.inputs[0]] * c,
              NewGateKind::PROJ(range, phi) => {
-                 let a = gate.inputs[0];
-                 let tau = lsb(wires[a].values[0]);
-
-                 // TODO(frm): Hash but without the 0
-                 // TODO(frm): Is this delta[a] or delta for the domain?
-                 // TODO(frm): Modulo?
-
-                 wires[i] = -hash(i as u64, 0, wires[a][0] + (tau * delta[i])) - phi(-tau) * delta[a];
-
-                 let g = vec![0, gate.domain as usize];
-                 for x in 0..gate.domain {
-                     g[x + tau] = hash(i as u64, 0, wires[a][0] + x * delta[gate.domain]) + wires[i] + phi(x) * delta[a];
-                 }
-
-                 // TODO(frm): Keep track of the ciperhtexts
+                let a = gate.inputs[0];
+                let i = gate.output;
+                let domain = gate.domain;
+                let delta_m = &delta[&domain];
+                let delta_n = &delta[&range];
+                let tau = lsb(wires[a].values[0]);
+                let w = hazh(i as u64, &(&wires[a] - &(delta_m * tau) ));// - &delta_n *phi(-tau);
+                let g : Vec<Wire> = (0..domain).map(|x : u64|
+                            &hazh(i as u64, &(&w + &(delta_m*x))) - &(delta_n * phi(tau))
+                        ).collect();
+                f.insert(i, g);
+                w
+                // TODO(frm): Keep track of the ciperhtexts
             },
             _ => {
                 panic!("Unsupported gate type");
@@ -249,7 +291,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     return (f, encoding, decoding);
 }
 
-fn evaluate(circuit: &NewCircuit, _f: &Vec<u64>, x: &Vec<Wire>) -> Vec<Wire> {
+fn evaluate(circuit: &NewCircuit, _f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -> Vec<Wire> {
     use std::mem::{transmute, MaybeUninit};
     let mut wires: Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);
     unsafe {
