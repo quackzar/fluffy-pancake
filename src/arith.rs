@@ -158,9 +158,6 @@ use std::collections::HashMap;
 
 fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
     // 1. For each domain (we only have one)
-
-    ceil((k as f64) / (WIREDOMAIN as f64), 0) as u64;
-
     let lambda: HashMap<_, _> = circuit
         .gates
         .iter()
@@ -178,7 +175,6 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
         .collect();
 
     // 2. For each input
-
     let inputs = 0..circuit.num_inputs;
     let mut wires = Vec::with_capacity(circuit.num_wires);
     for i in inputs {
@@ -198,13 +194,23 @@ fn garble(circuit: &NewCircuit, k: u64) -> (Vec<u64>, Encoding, Decoding) {
         let w = match gate.kind {
             NewGateKind::ADD => gate.inputs.iter().map(|&x| wires[x].clone()).sum(),
             NewGateKind::MUL(c) => &wires[gate.inputs[0]] * c,
-            // NewGateKind::PROJ(range, phi) => {
-            //     let a = gate.inputs[0];
-            //     let tau = lsb(wires[a]);
-            //     wires[i] -= hash(i as u64, wires[a] + (tau * delta[i]));
-            //     wires[i] -= phi( -(tau as i64) as u64)*delta[a];
-            //     for x
-            // },
+             NewGateKind::PROJ(range, phi) => {
+                 let a = gate.inputs[0];
+                 let tau = lsb(wires[a].values[0]);
+
+                 // TODO(frm): Hash but without the 0
+                 // TODO(frm): Is this delta[a] or delta for the domain?
+                 // TODO(frm): Modulo?
+
+                 wires[i] = -hash(i as u64, 0, wires[a][0] + (tau * delta[i])) - phi(-tau) * delta[a];
+
+                 let g = vec![0, gate.domain as usize];
+                 for x in 0..gate.domain {
+                     g[x + tau] = hash(i as u64, 0, wires[a][0] + x * delta[gate.domain]) + wires[i] + phi(x) * delta[a];
+                 }
+
+                 // TODO(frm): Keep track of the ciperhtexts
+            },
             _ => {
                 panic!("Unsupported gate type");
             }
