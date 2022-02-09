@@ -251,11 +251,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
                         ).collect();
                 f.insert(i, g);
                 w
-                // TODO(frm): Keep track of the ciperhtexts
             },
-            _ => {
-                panic!("Unsupported gate type");
-            }
         };
         wires.push(w);
     }
@@ -291,7 +287,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
     return (f, encoding, decoding);
 }
 
-fn evaluate(circuit: &NewCircuit, _f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -> Vec<Wire> {
+fn evaluate(circuit: &NewCircuit, f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -> Vec<Wire> {
     use std::mem::{transmute, MaybeUninit};
     let mut wires: Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);
     unsafe {
@@ -308,9 +304,10 @@ fn evaluate(circuit: &NewCircuit, _f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) 
                 .map(|&x| unsafe { wires[x].assume_init_ref() }.clone())
                 .sum::<Wire>(),
             NewGateKind::MUL(c) => unsafe { wires[gate.inputs[0]].assume_init_ref() * c },
-            // TODO(frm): Projections! Yay!
-            _ => {
-                panic!("Unsupported gate type");
+            NewGateKind::PROJ(_,_) => {
+                let wire = unsafe{ wires[gate.inputs[0]].assume_init_ref() };
+                let tau = lsb(wire.values[0]);
+                &f[&gate.output][tau as usize] - &hazh(gate.output as u64, wire)
             }
         };
         wires[gate.output].write(w);
