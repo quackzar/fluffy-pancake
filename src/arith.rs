@@ -179,10 +179,11 @@ impl iter::Sum for Wire {
 
 impl Wire {
     fn new(domain: u64, lambda: u64) -> Wire {
-        let mut values = vec![0u64; lambda as usize];
-        for i in 0..lambda {
+        let mut values = vec![0u64; (lambda+1) as usize];
+        for i in 0..lambda { // HACK: Should be lambda+1
             values[i as usize] = rng(domain + 1);
         }
+        
         return Wire {
             values,
             lambda,
@@ -191,10 +192,11 @@ impl Wire {
     }
 
     fn delta(domain: u64, lambda: u64) -> Wire {
-        let mut values = vec![0u64; lambda as usize];
-        for i in 0..lambda {
-            values[i as usize] = (rng(domain + 1)) | 0b1;
+        let mut values = vec![0u64; (lambda+1) as usize];
+        for i in 0..lambda { // HACK Should be lambda
+            values[i as usize] =  rng(domain + 1);
         }
+        values[lambda as usize] = 1;
         return Wire {
             values,
             lambda,
@@ -214,8 +216,13 @@ fn rng(max: u64) -> u64 {
 }
 
 #[inline]
-fn lsb(a: u64) -> u64 {
+fn lsb2(a: u64) -> u64 {
     (a & 1 == 1) as u64
+}
+
+#[inline]
+fn tau(w : &Wire) -> u64 {
+    w.values[w.lambda as usize]
 }
 
 #[inline]
@@ -286,7 +293,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize, Vec<Wire>>, Encoding,
                 let domain = gate.domain;
                 let delta_m = &delta[&domain];
                 let delta_n = &delta[&range];
-                let tau = lsb(wires[a].values[0]);
+                let tau = tau(&wires[a]);
                 let hw = hash_wire(i, 0, &(&wires[a] - &(delta_m * tau)), &delta_n);
                 let w = &hw + &(delta_n * phi(domain - tau));
                 let w = -&w;
@@ -357,7 +364,7 @@ fn evaluate(circuit: &NewCircuit, f: &HashMap<usize, Vec<Wire>>, x: &Vec<Wire>) 
             NewGateKind::MUL(c) => unsafe { wires[gate.inputs[0]].assume_init_ref() * c },
             NewGateKind::PROJ(_, _) => {
                 let wire = unsafe { wires[gate.inputs[0]].assume_init_ref() };
-                let tau = lsb(wire.values[0]);
+                let tau = tau(wire);
                 let cipher = &f[&gate.output][tau as usize];
                 let hw = hash_wire(gate.output as u64, 0, wire, cipher);
                 cipher - &hw
