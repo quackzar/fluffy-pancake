@@ -89,16 +89,6 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
     };
 }
 
-fn hazh(a: u64, w: &Wire) -> Wire {
-    let h = hash(0, a, w);
-    Wire{
-        domain: w.domain,
-        lambda: w.lambda,
-        values: w.values.iter().map(|x| (x^h) % w.domain ).collect(),
-    }
-
-}
-
 #[derive(Clone, Debug)]
 pub struct Wire {
     lambda: u64,
@@ -246,12 +236,6 @@ fn lsb(a: u64) -> u64 {
     (a & 1 == 1) as u64
 }
 
-fn additive_inverse(n: u64, m: u64) -> u64
-{   // n + (m - n) = m = 0 (m)
-    assert!(n < m);
-    return m - n;
-}
-
 pub struct Encoding {
     wires: Vec<Wire>,
     delta: HashMap<u64, Wire>,
@@ -317,11 +301,8 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
                 let delta_m = &delta[&domain];
                 let delta_n = &delta[&range];
                 let tau = lsb(wires[a].values[0]);
-
-                //let h = hash(i, 0, &(&wires[a] - &(delta_m * tau)));
-                //let hw = wire_with(delta_n.domain, delta_n.lambda, h);
                 let hw = hash_wire(i, 0, &(&wires[a] - &(delta_m * tau)), &delta_n);
-                let w = &hw + &(delta_n * phi(additive_inverse(tau, domain)));
+                let w = &hw + &(delta_n * phi(domain - tau));
                 let w = -&w;
                 let mut g = Vec::with_capacity(gate.domain as usize);
                 for x in 0..domain {
