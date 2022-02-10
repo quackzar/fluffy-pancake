@@ -40,8 +40,54 @@ fn hash(a: u64, b: u64, w: &Wire) -> u64 {
     }
     let digest = context.finish();
     let bytes = digest.as_ref();
+
     let num = u64::from_be_bytes(bytes[..8].try_into().unwrap());
     return num;
+}
+
+fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
+    // This is super nice 😎
+    use ring::digest::Context;
+    use ring::digest::SHA256;
+
+    // Compute the hash
+    let mut context = Context::new(&SHA256);
+    context.update(&a.to_be_bytes());
+    context.update(&b.to_be_bytes());
+    context.update(&w.lambda.to_be_bytes());
+    context.update(&w.domain.to_be_bytes());
+    for v in &w.values {
+        context.update(&v.to_be_bytes());
+    }
+    let digest = context.finish();
+    let bytes = digest.as_ref();
+
+    // Turn them into a wire
+    let mut v = Vec::with_capacity(target.lambda as usize);
+    let bits_per_value = log2(target.domain);
+    let truncated_bytes_per_value = bits_per_value / 8;
+    let bytes_per_value = if (bits_per_value % 8) == 0 { truncated_bytes_per_value } else { truncated_bytes_per_value + 1 };
+    assert!(target.lambda * bytes_per_value <= 32);
+    for i in (0..32).step_by(bytes_per_value as usize) {
+        let mut value = 0u64;
+        for j in 0..bytes_per_value {
+            value |= ((bytes[i + j as usize] as u64) << (8 * j));
+        }
+
+        v.push(value);
+
+        if v.len() == (target.lambda as usize) {
+            break;
+        }
+    }
+
+    assert_eq!(v.len(), target.lambda as usize);
+
+    return Wire {
+        domain: target.domain,
+        lambda: target.lambda,
+        values: v
+    };
 }
 
 fn hazh(a: u64, w: &Wire) -> Wire {
@@ -285,8 +331,10 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
                 let delta_n = &delta[&range];
                 let tau = lsb(wires[a].values[0]);
 
-                let h = hash(i, 0, &(&wires[a] - &(delta_m * tau)));
-                let hw = wire_with(delta_n.domain, delta_n.lambda, h % delta_n.domain);
+                let hw = hash_wire(i, 0, &(&wires[a] - &(delta_m * tau)), &delta_n);
+
+                //let h = hash(i, 0, &(&wires[a] - &(delta_m * tau)));
+                //let hw = wire_with(delta_n.domain, delta_n.lambda, h % delta_n.domain);
                 let mut w = &hw + &(delta_n * phi(additive_inverse(tau, domain)));
                 wire_negate(&mut w);
 
@@ -526,8 +574,8 @@ mod tests {
             num_wires: 2,
             input_domains: vec![source_domain]
         };
-        let input = vec![5];
+        let input = vec![1];
         let output = garble_encode_eval_decode(&circuit, &input);
-        assert_eq!(output[0], 5)
+        assert_eq!(output[0], 1)
     }
 }
