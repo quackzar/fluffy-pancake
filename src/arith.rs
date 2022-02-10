@@ -1,5 +1,4 @@
 pub struct NewCircuit {
-    // TODO(frm): usize, u32?
     num_wires: usize,
     num_inputs: usize,
     num_outputs: usize,
@@ -21,9 +20,6 @@ struct NewGate {
     domain: u64,
 }
 
-fn log2(x: u64) -> u64 {
-    (std::mem::size_of::<u64>() as u64) * 8 - (x.leading_zeros() as u64)
-}
 
 fn hash(a: u64, b: u64, w: &Wire) -> u64 {
     // This is super nice 😎
@@ -208,28 +204,10 @@ impl Wire {
 }
 
 // -------------------------------------------------------------------------------------------------
-// Wire helpers
-
-fn wire_with(domain: u64, lambda: u64, value: u64) -> Wire {
-    return Wire {
-        domain,
-        lambda,
-        values: vec![value; lambda as usize],
-    };
-}
-
-// -------------------------------------------------------------------------------------------------
 // Start of stuff ...
 
 use itertools::Itertools;
 use rand::Rng;
-
-// Domains (in bits, 2^n) for inputs and wires
-const INPUTDOMAIN: u64 = 4;
-const WIREDOMAIN: u64 = 8;
-const OUTPUTDOMAIN: u64 = 8;
-const GATEDOMAIN: u64 = WIREDOMAIN;
-// TODO(frm): Gate domain?
 
 fn rng(max: u64) -> u64 {
     rand::thread_rng().gen_range(0..max)
@@ -238,6 +216,11 @@ fn rng(max: u64) -> u64 {
 #[inline]
 fn lsb(a: u64) -> u64 {
     (a & 1 == 1) as u64
+}
+
+#[inline]
+fn log2(x: u64) -> u64 {
+    (std::mem::size_of::<u64>() as u64) * 8 - (x.leading_zeros() as u64)
 }
 
 pub struct Encoding {
