@@ -66,7 +66,11 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
     let mut v = Vec::with_capacity(target.lambda as usize);
     let bits_per_value = log2(target.domain);
     let truncated_bytes_per_value = bits_per_value / 8;
-    let bytes_per_value = if (bits_per_value % 8) == 0 { truncated_bytes_per_value } else { truncated_bytes_per_value + 1 };
+    let bytes_per_value = if (bits_per_value % 8) == 0 {
+        truncated_bytes_per_value
+    } else {
+        truncated_bytes_per_value + 1
+    };
     assert!(target.lambda * bytes_per_value <= 32);
     for i in (0..32).step_by(bytes_per_value as usize) {
         let mut value = 0u64;
@@ -81,11 +85,14 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
     }
 
     assert_eq!(v.len(), target.lambda as usize);
-    assert!(v.iter().all(|v| v < &target.domain), "value not under domain");
+    assert!(
+        v.iter().all(|v| v < &target.domain),
+        "value not under domain"
+    );
     return Wire {
         domain: target.domain,
         lambda: target.lambda,
-        values: v
+        values: v,
     };
 }
 
@@ -141,18 +148,16 @@ impl ops::Sub<&Wire> for &Wire {
     }
 }
 
-
 impl ops::Neg for &Wire {
     type Output = Wire;
     fn neg(self) -> Wire {
         return Wire {
             domain: self.domain,
             lambda: self.lambda, // this probably works
-            values: self.values.iter().map(|x| self.domain - x).collect(), 
-        }
+            values: self.values.iter().map(|x| self.domain - x).collect(),
+        };
     }
 }
-
 
 impl ops::Mul<u64> for &Wire {
     type Output = Wire;
@@ -202,7 +207,6 @@ impl Wire {
     }
 }
 
-
 // -------------------------------------------------------------------------------------------------
 // Wire helpers
 
@@ -210,7 +214,7 @@ fn wire_with(domain: u64, lambda: u64, value: u64) -> Wire {
     return Wire {
         domain,
         lambda,
-        values: vec![value; lambda as usize]
+        values: vec![value; lambda as usize],
     };
 }
 
@@ -249,28 +253,27 @@ pub struct Decoding {
 
 use std::collections::HashMap;
 
-fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, Decoding) {
+fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize, Vec<Wire>>, Encoding, Decoding) {
     // 1. For each domain
-    let mut domains : Vec<u64> = circuit.gates
-        .iter()
-        .map(|g| g.domain)
-        .unique()
-        .collect();
+    let mut domains: Vec<u64> = circuit.gates.iter().map(|g| g.domain).unique().collect();
     domains.extend(
-        circuit.gates
+        circuit
+            .gates
             .iter()
             .filter_map(|g| match g.kind {
                 NewGateKind::PROJ(range, _) => Some(range),
                 _ => None,
             })
-            .unique()
+            .unique(),
     );
 
-    let lambda: HashMap<_, _> = domains.iter()
+    let lambda: HashMap<_, _> = domains
+        .iter()
         .map(|&m| (m, (k + log2(m) - 1) / log2(m)))
         .collect();
 
-    let delta: HashMap<_, _> = domains.iter()
+    let delta: HashMap<_, _> = domains
+        .iter()
         .map(|&m| (m, Wire::delta(m, lambda[&m])))
         .collect();
 
@@ -312,7 +315,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
                 }
                 f.insert(i as usize, g);
                 w
-            },
+            }
         };
         wires.push(w);
     }
@@ -332,7 +335,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
         let id = gate.output;
         let domain = match gate.kind {
             NewGateKind::PROJ(range, _) => range,
-            _ => gate.domain
+            _ => gate.domain,
         };
         let mut values = vec![0; domain as usize];
         for k in 0..domain {
@@ -351,7 +354,8 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
     return (f, encoding, decoding);
 }
 
-fn evaluate(circuit: &NewCircuit, f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -> Vec<Wire> {
+fn evaluate(circuit: &NewCircuit, f: &HashMap<usize, Vec<Wire>>, x: &Vec<Wire>) -> Vec<Wire> {
+    assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
     use std::mem::{transmute, MaybeUninit};
     let mut wires: Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);
     unsafe {
@@ -368,8 +372,8 @@ fn evaluate(circuit: &NewCircuit, f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -
                 .map(|&x| unsafe { wires[x].assume_init_ref() }.clone())
                 .sum::<Wire>(),
             NewGateKind::MUL(c) => unsafe { wires[gate.inputs[0]].assume_init_ref() * c },
-            NewGateKind::PROJ(_,_) => {
-                let wire = unsafe{ wires[gate.inputs[0]].assume_init_ref() };
+            NewGateKind::PROJ(_, _) => {
+                let wire = unsafe { wires[gate.inputs[0]].assume_init_ref() };
                 let tau = lsb(wire.values[0]);
                 let cipher = &f[&gate.output][tau as usize];
                 let hw = hash_wire(gate.output as u64, 0, wire, cipher);
@@ -499,6 +503,26 @@ mod tests {
     }
 
     #[test]
+    fn sum_multiple_circuit() {
+        let domain = 128;
+        let circuit = NewCircuit {
+            gates: vec![NewGate {
+                kind: NewGateKind::ADD,
+                inputs: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                output: 10,
+                domain: domain,
+            }],
+            num_inputs: 10,
+            num_outputs: 1,
+            num_wires: 11,
+            input_domains: vec![domain; 10],
+        };
+        let inputs = vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+        let outputs = garble_encode_eval_decode(&circuit, &inputs);
+        assert_eq!(outputs[0], 10, "Wrong result");
+    }
+
+    #[test]
     fn mult_circuit() {
         let domain = 600;
         let circuit = NewCircuit {
@@ -533,10 +557,10 @@ mod tests {
             num_inputs: 1,
             num_outputs: 1,
             num_wires: 2,
-            input_domains: vec![source_domain]
+            input_domains: vec![source_domain],
         };
-        let input = vec![1];
+        let input = vec![7];
         let output = garble_encode_eval_decode(&circuit, &input);
-        assert_eq!(output[0], 1)
+        assert_eq!(output[0], 7)
     }
 }
