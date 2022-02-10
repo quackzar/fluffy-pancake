@@ -67,8 +67,8 @@ use std::iter;
 impl ops::Add<&Wire> for &Wire {
     type Output = Wire;
     fn add(self, rhs: &Wire) -> Wire {
-        assert_eq!(self.lambda, rhs.lambda);
-        assert_eq!(self.domain, rhs.domain);
+        assert_eq!(self.lambda, rhs.lambda, "Lambdas doesn't match.");
+        assert_eq!(self.domain, rhs.domain, "Domain not matching");
         let domain = self.domain;
         let lambda = self.lambda;
         let values = self
@@ -89,8 +89,8 @@ impl ops::Sub<&Wire> for &Wire {
     type Output = Wire;
     fn sub(self, rhs: &Wire) -> Self::Output {
         // TODO: does this ever go wrong?
-        assert_eq!(self.lambda, rhs.lambda);
-        assert_eq!(self.domain, rhs.domain);
+        assert_eq!(self.lambda, rhs.lambda, "Lambdas doesn't match.");
+        assert_eq!(self.domain, rhs.domain, "Domain not matching");
         let domain = self.domain;
         let lambda = self.lambda;
         let values = self
