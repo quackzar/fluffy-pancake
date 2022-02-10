@@ -362,8 +362,8 @@ fn evaluate(circuit: &NewCircuit, f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -
                 let tau = lsb(wire.values[0]);
                 let cipher = &f[&gate.output][tau as usize];
                 let h = hash(gate.output as u64, 0, wire);
-                let hw = wire_with(cipher.domain, cipher.lambda, h);
-                cipher - &hw
+                let hw = wire_with(cipher.domain, cipher.lambda, additive_inverse(h % wire.domain, wire.domain));
+                cipher + &hw
             }
         };
         wires[gate.output].write(w);
