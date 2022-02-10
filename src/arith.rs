@@ -168,6 +168,21 @@ impl Wire {
     }
 }
 
+
+// -------------------------------------------------------------------------------------------------
+// Wire helpers
+
+fn wire_negate(wire: &mut Wire) {
+    // To negate a wire we negate all of its values, which modulo something is the same as taking
+    // the additive inverse of the value.
+    for i in 0..wire.values.len() {
+        wire.values[i] = additive_inverse(wire.values[i], wire.domain);
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Start of stuff ...
+
 use itertools::Itertools;
 use rand::Rng;
 
@@ -185,6 +200,15 @@ fn rng(max: u64) -> u64 {
 #[inline]
 fn lsb(a: u64) -> u64 {
     (a & 1 == 1) as u64
+}
+
+fn additive_inverse(n: u64, domain: u64) -> u64
+{
+    let m = 1 << domain; // 2^domain
+    assert!(n < m);
+
+    // n + (m - n) = m = 0 (m)
+    return m - n;
 }
 
 pub struct Encoding {
@@ -214,34 +238,12 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
         let d = Wire::delta(m, l);
         delta.insert(m, d);
 
-        println!("Adding domain {}", m);
-
         if let NewGateKind::PROJ(range, _) = gate.kind {
-            println!("Adding range {}", range);
-
             let l = (k + log2(range) - 1) / log2(range);
             let d = Wire::delta(range, l);
             delta.insert(range, d);
         }
     }
-
-    /*
-    let lambda: HashMap<_, _> = circuit
-        .gates
-        .iter()
-        .map(|g| g.domain)
-        .unique()
-        .map(|m| (m, (k + log2(m) - 1) / log2(m)))
-        .collect();
-
-    let delta: HashMap<_, _> = circuit
-        .gates
-        .iter()
-        .map(|g: &NewGate| g.domain)
-        .unique()
-        .map(|m| (m, Wire::delta(m, lambda[&m])))
-        .collect();
-     */
 
     // 2. For each input
     let inputs = 0..circuit.num_inputs;
@@ -270,7 +272,8 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
                 let delta_m = &delta[&domain];
                 let delta_n = &delta[&range];
                 let tau = lsb(wires[a].values[0]);
-                let w = hazh(i as u64, &(&wires[a] - &(delta_m * tau) ));// - &delta_n *phi(-tau);
+                let mut w = (&hazh(i as u64, &(&wires[a] - &(delta_m * tau))) + &(delta_n * phi(additive_inverse(tau, domain))));
+                wire_negate(&mut w);
                 let g : Vec<Wire> = (0..domain).map(|x : u64|
                             &hazh(i as u64, &(&w + &(delta_m*x))) - &(delta_n * phi(tau))
                         ).collect();
