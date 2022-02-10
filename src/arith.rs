@@ -230,8 +230,6 @@ pub struct Decoding {
 use std::collections::HashMap;
 
 fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, Decoding) {
-    println!("-----------------------------");
-
     // 1. For each domain (we only have one)
     let mut lambda = HashMap::new();
     let mut delta = HashMap::new();
@@ -272,20 +270,27 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
             NewGateKind::MUL(c) => &wires[gate.inputs[0]] * c,
             NewGateKind::PROJ(range, phi) => {
                 let a = gate.inputs[0];
-                let i = gate.output;
+                let i = gate.output as u64;
                 let domain = gate.domain;
                 let delta_m = &delta[&domain];
                 let delta_n = &delta[&range];
                 let tau = lsb(wires[a].values[0]);
 
-                let h = hash(i as u64, 0, &(&wires[a] - &(delta_m * tau)));
+                let h = hash(i, 0, &(&wires[a] - &(delta_m * tau)));
                 let hw = wire_with(delta_n.domain, delta_n.lambda, h);
                 let mut w = &hw + &(delta_n * phi(additive_inverse(tau, domain)));
                 wire_negate(&mut w);
-                let g : Vec<Wire> = (0..domain).map(|x : u64|
-                            &hazh(i as u64, &(&w + &(delta_m*x))) - &(delta_n * phi(tau))
-                        ).collect();
-                f.insert(i, g);
+
+                let mut g = Vec::with_capacity(gate.domain as usize);
+                for x in 0..domain {
+                    let h = hash(i, 0, &(&wires[a] + &(delta_m * x)));
+                    let hw = wire_with(delta_n.domain, delta_n.lambda, h);
+                    let wx = &(&hw + &w) + &(delta_n * phi(x));
+
+                    g.push(wx);
+                }
+
+                f.insert(i as usize, g);
                 w
             },
         };
