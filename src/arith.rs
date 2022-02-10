@@ -351,7 +351,10 @@ fn evaluate(circuit: &NewCircuit, f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -
             NewGateKind::PROJ(_,_) => {
                 let wire = unsafe{ wires[gate.inputs[0]].assume_init_ref() };
                 let tau = lsb(wire.values[0]);
-                &f[&gate.output][tau as usize] - &hazh(gate.output as u64, wire)
+                let cipher = &f[&gate.output][tau as usize];
+                let h = hash(gate.output as u64, 0, wire);
+                let hw = wire_with(cipher.domain, cipher.lambda, h);
+                cipher - &hw
             }
         };
         wires[gate.output].write(w);
