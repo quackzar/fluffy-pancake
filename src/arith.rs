@@ -71,9 +71,8 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
     for i in (0..32).step_by(bytes_per_value as usize) {
         let mut value = 0u64;
         for j in 0..bytes_per_value {
-            value |= ((bytes[i + j as usize] as u64) << (8 * j));
+            value |= (bytes[i + j as usize] as u64) << (8 * j);
         }
-
         v.push(value);
 
         if v.len() == (target.lambda as usize) {
@@ -82,7 +81,7 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
     }
 
     assert_eq!(v.len(), target.lambda as usize);
-
+    assert!(v.iter().all(|v| v < &target.domain), "value not under domain");
     return Wire {
         domain: target.domain,
         lambda: target.lambda,
@@ -134,7 +133,6 @@ impl ops::Add<&Wire> for &Wire {
 impl ops::Sub<&Wire> for &Wire {
     type Output = Wire;
     fn sub(self, rhs: &Wire) -> Self::Output {
-        // TODO: does this ever go wrong?
         assert_eq!(self.lambda, rhs.lambda, "Lambdas doesn't match.");
         assert_eq!(self.domain, rhs.domain, "Domain not matching");
         let domain = self.domain;
@@ -229,6 +227,7 @@ fn wire_with(domain: u64, lambda: u64, value: u64) -> Wire {
 // -------------------------------------------------------------------------------------------------
 // Start of stuff ...
 
+use itertools::Itertools;
 use rand::Rng;
 
 // Domains (in bits, 2^n) for inputs and wires
@@ -267,23 +266,29 @@ pub struct Decoding {
 use std::collections::HashMap;
 
 fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, Decoding) {
-    // 1. For each domain (we only have one)
-    let mut lambda = HashMap::new();
-    let mut delta = HashMap::new();
-    for gate in &circuit.gates {
-        let m = gate.domain;
-        let l = (k + log2(m) - 1) / log2(m);
-        lambda.insert(m, l);
+    // 1. For each domain
+    let mut domains : Vec<u64> = circuit.gates
+        .iter()
+        .map(|g| g.domain)
+        .unique()
+        .collect();
+    domains.extend(
+        circuit.gates
+            .iter()
+            .filter_map(|g| match g.kind {
+                NewGateKind::PROJ(range, _) => Some(range),
+                _ => None,
+            })
+            .unique()
+    );
 
-        let d = Wire::delta(m, l);
-        delta.insert(m, d);
+    let lambda: HashMap<_, _> = domains.iter()
+        .map(|&m| (m, (k + log2(m) - 1) / log2(m)))
+        .collect();
 
-        if let NewGateKind::PROJ(range, _) = gate.kind {
-            let l = (k + log2(range) - 1) / log2(range);
-            let d = Wire::delta(range, l);
-            delta.insert(range, d);
-        }
-    }
+    let delta: HashMap<_, _> = domains.iter()
+        .map(|&m| (m, Wire::delta(m, lambda[&m])))
+        .collect();
 
     // 2. For each input
     let inputs = 0..circuit.num_inputs;
@@ -320,13 +325,10 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
                 let w = -&w;
                 let mut g = Vec::with_capacity(gate.domain as usize);
                 for x in 0..domain {
-                    let h = hash(i, 0, &(&wires[a] + &(delta_m * x)));
-                    let hw = wire_with(delta_n.domain, delta_n.lambda, h);
+                    let hw = hash_wire(i, 0, &(&wires[a] + &(delta_m * x)), &w);
                     let wx = &(&hw + &w) + &(delta_n * phi(x));
-
                     g.push(wx);
                 }
-
                 f.insert(i as usize, g);
                 w
             },
@@ -389,8 +391,7 @@ fn evaluate(circuit: &NewCircuit, f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -
                 let wire = unsafe{ wires[gate.inputs[0]].assume_init_ref() };
                 let tau = lsb(wire.values[0]);
                 let cipher = &f[&gate.output][tau as usize];
-                let h = hash(gate.output as u64, 0, wire);
-                let hw = wire_with(cipher.domain, cipher.lambda, h);
+                let hw = hash_wire(gate.output as u64, 0, wire, cipher);
                 cipher - &hw
             }
         };
