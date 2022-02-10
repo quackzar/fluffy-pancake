@@ -201,7 +201,31 @@ pub struct Decoding {
 use std::collections::HashMap;
 
 fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, Decoding) {
+    println!("-----------------------------");
+
     // 1. For each domain (we only have one)
+    let mut lambda = HashMap::new();
+    let mut delta = HashMap::new();
+    for gate in &circuit.gates {
+        let m = gate.domain;
+        let l = (k + log2(m) - 1) / log2(m);
+        lambda.insert(m, l);
+
+        let d = Wire::delta(m, l);
+        delta.insert(m, d);
+
+        println!("Adding domain {}", m);
+
+        if let NewGateKind::PROJ(range, _) = gate.kind {
+            println!("Adding range {}", range);
+
+            let l = (k + log2(range) - 1) / log2(range);
+            let d = Wire::delta(range, l);
+            delta.insert(range, d);
+        }
+    }
+
+    /*
     let lambda: HashMap<_, _> = circuit
         .gates
         .iter()
@@ -217,6 +241,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
         .unique()
         .map(|m| (m, Wire::delta(m, lambda[&m])))
         .collect();
+     */
 
     // 2. For each input
     let inputs = 0..circuit.num_inputs;
@@ -238,7 +263,7 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
         let w = match gate.kind {
             NewGateKind::ADD => gate.inputs.iter().map(|&x| wires[x].clone()).sum(),
             NewGateKind::MUL(c) => &wires[gate.inputs[0]] * c,
-             NewGateKind::PROJ(range, phi) => {
+            NewGateKind::PROJ(range, phi) => {
                 let a = gate.inputs[0];
                 let i = gate.output;
                 let domain = gate.domain;
@@ -334,6 +359,7 @@ pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<Wire> {
 
 use std::error::Error;
 use std::fmt;
+use crate::GateKind;
 
 #[derive(Debug)]
 pub struct DecodeError {}
