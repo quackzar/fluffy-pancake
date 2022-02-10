@@ -73,7 +73,7 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
         for j in 0..bytes_per_value {
             value |= (bytes[i + j as usize] as u64) << (8 * j);
         }
-        v.push(value);
+        v.push(value % target.domain);
 
         if v.len() == (target.lambda as usize) {
             break;
