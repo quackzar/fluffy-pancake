@@ -310,7 +310,10 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
     let mut domains = Vec::with_capacity(circuit.num_outputs);
     for gate in outputs {
         let id = gate.output;
-        let domain = gate.domain;
+        let domain = match gate.kind {
+            NewGateKind::PROJ(range, _) => range,
+            _ => gate.domain
+        };
         let mut values = vec![0; domain as usize];
         for k in 0..domain {
             let hash = hash(id as u64, k as u64, &(&wires[id] + &(&delta[&domain] * k)));
