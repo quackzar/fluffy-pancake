@@ -180,6 +180,14 @@ fn wire_negate(wire: &mut Wire) {
     }
 }
 
+fn wire_with(domain: u64, lambda: u64, value: u64) -> Wire {
+    return Wire {
+        domain,
+        lambda,
+        values: vec![value; lambda as usize]
+    };
+}
+
 // -------------------------------------------------------------------------------------------------
 // Start of stuff ...
 
@@ -202,12 +210,9 @@ fn lsb(a: u64) -> u64 {
     (a & 1 == 1) as u64
 }
 
-fn additive_inverse(n: u64, domain: u64) -> u64
-{
-    let m = 1 << domain; // 2^domain
+fn additive_inverse(n: u64, m: u64) -> u64
+{   // n + (m - n) = m = 0 (m)
     assert!(n < m);
-
-    // n + (m - n) = m = 0 (m)
     return m - n;
 }
 
@@ -272,7 +277,10 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
                 let delta_m = &delta[&domain];
                 let delta_n = &delta[&range];
                 let tau = lsb(wires[a].values[0]);
-                let mut w = (&hazh(i as u64, &(&wires[a] - &(delta_m * tau))) + &(delta_n * phi(additive_inverse(tau, domain))));
+
+                let h = hash(i as u64, 0, &(&wires[a] - &(delta_m * tau)));
+                let hw = wire_with(delta_n.domain, delta_n.lambda, h);
+                let mut w = &hw + &(delta_n * phi(additive_inverse(tau, domain)));
                 wire_negate(&mut w);
                 let g : Vec<Wire> = (0..domain).map(|x : u64|
                             &hazh(i as u64, &(&w + &(delta_m*x))) - &(delta_n * phi(tau))
