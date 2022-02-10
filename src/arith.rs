@@ -143,7 +143,7 @@ impl ops::Sub<&Wire> for &Wire {
             .values
             .iter()
             .zip(rhs.values.iter())
-            .map(|(a, b)| additive_sub_inv(*a, *b, self.domain))
+            .map(|(a, b)| (a + (domain - b)) % domain)
             .collect();
         return Wire {
             domain,
@@ -169,10 +169,10 @@ impl ops::Neg for &Wire {
 impl ops::Mul<u64> for &Wire {
     type Output = Wire;
     #[inline]
-    fn mul(self, _rhs: u64) -> Wire {
+    fn mul(self, rhs: u64) -> Wire {
         let domain = self.domain;
         let lambda = self.lambda;
-        let values = self.values.iter().map(|x| (x * _rhs) % domain).collect();
+        let values = self.values.iter().map(|x| (x * rhs) % domain).collect();
         return Wire {
             domain,
             values,
@@ -218,14 +218,6 @@ impl Wire {
 // -------------------------------------------------------------------------------------------------
 // Wire helpers
 
-fn wire_negate(wire: &mut Wire) {
-    // To negate a wire we negate all of its values, which modulo something is the same as taking
-    // the additive inverse of the value.
-    for i in 0..wire.values.len() {
-        wire.values[i] = additive_inverse(wire.values[i], wire.domain);
-    }
-}
-
 fn wire_with(domain: u64, lambda: u64, value: u64) -> Wire {
     return Wire {
         domain,
@@ -237,7 +229,6 @@ fn wire_with(domain: u64, lambda: u64, value: u64) -> Wire {
 // -------------------------------------------------------------------------------------------------
 // Start of stuff ...
 
-use itertools::Itertools;
 use rand::Rng;
 
 // Domains (in bits, 2^n) for inputs and wires
@@ -260,15 +251,6 @@ fn additive_inverse(n: u64, m: u64) -> u64
 {   // n + (m - n) = m = 0 (m)
     assert!(n < m);
     return m - n;
-}
-
-fn additive_sub_inv(l: u64, r: u64, m: u64) -> u64 {
-    if r <= l {
-        return l - r;
-    }
-
-    let delta = r - l;
-    return additive_inverse(delta, m);
 }
 
 pub struct Encoding {
@@ -331,17 +313,15 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize,Vec<Wire>>, Encoding, 
                 let delta_n = &delta[&range];
                 let tau = lsb(wires[a].values[0]);
 
-                let hw = hash_wire(i, 0, &(&wires[a] - &(delta_m * tau)), &delta_n);
-
                 //let h = hash(i, 0, &(&wires[a] - &(delta_m * tau)));
-                //let hw = wire_with(delta_n.domain, delta_n.lambda, h % delta_n.domain);
-                let mut w = &hw + &(delta_n * phi(additive_inverse(tau, domain)));
-                wire_negate(&mut w);
-
+                //let hw = wire_with(delta_n.domain, delta_n.lambda, h);
+                let hw = hash_wire(i, 0, &(&wires[a] - &(delta_m * tau)), &delta_n);
+                let w = &hw + &(delta_n * phi(additive_inverse(tau, domain)));
+                let w = -&w;
                 let mut g = Vec::with_capacity(gate.domain as usize);
                 for x in 0..domain {
                     let h = hash(i, 0, &(&wires[a] + &(delta_m * x)));
-                    let hw = wire_with(delta_n.domain, delta_n.lambda, h % delta_n.domain);
+                    let hw = wire_with(delta_n.domain, delta_n.lambda, h);
                     let wx = &(&hw + &w) + &(delta_n * phi(x));
 
                     g.push(wx);
@@ -410,8 +390,8 @@ fn evaluate(circuit: &NewCircuit, f: &HashMap<usize,Vec<Wire>>, x: &Vec<Wire>) -
                 let tau = lsb(wire.values[0]);
                 let cipher = &f[&gate.output][tau as usize];
                 let h = hash(gate.output as u64, 0, wire);
-                let hw = wire_with(cipher.domain, cipher.lambda, additive_inverse(h % wire.domain, wire.domain));
-                cipher + &hw
+                let hw = wire_with(cipher.domain, cipher.lambda, h);
+                cipher - &hw
             }
         };
         wires[gate.output].write(w);
@@ -438,7 +418,6 @@ pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<Wire> {
 
 use std::error::Error;
 use std::fmt;
-use crate::GateKind;
 
 #[derive(Debug)]
 pub struct DecodeError {}
