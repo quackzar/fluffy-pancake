@@ -97,7 +97,7 @@ impl ops::Sub<&Wire> for &Wire {
             .values
             .iter()
             .zip(rhs.values.iter())
-            .map(|(a, b)| additive_sub_inv(*a, *b, self.domain))
+            .map(|(a, b)| (a - b) % domain)
             .collect();
         return Wire {
             domain,
@@ -214,15 +214,6 @@ fn additive_inverse(n: u64, m: u64) -> u64
 {   // n + (m - n) = m = 0 (m)
     assert!(n < m);
     return m - n;
-}
-
-fn additive_sub_inv(l: u64, r: u64, m: u64) -> u64 {
-    if r <= l {
-        return l - r;
-    }
-
-    let delta = r - l;
-    return additive_inverse(delta, m);
 }
 
 pub struct Encoding {
