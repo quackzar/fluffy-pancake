@@ -304,12 +304,11 @@ fn garble(circuit: &NewCircuit, security: u64) -> (HashMap<usize, Vec<Wire>>, En
             NewGateKind::MUL(constant) => &wires[gate.inputs[0]] * constant,
             NewGateKind::PROJ(range, phi) => {
                 let input_index = gate.inputs[0];
+                let color = tau(&wires[input_index]);
                 let output_index = gate.output as u64;
 
                 let delta_m = &delta[&gate.domain];
                 let delta_n = &delta[&range];
-
-                let color = tau(&wires[input_index]);
 
                 let hashed_wire = hash_wire(output_index, 0, &(&wires[input_index] - &(delta_m * color)), &delta_n);
                 let wire = &hashed_wire + &(delta_n * phi(gate.domain - color));
@@ -346,11 +345,13 @@ fn garble(circuit: &NewCircuit, security: u64) -> (HashMap<usize, Vec<Wire>>, En
             NewGateKind::PROJ(range, _) => range,
             _ => gate.domain,
         };
+
         let mut values = vec![0; output_domain as usize];
         for x in 0..output_domain {
             let hash = hash(gate.output as u64, x as u64, &(&wires[gate.output] + &(&delta[&output_domain] * x)));
             values[x as usize] = hash;
         }
+
         d.push(values);
         output_ids.push(gate.output);
         domains.push(output_domain);
@@ -436,11 +437,13 @@ pub fn decode(decoding: &Decoding, z: &Vec<Wire>) -> Result<Vec<u64>, DecodeErro
     let domains = &decoding.domains;
     assert_eq!(d.len(), z.len());
     assert_eq!(d.len(), ids.len());
+
     let mut y = vec![0u64; d.len()];
     for i in 0..d.len() {
         let mut success = false;
         let id = ids[i];
         let h = &d[i];
+
         for k in 0..domains[i] {
             let hash = hash(id as u64, k, &z[i]);
             if hash == h[k as usize] {
@@ -449,11 +452,13 @@ pub fn decode(decoding: &Decoding, z: &Vec<Wire>) -> Result<Vec<u64>, DecodeErro
                 break;
             }
         }
+
         if !success {
             return Err(DecodeError {});
         }
     }
-    Ok(y)
+
+    return Ok(y);
 }
 
 #[cfg(test)]
