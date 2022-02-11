@@ -59,7 +59,7 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
     let bytes = digest.as_ref();
 
     // Turn them into a wire
-    let mut v = Vec::with_capacity(target.lambda as usize);
+    let mut v = Vec::with_capacity((target.lambda + 1) as usize);
     let bits_per_value = log2(target.domain);
     let truncated_bytes_per_value = bits_per_value / 8;
     let bytes_per_value = if (bits_per_value % 8) == 0 {
@@ -67,20 +67,21 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
     } else {
         truncated_bytes_per_value + 1
     };
-    assert!(target.lambda * bytes_per_value <= 32);
-    for i in (0..32).step_by(bytes_per_value as usize) {
+    //assert!((target.lambda + 1) * bytes_per_value <= 32);
+    // TODO(frm): This is not the right way to do this! Do the bits!
+    for i in (0..128).step_by(bytes_per_value as usize) {
         let mut value = 0u64;
         for j in 0..bytes_per_value {
-            value |= (bytes[i + j as usize] as u64) << (8 * j);
+            value |= (bytes[((i + j) % 32) as usize] as u64) << (8 * j);
         }
         v.push(value % target.domain);
 
-        if v.len() == (target.lambda as usize) {
+        if v.len() == ((target.lambda + 1) as usize) {
             break;
         }
     }
 
-    assert_eq!(v.len(), target.lambda as usize);
+    assert_eq!(v.len(), (target.lambda + 1) as usize);
     assert!(
         v.iter().all(|v| v < &target.domain),
         "value not under domain"
@@ -314,12 +315,6 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize, Vec<Wire>>, Encoding,
 
                     g[((x + tau) % domain) as usize] = wx;
                 }
-
-                let tx = wires[a].values[(wires[a].lambda - 1) as usize];
-                let ty = w.values[(w.lambda - 1) as usize];
-
-                println!("Color input: {}", tx);
-                println!("Color output: {}", ty);
 
                 f.insert(i as usize, g);
                 w
@@ -617,5 +612,91 @@ mod tests {
         let input = vec![7];
         let output = garble_encode_eval_decode(&circuit, &input);
         assert_eq!(output[0], phi(input[0]));
+    }
+
+    #[test]
+    fn threshold_gate_test() {
+        // 8 inputs, 4 "comparators"
+        const INPUT_COUNT: usize = 8;
+        const BIT_DOMAIN: u64 = 2;
+        const COMAPRISON_DOMAIN: u64 = 8;
+
+        let id = |x| x;
+        let threshold = |x| (x < 2) as u64;
+
+        let circuit = NewCircuit {
+            // Comparison
+            gates: vec![NewGate {
+                kind: NewGateKind::ADD,
+                inputs: vec![0, 4],
+                output: 8,
+                domain: BIT_DOMAIN,
+            }, NewGate {
+                kind: NewGateKind::ADD,
+                inputs: vec![1, 5],
+                output: 9,
+                domain: BIT_DOMAIN,
+            }, NewGate {
+                kind: NewGateKind::ADD,
+                inputs: vec![2, 6],
+                output: 10,
+                domain: BIT_DOMAIN,
+            }, NewGate {
+                kind: NewGateKind::ADD,
+                inputs: vec![3, 7],
+                output: 11,
+                domain: BIT_DOMAIN,
+            },
+            // Second half of comparison
+            NewGate {
+                kind: NewGateKind::PROJ(COMAPRISON_DOMAIN, id),
+                inputs: vec![8],
+                output: 12,
+                domain: BIT_DOMAIN,
+            },
+            NewGate {
+                kind: NewGateKind::PROJ(COMAPRISON_DOMAIN, id),
+                inputs: vec![9],
+                output: 13,
+                domain: BIT_DOMAIN,
+            },
+            NewGate {
+                kind: NewGateKind::PROJ(COMAPRISON_DOMAIN, id),
+                inputs: vec![10],
+                output: 14,
+                domain: BIT_DOMAIN,
+            },
+            NewGate {
+                kind: NewGateKind::PROJ(COMAPRISON_DOMAIN, id),
+                inputs: vec![11],
+                output: 15,
+                domain: BIT_DOMAIN,
+            },
+            // Adder
+            NewGate {
+                kind: NewGateKind::ADD,
+                inputs: vec![12, 13, 14, 15],
+                output: 16,
+                domain: COMAPRISON_DOMAIN,
+            },
+            // Threshold
+            NewGate {
+                kind: NewGateKind::PROJ(BIT_DOMAIN, threshold),
+                inputs: vec![16],
+                output: 17,
+                domain: COMAPRISON_DOMAIN,
+            },
+            ],
+            num_inputs: INPUT_COUNT,
+            num_outputs: 1,
+            num_wires: 18,
+            input_domains: vec![BIT_DOMAIN; INPUT_COUNT],
+        };
+
+        let input = vec![0, 1, 1, 1,  // Alice bits
+                                  1, 1, 0, 1]; // Bob bits
+
+        let output = garble_encode_eval_decode(&circuit, &input);
+        assert_eq!(output[0], 1);
     }
 }
