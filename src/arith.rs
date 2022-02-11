@@ -533,7 +533,7 @@ mod tests {
     }
 
     #[test]
-    fn proj_circuit() {
+    fn proj_circuit_identity() {
         let target_domain = 8;
         let source_domain = 16;
         let phi = |x| x;
@@ -551,6 +551,50 @@ mod tests {
         };
         let input = vec![7];
         let output = garble_encode_eval_decode(&circuit, &input);
-        assert_eq!(output[0], 7)
+        assert_eq!(output[0], input[0]);
+    }
+
+    #[test]
+    fn proj_circuit_shl() {
+        let target_domain = 64;
+        let source_domain = 64;
+        let phi = |x| (x * 2);
+        let circuit = NewCircuit {
+            gates: vec![NewGate {
+                kind: NewGateKind::PROJ(target_domain, phi),
+                inputs: vec![0],
+                output: 1,
+                domain: source_domain,
+            }],
+            num_inputs: 1,
+            num_outputs: 1,
+            num_wires: 2,
+            input_domains: vec![source_domain],
+        };
+        let input = vec![7];
+        let output = garble_encode_eval_decode(&circuit, &input);
+        assert_eq!(output[0], phi(input[0]));
+    }
+
+    #[test]
+    fn proj_circuit_shr() {
+        let target_domain = 64;
+        let source_domain = 64;
+        let phi = |x| (x / 2);
+        let circuit = NewCircuit {
+            gates: vec![NewGate {
+                kind: NewGateKind::PROJ(target_domain, phi),
+                inputs: vec![0],
+                output: 1,
+                domain: source_domain,
+            }],
+            num_inputs: 1,
+            num_outputs: 1,
+            num_wires: 2,
+            input_domains: vec![source_domain],
+        };
+        let input = vec![7];
+        let output = garble_encode_eval_decode(&circuit, &input);
+        assert_eq!(output[0], phi(input[0]));
     }
 }
