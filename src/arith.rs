@@ -178,9 +178,17 @@ impl iter::Sum for Wire {
 }
 
 impl Wire {
+    fn empty() -> Wire {
+        return Wire {
+            domain: 0,
+            lambda: 0,
+            values: Vec::new()
+        }
+    }
+
     fn new(domain: u64, lambda: u64) -> Wire {
         let mut values = vec![0u64; (lambda+1) as usize];
-        for i in 0..lambda { // HACK: Should be lambda+1
+        for i in 0..=lambda {
             values[i as usize] = rng(domain + 1);
         }
         
@@ -193,7 +201,7 @@ impl Wire {
 
     fn delta(domain: u64, lambda: u64) -> Wire {
         let mut values = vec![0u64; (lambda+1) as usize];
-        for i in 0..lambda { // HACK Should be lambda
+        for i in 0..lambda {
             values[i as usize] =  rng(domain + 1);
         }
         values[lambda as usize] = 1;
@@ -242,6 +250,7 @@ pub struct Decoding {
 }
 
 use std::collections::HashMap;
+use std::mem;
 
 fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize, Vec<Wire>>, Encoding, Decoding) {
     // 1. For each domain
@@ -297,12 +306,21 @@ fn garble(circuit: &NewCircuit, k: u64) -> (HashMap<usize, Vec<Wire>>, Encoding,
                 let hw = hash_wire(i, 0, &(&wires[a] - &(delta_m * tau)), &delta_n);
                 let w = &hw + &(delta_n * phi(domain - tau));
                 let w = -&w;
-                let mut g = Vec::with_capacity(gate.domain as usize);
+
+                let mut g: Vec<Wire> = vec![Wire::empty(); gate.domain as usize];
                 for x in 0..domain {
                     let hw = hash_wire(i, 0, &(&wires[a] + &(delta_m * x)), &w);
                     let wx = &(&hw + &w) + &(delta_n * phi(x));
-                    g.push(wx);
+
+                    g[((x + tau) % domain) as usize] = wx;
                 }
+
+                let tx = wires[a].values[(wires[a].lambda - 1) as usize];
+                let ty = w.values[(w.lambda - 1) as usize];
+
+                println!("Color input: {}", tx);
+                println!("Color output: {}", ty);
+
                 f.insert(i as usize, g);
                 w
             }
@@ -394,6 +412,9 @@ pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<Wire> {
 
 use std::error::Error;
 use std::fmt;
+use std::mem::MaybeUninit;
+use std::ptr::null;
+use ring::io::der::Tag::Null;
 
 #[derive(Debug)]
 pub struct DecodeError {}
