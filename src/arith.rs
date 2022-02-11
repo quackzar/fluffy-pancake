@@ -450,6 +450,7 @@ pub fn decode(decoding: &Decoding, z: &Vec<Wire>) -> Result<Vec<u64>, DecodeErro
 mod tests {
     use crate::arith::{decode, encode, evaluate, garble, hash, Decoding, Encoding, Wire};
     use std::collections::HashMap;
+    use crate::Circuit;
 
     use super::{NewCircuit, NewGate, NewGateKind};
 
@@ -614,8 +615,8 @@ mod tests {
         assert_eq!(output[0], phi(input[0]));
     }
 
-    #[test]
-    fn threshold_gate_test() {
+    fn make_me_the_threshold() -> NewCircuit {
+
         // 8 inputs, 4 "comparators"
         const INPUT_COUNT: usize = 8;
         const BIT_DOMAIN: u64 = 2;
@@ -693,10 +694,46 @@ mod tests {
             input_domains: vec![BIT_DOMAIN; INPUT_COUNT],
         };
 
-        let input = vec![0, 1, 1, 1,  // Alice bits
-                                  1, 1, 0, 1]; // Bob bits
+        return circuit;
+    }
+
+    #[test]
+    fn threshold_gate_zero() {
+        let circuit = make_me_the_threshold();
+        let input = vec![0, 1, 0, 1,  // Alice bits
+                         0, 1, 0, 1]; // Bob bits
 
         let output = garble_encode_eval_decode(&circuit, &input);
         assert_eq!(output[0], 1);
+    }
+
+    #[test]
+    fn threshold_gate_less() {
+        let circuit = make_me_the_threshold();
+        let input = vec![0, 1, 0, 1,  // Alice bits
+                         1, 1, 0, 1]; // Bob bits
+
+        let output = garble_encode_eval_decode(&circuit, &input);
+        assert_eq!(output[0], 1);
+    }
+
+    #[test]
+    fn threshold_gate_equal() {
+        let circuit = make_me_the_threshold();
+        let input = vec![1, 1, 0, 1,  // Alice bits
+                         0, 0, 0, 1]; // Bob bits
+
+        let output = garble_encode_eval_decode(&circuit, &input);
+        assert_eq!(output[0], 0);
+    }
+
+    #[test]
+    fn threshold_gate_above() {
+        let circuit = make_me_the_threshold();
+        let input = vec![1, 0, 1, 0,  // Alice bits
+                         0, 1, 0, 1]; // Bob bits
+
+        let output = garble_encode_eval_decode(&circuit, &input);
+        assert_eq!(output[0], 0);
     }
 }
