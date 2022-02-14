@@ -2,6 +2,7 @@
 
 mod arith;
 mod circuits;
+mod fpake;
 use crate::circuits::{Circuit, GateKind};
 
 // -------------------------------------------------------------------------------------------------

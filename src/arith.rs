@@ -1,23 +1,26 @@
+#[derive(Debug)]
 pub struct NewCircuit {
-    num_wires: usize,
-    num_inputs: usize,
-    num_outputs: usize,
-    gates: Vec<NewGate>,
-    input_domains: Vec<u64>,
+    pub num_wires: usize,
+    pub num_inputs: usize,
+    pub num_outputs: usize,
+    pub(crate) gates: Vec<NewGate>,
+    pub input_domains: Vec<u64>,
 }
 
-#[derive(PartialEq)]
-enum NewGateKind {
+
+#[derive(PartialEq, Debug)]
+pub(crate) enum NewGateKind {
     ADD,
     MUL(u64),
     PROJ(u64, fn(u64) -> u64),
 }
 
-struct NewGate {
-    kind: NewGateKind,
-    output: usize,
-    inputs: Vec<usize>,
-    domain: u64,
+#[derive(Debug)]
+pub(crate) struct NewGate {
+    pub kind: NewGateKind,
+    pub inputs: Vec<usize>,
+    pub output: usize,
+    pub domain: u64,
 }
 
 
@@ -67,7 +70,7 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
     } else {
         truncated_bytes_per_value + 1
     };
-    //assert!((target.lambda + 1) * bytes_per_value <= 32);
+    //debug_assert!((target.lambda + 1) * bytes_per_value <= 32);
     // TODO(frm): This is not the right way to do this! Do the bits!
     for i in (0..128).step_by(bytes_per_value as usize) {
         let mut value = 0u64;
@@ -81,8 +84,8 @@ fn hash_wire(a: u64, b: u64, w: &Wire, target: &Wire) -> Wire {
         }
     }
 
-    assert_eq!(v.len(), (target.lambda + 1) as usize);
-    assert!(
+    debug_assert_eq!(v.len(), (target.lambda + 1) as usize);
+    debug_assert!(
         v.iter().all(|v| v < &target.domain),
         "value not under domain"
     );
@@ -100,14 +103,16 @@ pub struct Wire {
     domain: u64,
 }
 
+// TODO: Improve internal representation and implement from/into.
+
 use core::ops;
 use std::iter;
 
 impl ops::Add<&Wire> for &Wire {
     type Output = Wire;
     fn add(self, rhs: &Wire) -> Wire {
-        assert_eq!(self.lambda, rhs.lambda, "Lambdas doesn't match.");
-        assert_eq!(self.domain, rhs.domain, "Domain not matching");
+        debug_assert_eq!(self.lambda, rhs.lambda, "Lambdas doesn't match.");
+        debug_assert_eq!(self.domain, rhs.domain, "Domain not matching");
 
         let domain = self.domain;
         let lambda = self.lambda;
@@ -129,8 +134,8 @@ impl ops::Add<&Wire> for &Wire {
 impl ops::Sub<&Wire> for &Wire {
     type Output = Wire;
     fn sub(self, rhs: &Wire) -> Self::Output {
-        assert_eq!(self.lambda, rhs.lambda, "Lambdas doesn't match.");
-        assert_eq!(self.domain, rhs.domain, "Domain not matching");
+        debug_assert_eq!(self.lambda, rhs.lambda, "Lambdas doesn't match.");
+        debug_assert_eq!(self.domain, rhs.domain, "Domain not matching");
 
         let domain = self.domain;
         let lambda = self.lambda;
@@ -256,10 +261,9 @@ pub struct Decoding {
 }
 
 use std::collections::HashMap;
-use std::mem;
 use std::mem::{transmute, MaybeUninit};
 
-fn garble(circuit: &NewCircuit, security: u64) -> (HashMap<usize, Vec<Wire>>, Encoding, Decoding) {
+pub fn garble(circuit: &NewCircuit, security: u64) -> (HashMap<usize, Vec<Wire>>, Encoding, Decoding) {
     // 1. For each domain
     let mut domains: Vec<u64> = circuit.gates.iter().map(|gate| gate.domain).unique().collect();
     domains.extend(
@@ -366,8 +370,8 @@ fn garble(circuit: &NewCircuit, security: u64) -> (HashMap<usize, Vec<Wire>>, En
     return (f, encoding, decoding);
 }
 
-fn evaluate(circuit: &NewCircuit, f: &HashMap<usize, Vec<Wire>>, x: &Vec<Wire>) -> Vec<Wire> {
-    assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
+pub fn evaluate(circuit: &NewCircuit, f: &HashMap<usize, Vec<Wire>>, x: &Vec<Wire>) -> Vec<Wire> {
+    debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
 
     let mut wires: Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);
     unsafe {
@@ -403,7 +407,7 @@ fn evaluate(circuit: &NewCircuit, f: &HashMap<usize, Vec<Wire>>, x: &Vec<Wire>) 
 pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<Wire> {
     let wires = &e.wires;
     let delta = &e.delta;
-    assert_eq!(
+    debug_assert_eq!(
         wires.len(),
         x.len(),
         "Wire and input vector lengths do not match"
@@ -419,8 +423,6 @@ pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<Wire> {
 
 use std::error::Error;
 use std::fmt;
-use std::ptr::null;
-use ring::io::der::Tag::Null;
 
 #[derive(Debug)]
 pub struct DecodeError {}
@@ -435,8 +437,8 @@ pub fn decode(decoding: &Decoding, z: &Vec<Wire>) -> Result<Vec<u64>, DecodeErro
     let d = &decoding.map;
     let ids = &decoding.ids;
     let domains = &decoding.domains;
-    assert_eq!(d.len(), z.len());
-    assert_eq!(d.len(), ids.len());
+    debug_assert_eq!(d.len(), z.len(), "Decoding and z vector lengths do not match");
+    debug_assert_eq!(d.len(), ids.len(), "Decoding and id vector lengths do not match");
 
     let mut y = vec![0u64; d.len()];
     for i in 0..d.len() {
@@ -465,7 +467,6 @@ pub fn decode(decoding: &Decoding, z: &Vec<Wire>) -> Result<Vec<u64>, DecodeErro
 mod tests {
     use crate::arith::{decode, encode, evaluate, garble, hash, Decoding, Encoding, Wire};
     use std::collections::HashMap;
-    use crate::Circuit;
 
     use super::{NewCircuit, NewGate, NewGateKind};
 
@@ -568,7 +569,7 @@ mod tests {
     fn proj_circuit_identity() {
         let target_domain = 8;
         let source_domain = 16;
-        let phi = |x| x;
+        let phi = |x : u64| x;
         let circuit = NewCircuit {
             gates: vec![NewGate {
                 kind: NewGateKind::PROJ(target_domain, phi),
