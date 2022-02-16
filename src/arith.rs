@@ -9,6 +9,9 @@ use std::fmt;
 use std::iter;
 use std::mem::{transmute, MaybeUninit};
 
+// -------------------------------------------------------------------------------------------------
+// Circuit Definition
+
 #[derive(Debug)]
 pub struct ArithCircuit {
     pub num_wires: usize,
@@ -34,82 +37,14 @@ pub(crate) struct ArithGate {
 }
 
 // -------------------------------------------------------------------------------------------------
-// PRF/Hash function
-
-fn hash(a: u64, b: u64, w: &ArithWire) -> u64 {
-    let mut context = Context::new(&SHA256);
-    // TODO(frm): Shoving things in like this is probably not terribly efficient, could we do better?
-    context.update(&a.to_be_bytes());
-    context.update(&b.to_be_bytes());
-    context.update(&w.lambda.to_be_bytes());
-    context.update(&w.domain.to_be_bytes());
-    for v in &w.values {
-        context.update(&v.to_be_bytes());
-    }
-    let digest = context.finish();
-    let bytes = digest.as_ref();
-
-    let num = u64::from_be_bytes(bytes[..8].try_into().unwrap());
-    return num;
-}
-
-// TODO(frm): This functions needs some cleanup and simple optimization
-fn hash_wire(a: u64, b: u64, w: &ArithWire, target: &ArithWire) -> ArithWire {
-    let mut context = Context::new(&SHA256);
-    context.update(&a.to_be_bytes());
-    context.update(&b.to_be_bytes());
-    context.update(&w.lambda.to_be_bytes());
-    context.update(&w.domain.to_be_bytes());
-    for v in &w.values {
-        context.update(&v.to_be_bytes());
-    }
-    let digest = context.finish();
-    let bytes = digest.as_ref();
-
-    // Turn them into a wire
-    let mut v = Vec::with_capacity((target.lambda + 1) as usize);
-    let bits_per_value = log2(target.domain);
-    let truncated_bytes_per_value = bits_per_value / 8;
-    let bytes_per_value = if (bits_per_value % 8) == 0 {
-        truncated_bytes_per_value
-    } else {
-        truncated_bytes_per_value + 1
-    };
-    //debug_assert!((target.lambda + 1) * bytes_per_value <= 32);
-    // TODO(frm): This is not the right way to do this! Do the bits!
-    for i in (0..128).step_by(bytes_per_value as usize) {
-        let mut value = 0u64;
-        for j in 0..bytes_per_value {
-            value |= (bytes[((i + j) % 32) as usize] as u64) << (8 * j);
-        }
-        v.push(value % target.domain);
-
-        if v.len() == ((target.lambda + 1) as usize) {
-            break;
-        }
-    }
-
-    debug_assert_eq!(v.len(), (target.lambda + 1) as usize);
-    debug_assert!(
-        v.iter().all(|v| v < &target.domain),
-        "value not under domain"
-    );
-    return ArithWire {
-        domain: target.domain,
-        lambda: target.lambda,
-        values: v,
-    };
-}
-
-// -------------------------------------------------------------------------------------------------
 // Wires
 
 // TODO: Improve internal representation and implement from/into.
 #[derive(Debug, Clone)]
 pub struct ArithWire {
     lambda: u64,
-    values: Vec<u64>,
     domain: u64,
+    values: Vec<u64>,
 }
 
 impl ops::Add<&ArithWire> for &ArithWire {
@@ -205,7 +140,7 @@ impl ArithWire {
         for i in 0..=lambda {
             values[i as usize] = rng(domain + 1);
         }
-        
+
         return ArithWire {
             values,
             lambda,
@@ -229,15 +164,75 @@ impl ArithWire {
 }
 
 // -------------------------------------------------------------------------------------------------
+// PRF/Hash function
+
+fn hash(index: u64, x: u64, wire: &ArithWire) -> u64 {
+    let mut context = Context::new(&SHA256);
+    context.update(&index.to_be_bytes());
+    context.update(&x.to_be_bytes());
+    context.update(&wire.lambda.to_be_bytes());
+    context.update(&wire.domain.to_be_bytes());
+    for value in &wire.values {
+        context.update(&value.to_be_bytes());
+    }
+
+    let digest = context.finish();
+    let bytes = digest.as_ref();
+
+    return u64::from_be_bytes(bytes[..8].try_into().unwrap());
+}
+
+// TODO(frm): This functions needs some cleanup and simple optimization
+fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
+    let mut context = Context::new(&SHA256);
+    context.update(&index.to_be_bytes());
+    context.update(&wire.lambda.to_be_bytes());
+    context.update(&wire.domain.to_be_bytes());
+    for v in &wire.values {
+        context.update(&v.to_be_bytes());
+    }
+
+    let digest = context.finish();
+    let bytes = digest.as_ref();
+
+    // Turn them into a wire
+    let mut values = Vec::with_capacity((target.lambda + 1) as usize);
+    let bits_per_value = log2(target.domain);
+    let truncated_bytes_per_value = bits_per_value / 8;
+    let bytes_per_value = if (bits_per_value % 8) == 0 {
+        truncated_bytes_per_value
+    } else {
+        truncated_bytes_per_value + 1
+    };
+
+    // TODO(frm): This is not the right way to do this! Do the bits!
+    for i in (0..128).step_by(bytes_per_value as usize) {
+        let mut value = 0u64;
+        for j in 0..bytes_per_value {
+            value |= (bytes[((i + j) % 32) as usize] as u64) << (8 * j);
+        }
+        values.push(value % target.domain);
+
+        if values.len() == ((target.lambda + 1) as usize) {
+            break;
+        }
+    }
+
+    debug_assert_eq!(values.len(), (target.lambda + 1) as usize);
+    debug_assert!(values.iter().all(|v| v < &target.domain), "value not under domain");
+
+    return ArithWire {
+        domain: target.domain,
+        lambda: target.lambda,
+        values,
+    };
+}
+
+// -------------------------------------------------------------------------------------------------
 // Helpers / Definitions
 
 fn rng(max: u64) -> u64 {
     rand::thread_rng().gen_range(0..max)
-}
-
-#[inline]
-fn lsb2(a: u64) -> u64 {
-    (a & 1 == 1) as u64
 }
 
 #[inline]
@@ -247,7 +242,7 @@ fn tau(w : &ArithWire) -> u64 {
 
 #[inline]
 fn log2(x: u64) -> u64 {
-    (std::mem::size_of::<u64>() as u64) * 8 - (x.leading_zeros() as u64)
+    64 - (x.leading_zeros() as u64)
 }
 
 pub struct Encoding {
@@ -324,13 +319,13 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<Arit
                 let delta_m = &delta[&gate.domain];
                 let delta_n = &delta[&range];
 
-                let hashed_wire = hash_wire(output_index, 0, &(&wires[input_index] - &(delta_m * color)), &delta_n);
+                let hashed_wire = hash_wire(output_index, &(&wires[input_index] - &(delta_m * color)), &delta_n);
                 let wire = &hashed_wire + &(delta_n * phi(gate.domain - color));
                 let wire = -&wire;
 
                 let mut g: Vec<ArithWire> = vec![ArithWire::empty(); gate.domain as usize];
                 for x in 0..gate.domain {
-                    let hashed_wire = hash_wire(output_index, 0, &(&wires[input_index] + &(delta_m * x)), &wire);
+                    let hashed_wire = hash_wire(output_index, &(&wires[input_index] + &(delta_m * x)), &wire);
                     let ciphertext = &(&hashed_wire + &wire) + &(delta_n * phi(x));
 
                     g[((x + color) % gate.domain) as usize] = ciphertext;
@@ -403,7 +398,7 @@ pub fn evaluate(circuit: &ArithCircuit, f: &HashMap<usize, Vec<ArithWire>>, x: &
                 let wire = unsafe { wires[gate.inputs[0]].assume_init_ref() };
                 let color = tau(wire);
                 let cipher = &f[&gate.output][color as usize];
-                let hw = hash_wire(gate.output as u64, 0, wire, cipher);
+                let hw = hash_wire(gate.output as u64, wire, cipher);
                 cipher - &hw
             }
         };
