@@ -2,17 +2,17 @@ use itertools::Itertools;
 
 use crate::arith::*;
 
-pub fn build_circuit(bitsize : usize, _threshold : u64) -> NewCircuit {
-    let mut gates : Vec<NewGate> = Vec::new();
+pub fn build_circuit(bitsize : usize, _threshold : u64) -> ArithCircuit {
+    let mut gates : Vec<ArithGate> = Vec::new();
     let bitdomain = 2;
     let comparison_domain = bitsize as u64 / 2 + 1;
 
     // xor gates
     for i in 0..bitsize {
-        let gate = NewGate {
+        let gate = ArithGate {
             inputs: vec![i, i+bitsize],
             output: i+2*bitsize,
-            kind: NewGateKind::ADD,
+            kind: ArithGateKind::ADD,
             domain : bitdomain,
         };
         gates.push(gate);
@@ -21,18 +21,18 @@ pub fn build_circuit(bitsize : usize, _threshold : u64) -> NewCircuit {
     // proj gates
     let identity = |x : u64| x;
     for i in 0..bitsize {
-        let gate = NewGate {
+        let gate = ArithGate {
             inputs: vec![i+2*bitsize],
             output: i+3*bitsize,
-            kind: NewGateKind::PROJ(comparison_domain, identity),
+            kind: ArithGateKind::PROJ(comparison_domain, identity),
             domain : bitdomain,
         };
         gates.push(gate);
     }
 
     // sum
-    let gate = NewGate {
-        kind: NewGateKind::ADD,
+    let gate = ArithGate {
+        kind: ArithGateKind::ADD,
         inputs: (3*bitsize..4*bitsize).collect(),
         output: 4*bitsize,
         domain: bitsize as u64,
@@ -41,14 +41,14 @@ pub fn build_circuit(bitsize : usize, _threshold : u64) -> NewCircuit {
 
     // comparison
     let threshold = |x : u64| (x < 2) as u64; // TODO: Make threshold dynamic.
-    let gate = NewGate {
-        kind: NewGateKind::PROJ(bitdomain, threshold),
+    let gate = ArithGate {
+        kind: ArithGateKind::PROJ(bitdomain, threshold),
         inputs: vec![4*bitsize],
         output: 4*bitsize+1,
         domain: comparison_domain,
     };
     gates.push(gate);
-    NewCircuit {
+    ArithCircuit {
         gates,
         num_inputs: bitsize*2,
         num_outputs: 1,
@@ -82,7 +82,7 @@ impl fmt::Display for CircuitError {
 
 
 
-fn verify_circuit(circuit : &NewCircuit) -> Result<(), CircuitError> {
+fn verify_circuit(circuit : &ArithCircuit) -> Result<(), CircuitError> {
     let num_wires = circuit.gates.iter()
         .map(|g| &g.inputs)
         .flatten()
@@ -111,7 +111,7 @@ fn verify_circuit(circuit : &NewCircuit) -> Result<(), CircuitError> {
 mod tests {
     use crate::{arith::*, fpake::build_circuit};
 
-    fn garble_encode_eval_decode(c: &NewCircuit, x: &Vec<u64>) -> Vec<u64> {
+    fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
         const SECURITY: u64 = 128;
         let (f, e, d) = garble(&c, SECURITY);
         let x = encode(&e, x);
@@ -136,8 +136,8 @@ mod tests {
         let pwsd_b = vec![1,1,1,0];
 
         let length = pwsd_a.len();
-        let out_a : Wire;
-        let out_b : Wire;
+        let out_a : ArithWire;
+        let out_b : ArithWire;
         { // Round 1
             let circuit = build_circuit(4, 1);
             let (f, e, d) = garble(&circuit, SECURITY);
