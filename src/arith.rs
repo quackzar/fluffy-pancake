@@ -447,26 +447,24 @@ pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<ArithWire> {
     return z;
 }
 
-pub fn decode(circuit: &ArithCircuit, decoding: &Vec<Vec<u64>>, z: &Vec<ArithWire>) -> Result<Vec<u64>, DecodeError> {
+pub fn decode(num_wires: usize, decoding: &Vec<Vec<u64>>, z: &Vec<ArithWire>) -> Result<Vec<u64>, DecodeError> {
     let mut y = vec![0; decoding.len()];
-    let outputs_start_at = circuit.num_wires - circuit.num_outputs;
-    for gate in &circuit.gates {
-        if gate.output >= outputs_start_at {
-            let mut success = false;
-            let output_idx = circuit.num_wires - gate.output - 1;
-            let h = &decoding[output_idx];
-            for k in 0..gate.domain {
-                let hash = hash(gate.output as u64, k, &z[output_idx]);
-                if hash == h[k as usize] {
-                    y[output_idx] = k;
-                    success = true;
-                    break;
-                }
-            }
+    for i in 0..z.len() {
+        let output = num_wires - z.len() + i;
+        let hashes = &decoding[i];
 
-            if !success {
-                return Err(DecodeError {});
+        let mut success = false;
+        for k in 0..z[i].domain {
+            let hash = hash(output as u64, k, &z[i]);
+            if hash == hashes[k as usize] {
+                y[i as usize] = k;
+                success = true;
+                break;
             }
+        }
+
+        if !success {
+            return Err(DecodeError {});
         }
     }
 
@@ -487,7 +485,7 @@ mod tests {
         let (f, e, d) = garble(&c, SECURITY);
         let x = encode(&e, x);
         let z = evaluate(c, &f, &x);
-        return decode(c, &d, &z).unwrap();
+        return decode(c.num_wires, &d, &z).unwrap();
     }
 
     #[test]
