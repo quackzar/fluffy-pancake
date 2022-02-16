@@ -116,7 +116,7 @@ mod tests {
         let (f, e, d) = garble(&c, SECURITY);
         let x = encode(&e, x);
         let z = evaluate(c, &f, &x);
-        return decode(&d, &z).unwrap();
+        return decode(c, &d, &z).unwrap();
     }
 
     #[test]

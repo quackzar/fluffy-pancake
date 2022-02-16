@@ -296,12 +296,6 @@ pub struct Encoding {
     delta: HashMap<u64, ArithWire>,
 }
 
-pub struct Decoding {
-    map: Vec<Vec<u64>>,
-    ids: Vec<usize>,
-    domains: Vec<u64>,
-}
-
 #[derive(Debug)]
 pub struct DecodeError {}
 impl Error for DecodeError {}
@@ -314,7 +308,7 @@ impl fmt::Display for DecodeError {
 // -------------------------------------------------------------------------------------------------
 // Garbling Scheme Implementations
 
-pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<ArithWire>>, Encoding, Decoding) {
+pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<ArithWire>>, Encoding, Vec<Vec<u64>>) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut lambda = HashMap::new();
     let mut delta = HashMap::new();
@@ -352,8 +346,6 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<Arit
     let outputs_start_at = circuit.num_wires - circuit.num_outputs;
     let mut f = HashMap::new();
     let mut d = Vec::with_capacity(circuit.num_outputs);
-    let mut output_ids = Vec::with_capacity(circuit.num_outputs);
-    let mut domains = Vec::with_capacity(circuit.num_outputs);
     for gate in &circuit.gates {
         let wire = match gate.kind {
             ArithGateKind::ADD => gate.inputs.iter().map(|&input| wires[input].clone()).sum(),
@@ -398,18 +390,10 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<Arit
             }
 
             d.push(values);
-            output_ids.push(gate.output);
-            domains.push(output_domain);
         }
     }
 
-    let decoding = Decoding {
-        map: d,
-        ids: output_ids,
-        domains,
-    };
-
-    return (f, encoding, decoding);
+    return (f, encoding, d);
 }
 
 pub fn evaluate(circuit: &ArithCircuit, f: &HashMap<usize, Vec<ArithWire>>, x: &Vec<ArithWire>) -> Vec<ArithWire> {
@@ -463,30 +447,26 @@ pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<ArithWire> {
     return z;
 }
 
-pub fn decode(decoding: &Decoding, z: &Vec<ArithWire>) -> Result<Vec<u64>, DecodeError> {
-    let d = &decoding.map;
-    let ids = &decoding.ids;
-    let domains = &decoding.domains;
-    debug_assert_eq!(d.len(), z.len(), "Decoding and z vector lengths do not match");
-    debug_assert_eq!(d.len(), ids.len(), "Decoding and id vector lengths do not match");
-
-    let mut y = vec![0; d.len()];
-    for i in 0..d.len() {
-        let mut success = false;
-        let id = ids[i];
-        let h = &d[i];
-
-        for k in 0..domains[i] {
-            let hash = hash(id as u64, k, &z[i]);
-            if hash == h[k as usize] {
-                y[i] = k;
-                success = true;
-                break;
+pub fn decode(circuit: &ArithCircuit, decoding: &Vec<Vec<u64>>, z: &Vec<ArithWire>) -> Result<Vec<u64>, DecodeError> {
+    let mut y = vec![0; decoding.len()];
+    let outputs_start_at = circuit.num_wires - circuit.num_outputs;
+    for gate in &circuit.gates {
+        if gate.output >= outputs_start_at {
+            let mut success = false;
+            let output_idx = circuit.num_wires - gate.output - 1;
+            let h = &decoding[output_idx];
+            for k in 0..gate.domain {
+                let hash = hash(gate.output as u64, k, &z[output_idx]);
+                if hash == h[k as usize] {
+                    y[output_idx] = k;
+                    success = true;
+                    break;
+                }
             }
-        }
 
-        if !success {
-            return Err(DecodeError {});
+            if !success {
+                return Err(DecodeError {});
+            }
         }
     }
 
@@ -498,7 +478,7 @@ pub fn decode(decoding: &Decoding, z: &Vec<ArithWire>) -> Result<Vec<u64>, Decod
 
 #[cfg(test)]
 mod tests {
-    use crate::arith::{decode, encode, evaluate, garble, hash, Decoding, Encoding, ArithWire};
+    use crate::arith::{decode, encode, evaluate, garble, hash, Encoding, ArithWire};
     use std::collections::HashMap;
     use super::{ArithCircuit, ArithGate, ArithGateKind};
 
@@ -507,34 +487,7 @@ mod tests {
         let (f, e, d) = garble(&c, SECURITY);
         let x = encode(&e, x);
         let z = evaluate(c, &f, &x);
-        return decode(&d, &z).unwrap();
-    }
-
-    #[test]
-    fn encode_decode() {
-        let id: usize = 0;
-        let lambda = 8;
-        let domain = 128;
-        let mut map = HashMap::new();
-        let delta = ArithWire::delta(domain, lambda);
-        map.insert(domain, delta.clone());
-        let wire = ArithWire::new(domain, lambda);
-        let e = Encoding {
-            wires: vec![wire.clone()],
-            delta: map,
-        };
-        let hashes: Vec<u64> = (0..domain)
-            .map(|k| hash(id as u64, k, &(&wire + &(&delta * k))))
-            .collect();
-        let d = Decoding {
-            domains: vec![domain],
-            ids: vec![id],
-            map: vec![hashes],
-        };
-        let input = vec![69];
-        let x = encode(&e, &input);
-        let y = decode(&d, &x).unwrap();
-        assert_eq!(input, y)
+        return decode(c, &d, &z).unwrap();
     }
 
     #[test]
