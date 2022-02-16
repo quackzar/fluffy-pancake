@@ -216,7 +216,7 @@ fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
             bits_wanted -= bits_to_grab;
 
             let mask_shift = 8 - bits_to_grab;
-            let mask = ((0xFF << mask_shift) >> bits_to_grab) as u8;
+            let mask = ((0xFFu8 << mask_shift) >> mask_shift) as u8;
             let bits = byte & mask;
 
             if bits_to_grab == bits_in_byte {
@@ -254,7 +254,8 @@ fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
         // Grab any remaining bits
         if bits_wanted != 0 {
             let mask_shift = 8 - bits_wanted;
-            let mask = ((0xFF << mask_shift) >> bits_wanted) as u8;
+
+            let mask = ((0xFFu8 << mask_shift) >> mask_shift) as u8;
             let bits = (byte & mask) as u8;
 
             value |= bits as u64;
@@ -288,7 +289,40 @@ fn tau(w : &ArithWire) -> u64 {
 
 #[inline]
 fn log2(x: u64) -> u64 {
-    64 - (x.leading_zeros() as u64)
+    64 - ((x - 1).leading_zeros() as u64)
+}
+
+fn wire_to_bytes(wire: &ArithWire) -> Vec<u8> {
+    let bits_per_value = log2(wire.domain);
+    let wire_bits = wire.lambda * bits_per_value;
+    let wire_bytes_truncated = wire_bits / 8;
+    let wire_bytes = if wire_bytes_truncated* 8 != wire_bits { wire_bytes_truncated + 1 } else { wire_bytes_truncated };
+    let mut bytes = vec![0u8; wire_bytes as usize];
+
+    let mut byte_idx = 0;
+    let mut byte_bits = 8;
+    for value_ref in &wire.values {
+        let mut value = *value_ref;
+        let mut bits_remaining = bits_per_value;
+        while bits_remaining != 0 {
+            let bits_to_grab = cmp::min(8, cmp::min(bits_remaining, byte_bits));
+            let mask_shift = 8 - bits_to_grab;
+            let source_mask = ((0xFFu8 << mask_shift) >> mask_shift) as u64;
+
+            bytes[byte_idx] <<= bits_to_grab;
+            bytes[byte_idx]  |= (value & source_mask) as u8;
+            byte_bits -= bits_to_grab;
+            if byte_bits == 0 {
+                byte_bits = 8;
+                byte_idx += 1;
+            }
+
+            value >>= bits_to_grab;
+            bits_remaining -= bits_to_grab;
+        }
+    }
+
+    return bytes;
 }
 
 pub struct Encoding {
