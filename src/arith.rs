@@ -4,6 +4,7 @@ use rand::Rng;
 use ring::digest::Context;
 use ring::digest::SHA256;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::cmp;
 use std::error::Error;
 use std::fmt;
@@ -314,44 +315,45 @@ impl fmt::Display for DecodeError {
 // Garbling Scheme Implementations
 
 pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<ArithWire>>, Encoding, Decoding) {
-    // 1. For each domain
-    let mut domains: Vec<u64> = circuit.gates.iter().map(|gate| gate.domain).unique().collect();
-    domains.extend(
-    circuit
-        .gates
-        .iter()
-        .filter_map(|gate| match gate.kind {
-            ArithGateKind::PROJ(range, _) => Some(range),
-            _ => None,
-        })
-        .unique(),
-    );
+    // 1. Compute lambda & delta for the domains in the circuit
+    let mut lambda = HashMap::new();
+    let mut delta = HashMap::new();
+    for gate in &circuit.gates {
+        if !lambda.contains_key(&gate.domain) {
+            let lambda_domain = (security + log2(gate.domain) - 1) / log2(gate.domain);
+            lambda.insert(gate.domain, lambda_domain);
+            delta.insert(gate.domain, ArithWire::delta(gate.domain, lambda_domain));
+        }
 
-    let lambda: HashMap<_, _> = domains
-        .iter()
-        .map(|&domain| (domain, (security + log2(domain) - 1) / log2(domain)))
-        .collect();
-    let delta: HashMap<_, _> = domains
-        .iter()
-        .map(|&domain| (domain, ArithWire::delta(domain, lambda[&domain])))
-        .collect();
+        if let ArithGateKind::PROJ(target_domain, _) = gate.kind {
+            if !lambda.contains_key(&target_domain) {
+                let lambda_domain = (security + log2(target_domain) - 1) / log2(target_domain);
+                lambda.insert(target_domain, lambda_domain);
+                delta.insert(target_domain, ArithWire::delta(target_domain, lambda_domain));
+            }
+        }
+    }
 
-    // 2. For each input
-    let inputs = 0..circuit.num_inputs;
+    // 2. Create wires for each of the inputs
     let mut wires = Vec::with_capacity(circuit.num_wires);
-    for input in inputs {
+    for input in 0..circuit.num_inputs {
         let domain = circuit.input_domains[input];
         wires.push(ArithWire::new(domain, lambda[&domain]));
     }
 
-    // 3. Encoding
+    // 3. Create encoding information from the inputs
+    // TODO(frm): Can we do this without having to clone delta?
     let encoding = Encoding {
         wires: wires[..circuit.num_inputs].to_vec(),
         delta: delta.clone(),
     };
 
     // 4. For each gate
+    let outputs_start_at = circuit.num_wires - circuit.num_outputs;
     let mut f = HashMap::new();
+    let mut d = Vec::with_capacity(circuit.num_outputs);
+    let mut output_ids = Vec::with_capacity(circuit.num_outputs);
+    let mut domains = Vec::with_capacity(circuit.num_outputs);
     for gate in &circuit.gates {
         let wire = match gate.kind {
             ArithGateKind::ADD => gate.inputs.iter().map(|&input| wires[input].clone()).sum(),
@@ -381,34 +383,24 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<Arit
             }
         };
         wires.push(wire);
-    }
 
-    // 5. Decoding / outputs
-    let outputs = (circuit.num_wires - circuit.num_outputs)..circuit.num_wires;
-    let outputs: Vec<&ArithGate> = circuit
-        .gates
-        .iter()
-        .filter(|g| outputs.contains(&g.output))
-        .collect();
+        // 5. Decoding information for outputs
+        if gate.output >= outputs_start_at {
+            let output_domain = match gate.kind {
+                ArithGateKind::PROJ(range, _) => range,
+                _ => gate.domain,
+            };
 
-    let mut d = Vec::with_capacity(circuit.num_outputs);
-    let mut output_ids = Vec::with_capacity(circuit.num_outputs);
-    let mut domains = Vec::with_capacity(circuit.num_outputs);
-    for gate in outputs {
-        let output_domain = match gate.kind {
-            ArithGateKind::PROJ(range, _) => range,
-            _ => gate.domain,
-        };
+            let mut values = vec![0; output_domain as usize];
+            for x in 0..output_domain {
+                let hash = hash(gate.output as u64, x as u64, &(&wires[gate.output] + &(&delta[&output_domain] * x)));
+                values[x as usize] = hash;
+            }
 
-        let mut values = vec![0; output_domain as usize];
-        for x in 0..output_domain {
-            let hash = hash(gate.output as u64, x as u64, &(&wires[gate.output] + &(&delta[&output_domain] * x)));
-            values[x as usize] = hash;
+            d.push(values);
+            output_ids.push(gate.output);
+            domains.push(output_domain);
         }
-
-        d.push(values);
-        output_ids.push(gate.output);
-        domains.push(output_domain);
     }
 
     let decoding = Decoding {
@@ -478,7 +470,7 @@ pub fn decode(decoding: &Decoding, z: &Vec<ArithWire>) -> Result<Vec<u64>, Decod
     debug_assert_eq!(d.len(), z.len(), "Decoding and z vector lengths do not match");
     debug_assert_eq!(d.len(), ids.len(), "Decoding and id vector lengths do not match");
 
-    let mut y = vec![0u64; d.len()];
+    let mut y = vec![0; d.len()];
     for i in 0..d.len() {
         let mut success = false;
         let id = ids[i];
