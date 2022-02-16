@@ -4,6 +4,7 @@ use rand::Rng;
 use ring::digest::Context;
 use ring::digest::SHA256;
 use std::collections::HashMap;
+use std::cmp;
 use std::error::Error;
 use std::fmt;
 use std::iter;
@@ -195,27 +196,72 @@ fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
     let digest = context.finish();
     let bytes = digest.as_ref();
 
-    // Turn them into a wire
+    // Makes values for the wire of target size from the output of the hash function, recall that
+    // the hash function outputs 256 bits, which means that the number of values * the number of
+    // bits in a value must be less than or equal to 256.
     let mut values = Vec::with_capacity((target.lambda + 1) as usize);
     let bits_per_value = log2(target.domain);
-    let truncated_bytes_per_value = bits_per_value / 8;
-    let bytes_per_value = if (bits_per_value % 8) == 0 {
-        truncated_bytes_per_value
-    } else {
-        truncated_bytes_per_value + 1
-    };
+    debug_assert!(bits_per_value * (target.lambda + 1) <= 256);
 
-    // TODO(frm): This is not the right way to do this! Do the bits!
-    for i in (0..128).step_by(bytes_per_value as usize) {
-        let mut value = 0u64;
-        for j in 0..bytes_per_value {
-            value |= (bytes[((i + j) % 32) as usize] as u64) << (8 * j);
+    let mut bits_in_byte = 8;
+    let mut byte_idx = 0;
+    let mut byte = bytes[0];
+    for _ in 0..=target.lambda {
+        let mut bits_wanted = bits_per_value;
+        let mut value: u64 = 0;
+
+        // Grab bits up until the next full byte
+        if bits_in_byte != 8 {
+            let bits_to_grab = cmp::min(bits_in_byte, bits_wanted);
+            bits_wanted -= bits_to_grab;
+
+            let mask_shift = 8 - bits_to_grab;
+            let mask = ((0xFF << mask_shift) >> bits_to_grab) as u8;
+            let bits = byte & mask;
+
+            if bits_to_grab == bits_in_byte {
+                bits_in_byte = 8;
+                byte_idx += 1;
+                byte = bytes[byte_idx];
+            } else {
+                bits_in_byte -= bits_to_grab;
+            }
+
+            value |= bits as u64;
+            if bits_wanted != 0 {
+                value <<= cmp::min(8, bits_wanted);
+            }
         }
+
+        // Grab as many full bytes as we need
+        // From the previous code we know that at this point either we want no more bits or the
+        // number of bits in the current byte from the hash will be equal to 8, thus we do not need
+        // to update bits_in_byte.
+        while bits_wanted >= 8 {
+            value |= byte as u64;
+            byte_idx += 1;
+            byte = bytes[byte_idx];
+            bits_wanted -= 8;
+
+            if bits_wanted < 8 {
+                value <<= bits_wanted;
+                break;
+            }
+
+            value <<= 8;
+        }
+
+        // Grab any remaining bits
+        if bits_wanted != 0 {
+            let mask_shift = 8 - bits_wanted;
+            let mask = ((0xFF << mask_shift) >> bits_wanted) as u8;
+            let bits = (byte & mask) as u8;
+
+            value |= bits as u64;
+            bits_in_byte -= bits_wanted;
+        }
+
         values.push(value % target.domain);
-
-        if values.len() == ((target.lambda + 1) as usize) {
-            break;
-        }
     }
 
     debug_assert_eq!(values.len(), (target.lambda + 1) as usize);
