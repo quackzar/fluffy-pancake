@@ -137,8 +137,8 @@ impl ArithWire {
     }
 
     fn new(domain: u64, lambda: u64) -> ArithWire {
-        let mut values = vec![0u64; (lambda+1) as usize];
-        for i in 0..=lambda {
+        let mut values = vec![0u64; lambda as usize];
+        for i in 0..lambda {
             values[i as usize] = rng(domain + 1);
         }
 
@@ -150,11 +150,11 @@ impl ArithWire {
     }
 
     fn delta(domain: u64, lambda: u64) -> ArithWire {
-        let mut values = vec![0u64; (lambda+1) as usize];
+        let mut values = vec![0u64; lambda as usize];
         for i in 0..lambda {
             values[i as usize] =  rng(domain + 1);
         }
-        values[lambda as usize] = 1;
+        values[(lambda - 1) as usize] = 1;
 
         return ArithWire {
             values,
@@ -183,7 +183,6 @@ fn hash(index: u64, x: u64, wire: &ArithWire) -> u64 {
     return u64::from_be_bytes(bytes[..8].try_into().unwrap());
 }
 
-// TODO(frm): This functions needs some cleanup and simple optimization
 fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
     let mut context = Context::new(&SHA256);
     context.update(&index.to_be_bytes());
@@ -199,9 +198,9 @@ fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
     // Makes values for the wire of target size from the output of the hash function, recall that
     // the hash function outputs 256 bits, which means that the number of values * the number of
     // bits in a value must be less than or equal to 256.
-    let mut values = Vec::with_capacity((target.lambda + 1) as usize);
+    let mut values = Vec::with_capacity(target.lambda as usize);
     let bits_per_value = log2(target.domain);
-    debug_assert!(bits_per_value * (target.lambda + 1) <= 256);
+    debug_assert!(bits_per_value * target.lambda <= 256);
 
     let mut bits_in_byte = 8;
     let mut byte_idx = 0;
@@ -283,7 +282,7 @@ fn rng(max: u64) -> u64 {
 
 #[inline]
 fn tau(w : &ArithWire) -> u64 {
-    w.values[w.lambda as usize]
+    w.values[(w.lambda - 1) as usize]
 }
 
 #[inline]
