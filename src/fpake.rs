@@ -115,7 +115,7 @@ mod tests {
         let (f, e, d) = garble(&c, SECURITY);
         let x = encode(&e, x);
         let z = evaluate(c, &f, &x);
-        return decode(c.num_wires, &d, &z).unwrap();
+        return decode(&d, &z).unwrap();
     }
 
     #[test]

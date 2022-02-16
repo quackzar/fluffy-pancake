@@ -5,7 +5,6 @@ use ring::digest::Context;
 use ring::digest::SHA256;
 use std::cmp;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 use std::iter;
@@ -332,9 +331,14 @@ fn wire_to_bytes(wire: &ArithWire) -> Vec<u8> {
     return bytes;
 }
 
-pub struct Encoding {
+pub struct EncodingKey {
     wires: Vec<ArithWire>,
     delta: HashMap<u64, ArithWire>,
+}
+
+pub struct DecodingKey {
+    hashes: Vec<Vec<u64>>,
+    offset: usize,
 }
 
 #[derive(Debug)]
@@ -349,10 +353,12 @@ impl fmt::Display for DecodeError {
 // -------------------------------------------------------------------------------------------------
 // Garbling Scheme Implementations
 
+type ProjMap = HashMap<usize, Vec<ArithWire>>;
+
 pub fn garble(
     circuit: &ArithCircuit,
     security: u64,
-) -> (HashMap<usize, Vec<ArithWire>>, Encoding, Vec<Vec<u64>>) {
+) -> (ProjMap, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut lambda = HashMap::new();
     let mut delta = HashMap::new();
@@ -384,7 +390,7 @@ pub fn garble(
 
     // 3. Create encoding information from the inputs
     // TODO(frm): Can we do this without having to clone delta?
-    let encoding = Encoding {
+    let encode_key = EncodingKey {
         wires: wires[..circuit.num_inputs].to_vec(),
         delta: delta.clone(),
     };
@@ -448,13 +454,16 @@ pub fn garble(
             d.push(values);
         }
     }
-
-    return (f, encoding, d);
+    let decode_key = DecodingKey {
+        hashes: d,
+        offset: outputs_start_at,
+    };
+    return (f, encode_key, decode_key);
 }
 
 pub fn evaluate(
     circuit: &ArithCircuit,
-    f: &HashMap<usize, Vec<ArithWire>>,
+    f: &ProjMap,
     x: &Vec<ArithWire>,
 ) -> Vec<ArithWire> {
     debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
@@ -490,7 +499,8 @@ pub fn evaluate(
     return wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec();
 }
 
-pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<ArithWire> {
+
+pub fn encode(e: &EncodingKey, x: &Vec<u64>) -> Vec<ArithWire> {
     let wires = &e.wires;
     let delta = &e.delta;
     debug_assert_eq!(
@@ -507,15 +517,12 @@ pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<ArithWire> {
     return z;
 }
 
-pub fn decode(
-    num_wires: usize,
-    decoding: &Vec<Vec<u64>>,
-    z: &Vec<ArithWire>,
-) -> Result<Vec<u64>, DecodeError> {
-    let mut y = vec![0; decoding.len()];
+
+pub fn decode( d: &DecodingKey, z: &Vec<ArithWire>,) -> Result<Vec<u64>, DecodeError> {
+    let mut y = vec![0; d.hashes.len()];
     for i in 0..z.len() {
-        let output = num_wires - z.len() + i;
-        let hashes = &decoding[i];
+        let output = &d.offset + i;
+        let hashes = &d.hashes[i];
 
         let mut success = false;
         for k in 0..z[i].domain {
@@ -541,7 +548,7 @@ pub fn decode(
 #[cfg(test)]
 mod tests {
     use super::{ArithCircuit, ArithGate, ArithGateKind};
-    use crate::arith::{decode, encode, evaluate, garble, hash, ArithWire, Encoding};
+    use crate::arith::{decode, encode, evaluate, garble, hash, ArithWire, EncodingKey};
     use std::collections::HashMap;
 
     fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
@@ -549,7 +556,7 @@ mod tests {
         let (f, e, d) = garble(&c, SECURITY);
         let x = encode(&e, x);
         let z = evaluate(c, &f, &x);
-        return decode(c.num_wires, &d, &z).unwrap();
+        return decode(&d, &z).unwrap();
     }
 
     #[test]
