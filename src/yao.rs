@@ -1,9 +1,5 @@
 #![allow(dead_code)]
 
-mod arith;
-mod circuits;
-mod fpake;
-mod ot;
 use crate::circuits::{Circuit, GateKind};
 
 // -------------------------------------------------------------------------------------------------
