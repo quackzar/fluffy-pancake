@@ -3,9 +3,9 @@ use itertools::Itertools;
 use rand::Rng;
 use ring::digest::Context;
 use ring::digest::SHA256;
+use std::cmp;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::cmp;
 use std::error::Error;
 use std::fmt;
 use std::iter;
@@ -133,8 +133,8 @@ impl ArithWire {
         return ArithWire {
             domain: 0,
             lambda: 0,
-            values: Vec::new()
-        }
+            values: Vec::new(),
+        };
     }
 
     fn new(domain: u64, lambda: u64) -> ArithWire {
@@ -153,7 +153,7 @@ impl ArithWire {
     fn delta(domain: u64, lambda: u64) -> ArithWire {
         let mut values = vec![0u64; lambda as usize];
         for i in 0..lambda {
-            values[i as usize] =  rng(domain + 1);
+            values[i as usize] = rng(domain + 1);
         }
         values[(lambda - 1) as usize] = 1;
 
@@ -266,7 +266,10 @@ fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
     }
 
     debug_assert_eq!(values.len(), (target.lambda + 1) as usize);
-    debug_assert!(values.iter().all(|v| v < &target.domain), "value not under domain");
+    debug_assert!(
+        values.iter().all(|v| v < &target.domain),
+        "value not under domain"
+    );
 
     return ArithWire {
         domain: target.domain,
@@ -283,7 +286,7 @@ fn rng(max: u64) -> u64 {
 }
 
 #[inline]
-fn tau(w : &ArithWire) -> u64 {
+fn tau(w: &ArithWire) -> u64 {
     w.values[(w.lambda - 1) as usize]
 }
 
@@ -296,7 +299,11 @@ fn wire_to_bytes(wire: &ArithWire) -> Vec<u8> {
     let bits_per_value = log2(wire.domain);
     let wire_bits = wire.lambda * bits_per_value;
     let wire_bytes_truncated = wire_bits / 8;
-    let wire_bytes = if wire_bytes_truncated* 8 != wire_bits { wire_bytes_truncated + 1 } else { wire_bytes_truncated };
+    let wire_bytes = if wire_bytes_truncated * 8 != wire_bits {
+        wire_bytes_truncated + 1
+    } else {
+        wire_bytes_truncated
+    };
     let mut bytes = vec![0u8; wire_bytes as usize];
 
     let mut byte_idx = 0;
@@ -310,7 +317,7 @@ fn wire_to_bytes(wire: &ArithWire) -> Vec<u8> {
             let source_mask = ((0xFFu8 << mask_shift) >> mask_shift) as u64;
 
             bytes[byte_idx] <<= bits_to_grab;
-            bytes[byte_idx]  |= (value & source_mask) as u8;
+            bytes[byte_idx] |= (value & source_mask) as u8;
             byte_bits -= bits_to_grab;
             if byte_bits == 0 {
                 byte_bits = 8;
@@ -342,7 +349,10 @@ impl fmt::Display for DecodeError {
 // -------------------------------------------------------------------------------------------------
 // Garbling Scheme Implementations
 
-pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<ArithWire>>, Encoding, Vec<Vec<u64>>) {
+pub fn garble(
+    circuit: &ArithCircuit,
+    security: u64,
+) -> (HashMap<usize, Vec<ArithWire>>, Encoding, Vec<Vec<u64>>) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut lambda = HashMap::new();
     let mut delta = HashMap::new();
@@ -357,7 +367,10 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<Arit
             if !lambda.contains_key(&target_domain) {
                 let lambda_domain = (security + log2(target_domain) - 1) / log2(target_domain);
                 lambda.insert(target_domain, lambda_domain);
-                delta.insert(target_domain, ArithWire::delta(target_domain, lambda_domain));
+                delta.insert(
+                    target_domain,
+                    ArithWire::delta(target_domain, lambda_domain),
+                );
             }
         }
     }
@@ -392,13 +405,18 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<Arit
                 let delta_m = &delta[&gate.domain];
                 let delta_n = &delta[&range];
 
-                let hashed_wire = hash_wire(output_index, &(&wires[input_index] - &(delta_m * color)), &delta_n);
+                let hashed_wire = hash_wire(
+                    output_index,
+                    &(&wires[input_index] - &(delta_m * color)),
+                    &delta_n,
+                );
                 let wire = &hashed_wire + &(delta_n * phi(gate.domain - color));
                 let wire = -&wire;
 
                 let mut g: Vec<ArithWire> = vec![ArithWire::empty(); gate.domain as usize];
                 for x in 0..gate.domain {
-                    let hashed_wire = hash_wire(output_index, &(&wires[input_index] + &(delta_m * x)), &wire);
+                    let hashed_wire =
+                        hash_wire(output_index, &(&wires[input_index] + &(delta_m * x)), &wire);
                     let ciphertext = &(&hashed_wire + &wire) + &(delta_n * phi(x));
 
                     g[((x + color) % gate.domain) as usize] = ciphertext;
@@ -419,7 +437,11 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<Arit
 
             let mut values = vec![0; output_domain as usize];
             for x in 0..output_domain {
-                let hash = hash(gate.output as u64, x as u64, &(&wires[gate.output] + &(&delta[&output_domain] * x)));
+                let hash = hash(
+                    gate.output as u64,
+                    x as u64,
+                    &(&wires[gate.output] + &(&delta[&output_domain] * x)),
+                );
                 values[x as usize] = hash;
             }
 
@@ -430,7 +452,11 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (HashMap<usize, Vec<Arit
     return (f, encoding, d);
 }
 
-pub fn evaluate(circuit: &ArithCircuit, f: &HashMap<usize, Vec<ArithWire>>, x: &Vec<ArithWire>) -> Vec<ArithWire> {
+pub fn evaluate(
+    circuit: &ArithCircuit,
+    f: &HashMap<usize, Vec<ArithWire>>,
+    x: &Vec<ArithWire>,
+) -> Vec<ArithWire> {
     debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
 
     let mut wires: Vec<MaybeUninit<ArithWire>> = Vec::with_capacity(circuit.num_wires);
@@ -481,7 +507,11 @@ pub fn encode(e: &Encoding, x: &Vec<u64>) -> Vec<ArithWire> {
     return z;
 }
 
-pub fn decode(num_wires: usize, decoding: &Vec<Vec<u64>>, z: &Vec<ArithWire>) -> Result<Vec<u64>, DecodeError> {
+pub fn decode(
+    num_wires: usize,
+    decoding: &Vec<Vec<u64>>,
+    z: &Vec<ArithWire>,
+) -> Result<Vec<u64>, DecodeError> {
     let mut y = vec![0; decoding.len()];
     for i in 0..z.len() {
         let output = num_wires - z.len() + i;
@@ -510,9 +540,9 @@ pub fn decode(num_wires: usize, decoding: &Vec<Vec<u64>>, z: &Vec<ArithWire>) ->
 
 #[cfg(test)]
 mod tests {
-    use crate::arith::{decode, encode, evaluate, garble, hash, Encoding, ArithWire};
-    use std::collections::HashMap;
     use super::{ArithCircuit, ArithGate, ArithGateKind};
+    use crate::arith::{decode, encode, evaluate, garble, hash, ArithWire, Encoding};
+    use std::collections::HashMap;
 
     fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
         const SECURITY: u64 = 128;
@@ -586,7 +616,7 @@ mod tests {
     fn proj_circuit_identity() {
         let target_domain = 8;
         let source_domain = 16;
-        let phi = |x : u64| x;
+        let phi = |x: u64| x;
         let circuit = ArithCircuit {
             gates: vec![ArithGate {
                 kind: ArithGateKind::PROJ(target_domain, phi),
@@ -649,7 +679,6 @@ mod tests {
     }
 
     fn make_me_the_threshold() -> ArithCircuit {
-
         // 8 inputs, 4 "comparators"
         const INPUT_COUNT: usize = 8;
         const BIT_DOMAIN: u64 = 2;
@@ -660,66 +689,70 @@ mod tests {
 
         let circuit = ArithCircuit {
             // Comparison
-            gates: vec![ArithGate {
-                kind: ArithGateKind::ADD,
-                inputs: vec![0, 4],
-                output: 8,
-                domain: BIT_DOMAIN,
-            }, ArithGate {
-                kind: ArithGateKind::ADD,
-                inputs: vec![1, 5],
-                output: 9,
-                domain: BIT_DOMAIN,
-            }, ArithGate {
-                kind: ArithGateKind::ADD,
-                inputs: vec![2, 6],
-                output: 10,
-                domain: BIT_DOMAIN,
-            }, ArithGate {
-                kind: ArithGateKind::ADD,
-                inputs: vec![3, 7],
-                output: 11,
-                domain: BIT_DOMAIN,
-            },
-                        // Second half of comparison
-            ArithGate {
-                kind: ArithGateKind::PROJ(COMAPRISON_DOMAIN, id),
-                inputs: vec![8],
-                output: 12,
-                domain: BIT_DOMAIN,
-            },
-                        ArithGate {
-                kind: ArithGateKind::PROJ(COMAPRISON_DOMAIN, id),
-                inputs: vec![9],
-                output: 13,
-                domain: BIT_DOMAIN,
-            },
-                        ArithGate {
-                kind: ArithGateKind::PROJ(COMAPRISON_DOMAIN, id),
-                inputs: vec![10],
-                output: 14,
-                domain: BIT_DOMAIN,
-            },
-                        ArithGate {
-                kind: ArithGateKind::PROJ(COMAPRISON_DOMAIN, id),
-                inputs: vec![11],
-                output: 15,
-                domain: BIT_DOMAIN,
-            },
-                        // Adder
-            ArithGate {
-                kind: ArithGateKind::ADD,
-                inputs: vec![12, 13, 14, 15],
-                output: 16,
-                domain: COMAPRISON_DOMAIN,
-            },
-                        // Threshold
-            ArithGate {
-                kind: ArithGateKind::PROJ(BIT_DOMAIN, threshold),
-                inputs: vec![16],
-                output: 17,
-                domain: COMAPRISON_DOMAIN,
-            },
+            gates: vec![
+                ArithGate {
+                    kind: ArithGateKind::ADD,
+                    inputs: vec![0, 4],
+                    output: 8,
+                    domain: BIT_DOMAIN,
+                },
+                ArithGate {
+                    kind: ArithGateKind::ADD,
+                    inputs: vec![1, 5],
+                    output: 9,
+                    domain: BIT_DOMAIN,
+                },
+                ArithGate {
+                    kind: ArithGateKind::ADD,
+                    inputs: vec![2, 6],
+                    output: 10,
+                    domain: BIT_DOMAIN,
+                },
+                ArithGate {
+                    kind: ArithGateKind::ADD,
+                    inputs: vec![3, 7],
+                    output: 11,
+                    domain: BIT_DOMAIN,
+                },
+                // Second half of comparison
+                ArithGate {
+                    kind: ArithGateKind::PROJ(COMAPRISON_DOMAIN, id),
+                    inputs: vec![8],
+                    output: 12,
+                    domain: BIT_DOMAIN,
+                },
+                ArithGate {
+                    kind: ArithGateKind::PROJ(COMAPRISON_DOMAIN, id),
+                    inputs: vec![9],
+                    output: 13,
+                    domain: BIT_DOMAIN,
+                },
+                ArithGate {
+                    kind: ArithGateKind::PROJ(COMAPRISON_DOMAIN, id),
+                    inputs: vec![10],
+                    output: 14,
+                    domain: BIT_DOMAIN,
+                },
+                ArithGate {
+                    kind: ArithGateKind::PROJ(COMAPRISON_DOMAIN, id),
+                    inputs: vec![11],
+                    output: 15,
+                    domain: BIT_DOMAIN,
+                },
+                // Adder
+                ArithGate {
+                    kind: ArithGateKind::ADD,
+                    inputs: vec![12, 13, 14, 15],
+                    output: 16,
+                    domain: COMAPRISON_DOMAIN,
+                },
+                // Threshold
+                ArithGate {
+                    kind: ArithGateKind::PROJ(BIT_DOMAIN, threshold),
+                    inputs: vec![16],
+                    output: 17,
+                    domain: COMAPRISON_DOMAIN,
+                },
             ],
             num_inputs: INPUT_COUNT,
             num_outputs: 1,
@@ -733,8 +766,10 @@ mod tests {
     #[test]
     fn threshold_gate_zero() {
         let circuit = make_me_the_threshold();
-        let input = vec![0, 1, 0, 1,  // Alice bits
-                         0, 1, 0, 1]; // Bob bits
+        let input = vec![
+            0, 1, 0, 1, // Alice bits
+            0, 1, 0, 1,
+        ]; // Bob bits
 
         let output = garble_encode_eval_decode(&circuit, &input);
         assert_eq!(output[0], 1);
@@ -743,8 +778,10 @@ mod tests {
     #[test]
     fn threshold_gate_less() {
         let circuit = make_me_the_threshold();
-        let input = vec![0, 1, 0, 1,  // Alice bits
-                         1, 1, 0, 1]; // Bob bits
+        let input = vec![
+            0, 1, 0, 1, // Alice bits
+            1, 1, 0, 1,
+        ]; // Bob bits
 
         let output = garble_encode_eval_decode(&circuit, &input);
         assert_eq!(output[0], 1);
@@ -753,8 +790,10 @@ mod tests {
     #[test]
     fn threshold_gate_equal() {
         let circuit = make_me_the_threshold();
-        let input = vec![1, 1, 0, 1,  // Alice bits
-                         0, 0, 0, 1]; // Bob bits
+        let input = vec![
+            1, 1, 0, 1, // Alice bits
+            0, 0, 0, 1,
+        ]; // Bob bits
 
         let output = garble_encode_eval_decode(&circuit, &input);
         assert_eq!(output[0], 0);
@@ -763,8 +802,10 @@ mod tests {
     #[test]
     fn threshold_gate_above() {
         let circuit = make_me_the_threshold();
-        let input = vec![1, 0, 1, 0,  // Alice bits
-                         0, 1, 0, 1]; // Bob bits
+        let input = vec![
+            1, 0, 1, 0, // Alice bits
+            0, 1, 0, 1,
+        ]; // Bob bits
 
         let output = garble_encode_eval_decode(&circuit, &input);
         assert_eq!(output[0], 0);

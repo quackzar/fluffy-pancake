@@ -1,23 +1,22 @@
 // Library for fast OT.
 // use curve25519_dalek::edwards;
-use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::scalar::Scalar;
 // use curve25519_dalek::edwards;
-use aes_gcm::{Aes256Gcm, Key, Nonce};
 use aes_gcm::aead::{Aead, NewAead};
-
+use aes_gcm::{Aes256Gcm, Key, Nonce};
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 // fn send(m0 : &[u8], m1 : &[u8]) {
 
 // }
 
 // fn receive(c : bool) -> [u8] {
-//     
+//
 // }
 //
 #[cfg(test)]
@@ -37,17 +36,17 @@ mod tests {
         let a = Scalar::random(&mut rng);
         let b = Scalar::random(&mut rng);
         let A = g * a; // Send A to receiver.
-        let B : Scalar;
+        let B: Scalar;
         if c == 0 {
             B = g * b;
         } else {
             B = A + (g * b);
         } // send B back to sender.
         let mut hasher = Sha256::new();
-        hasher.update( (B * a).as_bytes() );
+        hasher.update((B * a).as_bytes());
         let k0 = hasher.finalize();
         let mut hasher = Sha256::new();
-        hasher.update( ((B - A) * a).as_bytes() );
+        hasher.update(((B - A) * a).as_bytes());
         let k1 = hasher.finalize();
 
         let cipher = Aes256Gcm::new(Key::from_slice(&k0));
@@ -90,7 +89,7 @@ mod tests {
         let mut hasher = Sha256::new();
         hasher.update(g_ba.as_bytes());
         let k_B = hasher.finalize();
-        
+
         // key encryption test.
         let key = Key::from_slice(&k_A);
         let cipher = Aes256Gcm::new(key);
