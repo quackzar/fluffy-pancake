@@ -161,12 +161,16 @@ impl ArithWire {
             domain,
         };
     }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.values.iter().flat_map(|x| x.to_le_bytes()).collect()
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
 // PRF/Hash function
 
-fn hash(index: u64, x: u64, wire: &ArithWire) -> u64 {
+pub(crate) fn hash(index: u64, x: u64, wire: &ArithWire) -> u64 {
     let mut context = Context::new(&SHA256);
     context.update(&index.to_be_bytes());
     context.update(&x.to_be_bytes());
@@ -336,8 +340,8 @@ pub struct EncodingKey {
 }
 
 pub struct DecodingKey {
-    hashes: Vec<Vec<u64>>,
-    offset: usize,
+    pub(crate) hashes: Vec<Vec<u64>>,
+    pub(crate) offset: usize,
 }
 
 #[derive(Debug)]

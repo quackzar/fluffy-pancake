@@ -136,10 +136,8 @@ mod tests {
         let pwsd_a = vec![1, 1, 1, 1];
         let pwsd_b = vec![1, 1, 1, 0];
 
-        let length = pwsd_a.len();
-        let out_a: ArithWire;
-        let out_b: ArithWire;
-        {
+        // Alice's garbled circuit and Bob's eval
+        let (out_b, one_a) = {
             // Round 1
             let circuit = build_circuit(4, 1);
             let (f, e, d) = garble(&circuit, SECURITY);
@@ -147,9 +145,12 @@ mod tests {
             input.extend(&pwsd_a); // Provided by OT
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
-            out_a = evaluate(&circuit, &f, &garbled_input)[0].clone();
-        }
-        {
+            let out = evaluate(&circuit, &f, &garbled_input)[0].clone();
+            (hash((circuit.num_wires - 1) as u64, 1, &out), d.hashes[0][1])
+        };
+
+        // Bob's garbled circuit and Alice's eval
+        let (out_a, one_b) = {
             // Round 2
             let circuit = build_circuit(4, 1);
             let (f, e, d) = garble(&circuit, SECURITY);
@@ -157,8 +158,12 @@ mod tests {
             input.extend(&pwsd_a); // Provided by OT
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
-            out_b = evaluate(&circuit, &f, &garbled_input)[0].clone();
-        }
-        // TODO: XOR output wires and compare.
+            let out = evaluate(&circuit, &f, &garbled_input)[0].clone();
+            (hash((circuit.num_wires - 1) as u64, 1, &out), d.hashes[0][1])
+
+        };
+        let key_a = out_a ^ one_a;
+        let key_b = out_b ^ one_b;
+        assert_eq!(key_a, key_b)
     }
 }
