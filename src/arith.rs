@@ -221,7 +221,7 @@ fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
             if bits_to_grab == bits_in_byte {
                 bits_in_byte = 8;
                 byte_idx += 1;
-                byte = bytes[byte_idx];
+                byte = bytes[byte_idx]; // FIX: Breaks with SECURITY = 256
             } else {
                 bits_in_byte -= bits_to_grab;
             }

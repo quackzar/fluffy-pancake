@@ -119,7 +119,7 @@ mod tests {
     }
 
     #[test]
-    fn it_works() {
+    fn simple_test() {
         let circuit = build_circuit(16, 1);
         println!("{:?}", circuit);
         let x = vec![
