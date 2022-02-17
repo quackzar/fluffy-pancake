@@ -27,10 +27,7 @@ pub struct Circuit {
 impl Circuit {
     pub fn evaluate(&self, input: Vec<bool>) -> Vec<bool> {
         let mut wires = vec![false; self.num_wires];
-
-        for i in 0..input.len() {
-            wires[i] = input[i];
-        }
+        wires[..input.len()].copy_from_slice(&input);
 
         // TODO: Support magic several input gates
         for gate in &self.gates {
@@ -42,6 +39,6 @@ impl Circuit {
             };
         }
 
-        return wires[(wires.len() - self.num_outputs)..wires.len()].to_vec();
+        wires[(wires.len() - self.num_outputs)..wires.len()].to_vec()
     }
 }

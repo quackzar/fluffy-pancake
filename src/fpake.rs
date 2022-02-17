@@ -12,7 +12,7 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
         let gate = ArithGate {
             inputs: vec![i, i + bitsize],
             output: i + 2 * bitsize,
-            kind: ArithGateKind::ADD,
+            kind: ArithGateKind::Add,
             domain: bitdomain,
         };
         gates.push(gate);
@@ -24,7 +24,7 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
         let gate = ArithGate {
             inputs: vec![i + 2 * bitsize],
             output: i + 3 * bitsize,
-            kind: ArithGateKind::PROJ(comparison_domain, identity),
+            kind: ArithGateKind::Proj(comparison_domain, identity),
             domain: bitdomain,
         };
         gates.push(gate);
@@ -32,7 +32,7 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
 
     // sum
     let gate = ArithGate {
-        kind: ArithGateKind::ADD,
+        kind: ArithGateKind::Add,
         inputs: (3 * bitsize..4 * bitsize).collect(),
         output: 4 * bitsize,
         domain: bitsize as u64,
@@ -42,7 +42,7 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     // comparison
     let threshold = |x: u64| (x < 2) as u64; // TODO: Make threshold dynamic.
     let gate = ArithGate {
-        kind: ArithGateKind::PROJ(bitdomain, threshold),
+        kind: ArithGateKind::Proj(bitdomain, threshold),
         inputs: vec![4 * bitsize],
         output: 4 * bitsize + 1,
         domain: comparison_domain,
@@ -57,6 +57,7 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     }
 }
 
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
@@ -87,8 +88,7 @@ fn verify_circuit(circuit: &ArithCircuit) -> Result<(), CircuitError> {
     let num_wires = circuit
         .gates
         .iter()
-        .map(|g| &g.inputs)
-        .flatten()
+        .flat_map(|g| &g.inputs)
         .chain(circuit.gates.iter().map(|g| &g.output))
         .unique()
         .count();
@@ -96,12 +96,10 @@ fn verify_circuit(circuit: &ArithCircuit) -> Result<(), CircuitError> {
         // circuit has different amount of wires
         return Err(CircuitError::BadWireCount(num_wires, circuit.num_wires));
     }
-    let all_outputs: Vec<usize> = circuit.gates.iter().map(|g| g.output).collect();
-    for i in 0..circuit.num_inputs {
-        if all_outputs.contains(&i) {
-            // input wire is written to
-            return Err(CircuitError::BadInputCount);
-        }
+    let mut uniq = HashSet::new();
+    let ok = circuit.gates.iter().map(|g| g.output).all(move |i| uniq.insert(i));
+    if !ok {
+        return Err(CircuitError::BadOutputCount);
     }
     Ok(())
 }
@@ -112,10 +110,10 @@ mod tests {
 
     fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
         const SECURITY: u64 = 128;
-        let (f, e, d) = garble(&c, SECURITY);
+        let (f, e, d) = garble(c, SECURITY);
         let x = encode(&e, x);
-        let z = evaluate(c, &f, &x);
-        return decode(&d, &z).unwrap();
+        let z = evaluate(c, &f, x);
+        decode(&d, z).unwrap()
     }
 
     #[test]
@@ -145,7 +143,7 @@ mod tests {
             input.extend(&pwsd_a); // Provided by OT
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
-            let out = evaluate(&circuit, &f, &garbled_input)[0].clone();
+            let out = evaluate(&circuit, &f, garbled_input)[0].clone();
             (hash((circuit.num_wires - 1) as u64, 1, &out), d.hashes[0][1])
         };
 
@@ -158,7 +156,7 @@ mod tests {
             input.extend(&pwsd_a); // Provided by OT
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
-            let out = evaluate(&circuit, &f, &garbled_input)[0].clone();
+            let out = evaluate(&circuit, &f, garbled_input)[0].clone();
             (hash((circuit.num_wires - 1) as u64, 1, &out), d.hashes[0][1])
 
         };
