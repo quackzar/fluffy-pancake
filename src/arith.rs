@@ -1,5 +1,4 @@
 use core::ops;
-use itertools::Itertools;
 use rand::Rng;
 use ring::digest::Context;
 use ring::digest::SHA256;
@@ -548,8 +547,7 @@ pub fn decode( d: &DecodingKey, z: &Vec<ArithWire>,) -> Result<Vec<u64>, DecodeE
 #[cfg(test)]
 mod tests {
     use super::{ArithCircuit, ArithGate, ArithGateKind};
-    use crate::arith::{decode, encode, evaluate, garble, hash, ArithWire, EncodingKey};
-    use std::collections::HashMap;
+    use crate::arith::{decode, encode, evaluate, garble};
 
     fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
         const SECURITY: u64 = 128;
