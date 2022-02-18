@@ -23,6 +23,47 @@ pub struct ArithCircuit {
     pub input_domains: Vec<u64>,
 }
 
+impl ArithCircuit {
+    fn serialize(&self, file: &mut File) {
+        write_u64(self.num_wires as u64, file);
+        write_u64(self.num_inputs as u64, file);
+        write_u64(self.num_outputs as u64, file);
+
+        write_u64(self.gates.len() as u64, file);
+        for gate in &self.gates {
+            gate.serialize(file);
+        }
+
+        for domain in &self.input_domains {
+            write_u64(*domain, file);
+        }
+    }
+    fn deserialize(file: &mut File) -> ArithCircuit {
+        let num_wires = read_u64(file) as usize;
+        let num_inputs = read_u64(file) as usize;
+        let num_outputs = read_u64(file) as usize;
+
+        let num_gates = read_u64(file) as usize;
+        let mut gates = Vec::with_capacity(num_gates);
+        for _ in 0..num_gates {
+            gates.push(ArithGate::deserialize(file));
+        }
+
+        let mut input_domains = Vec::with_capacity(num_inputs);
+        for _ in 0..num_inputs {
+            input_domains.push(read_u64(file))
+        }
+
+        return ArithCircuit {
+            num_wires,
+            num_inputs,
+            num_outputs,
+            gates,
+            input_domains
+        };
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub(crate) enum ArithGateKind {
     Add,
@@ -95,7 +136,7 @@ impl ArithGate {
             GATE_MUL  => { ArithGateKind::Mul(read_u64(file)) },
             GATE_MAP  => { ArithGateKind::Map(read_u64(file)) },
             GATE_LESS => { ArithGateKind::Less(read_u64(file)) },
-            
+
             _ => {
                 debug_assert!(false, "Unsupported gate kind identifier!");
                 ArithGateKind::Add
