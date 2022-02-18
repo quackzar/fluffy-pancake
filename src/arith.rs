@@ -79,6 +79,36 @@ impl ArithGate {
             }
         };
     }
+    fn deserialize(file: &mut File) -> ArithGate {
+        let output = read_u64(file) as usize;
+        let domain = read_u64(file);
+
+        let input_count = read_u64(file);
+        let mut inputs = Vec::with_capacity(input_count as usize);
+        for _ in 0..input_count {
+            inputs.push(read_u64(file) as usize);
+        }
+
+        let gate_kind = read_u8(file);
+        let kind = match gate_kind {
+            GATE_ADD  => { ArithGateKind::Add },
+            GATE_MUL  => { ArithGateKind::Mul(read_u64(file)) },
+            GATE_MAP  => { ArithGateKind::Map(read_u64(file)) },
+            GATE_LESS => { ArithGateKind::Less(read_u64(file)) },
+            
+            _ => {
+                debug_assert!(false, "Unsupported gate kind identifier!");
+                ArithGateKind::Add
+            }
+        };
+
+        return ArithGate {
+            output,
+            domain,
+            inputs,
+            kind
+        };
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
