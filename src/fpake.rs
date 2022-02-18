@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn fpake() {
-        const SECURITY: u64 = 128;
+        const SECURITY: u64 = 256;
         let pwsd_a = vec![1, 1, 1, 1];
         let pwsd_b = vec![1, 1, 1, 0];
 

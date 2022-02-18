@@ -170,8 +170,7 @@ impl ArithWire {
 
         let mut bits_in_byte = 8;
         let mut byte_idx = 0;
-        let mut byte = bytes[0];
-        for _ in 0..=lambda {
+        for i in 0..lambda {
             let mut bits_wanted = bits_per_value;
             let mut value: u64 = 0;
 
@@ -182,12 +181,11 @@ impl ArithWire {
 
                 let mask_shift = 8 - bits_to_grab;
                 let mask = ((0xFFu8 << mask_shift) >> mask_shift) as u8;
-                let bits = byte & mask;
+                let bits = bytes[byte_idx] & mask;
 
-                if bits_to_grab == bits_in_byte {
+                if bits_to_grab == bits_in_byte as u64 {
                     bits_in_byte = 8;
                     byte_idx += 1;
-                    byte = bytes[byte_idx]; // FIX: Breaks with SECURITY = 256
                 } else {
                     bits_in_byte -= bits_to_grab;
                 }
@@ -203,9 +201,8 @@ impl ArithWire {
             // number of bits in the current byte from the hash will be equal to 8, thus we do not need
             // to update bits_in_byte.
             while bits_wanted >= 8 {
-                value |= byte as u64;
+                value |= bytes[byte_idx] as u64;
                 byte_idx += 1;
-                byte = bytes[byte_idx];
                 bits_wanted -= 8;
 
                 if bits_wanted < 8 {
@@ -221,7 +218,7 @@ impl ArithWire {
                 let mask_shift = 8 - bits_wanted;
 
                 let mask = ((0xFFu8 << mask_shift) >> mask_shift) as u8;
-                let bits = (byte & mask) as u8;
+                let bits = (bytes[byte_idx] & mask) as u8;
 
                 value |= bits as u64;
                 bits_in_byte -= bits_wanted;
@@ -230,7 +227,7 @@ impl ArithWire {
             values.push(value % domain);
         }
 
-        debug_assert_eq!(values.len(), (lambda + 1) as usize);
+        debug_assert_eq!(values.len(), lambda as usize);
         debug_assert!(values.iter().all(|v| v < &domain), "value not under domain");
 
         return ArithWire {
