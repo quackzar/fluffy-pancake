@@ -286,7 +286,7 @@ impl ArithWire {
 
         let mut bits_in_byte = 8;
         let mut byte_idx = 0;
-        for i in 0..lambda {
+        for _ in 0..lambda {
             let mut bits_wanted = bits_per_value;
             let mut value: u64 = 0;
 
