@@ -4,8 +4,8 @@ use crate::arith::*;
 
 pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     let mut gates: Vec<ArithGate> = Vec::new();
-    let bitdomain = 2;
     let comparison_domain = bitsize as u64 / 2 + 1;
+    let bitdomain = 2;
 
     // xor gates
     for i in 0..bitsize {
@@ -19,12 +19,11 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     }
 
     // proj gates
-    let identity = |x: u64| x;
     for i in 0..bitsize {
         let gate = ArithGate {
             inputs: vec![i + 2 * bitsize],
             output: i + 3 * bitsize,
-            kind: ArithGateKind::Proj(comparison_domain, identity),
+            kind: ArithGateKind::Map(comparison_domain),
             domain: bitdomain,
         };
         gates.push(gate);
@@ -40,9 +39,9 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     gates.push(gate);
 
     // comparison
-    let threshold = |x: u64| (x < 2) as u64; // TODO: Make threshold dynamic.
+    let threshold = 2; // TODO: Make threshold dynamic.
     let gate = ArithGate {
-        kind: ArithGateKind::Proj(bitdomain, threshold),
+        kind: ArithGateKind::Less(threshold),
         inputs: vec![4 * bitsize],
         output: 4 * bitsize + 1,
         domain: comparison_domain,
