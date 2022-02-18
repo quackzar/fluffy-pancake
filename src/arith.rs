@@ -770,8 +770,7 @@ pub fn decode(d: &DecodingKey, z: Vec<ArithWire>) -> Result<Vec<u64>, DecodeErro
 
 #[cfg(test)]
 mod tests {
-    use super::{ArithCircuit, ArithGate, ArithGateKind};
-    use crate::arith::{decode, encode, evaluate, garble};
+    use super::*;
 
     fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
         const SECURITY: u64 = 128;
