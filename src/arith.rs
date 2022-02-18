@@ -162,8 +162,119 @@ impl ArithWire {
         }
     }
 
+    fn from_bytes(bytes: &[u8], lambda: u64, domain: u64) -> ArithWire {
+        let mut values = Vec::with_capacity(lambda as usize);
+        let bits_per_value = log2(domain);
+        let bits_available = (bytes.len() * 8) as u64;
+        debug_assert!(bits_per_value * lambda <= bits_available);
+
+        let mut bits_in_byte = 8;
+        let mut byte_idx = 0;
+        let mut byte = bytes[0];
+        for _ in 0..=lambda {
+            let mut bits_wanted = bits_per_value;
+            let mut value: u64 = 0;
+
+            // Grab bits up until the next full byte
+            if bits_in_byte != 8 {
+                let bits_to_grab = cmp::min(bits_in_byte, bits_wanted);
+                bits_wanted -= bits_to_grab;
+
+                let mask_shift = 8 - bits_to_grab;
+                let mask = ((0xFFu8 << mask_shift) >> mask_shift) as u8;
+                let bits = byte & mask;
+
+                if bits_to_grab == bits_in_byte {
+                    bits_in_byte = 8;
+                    byte_idx += 1;
+                    byte = bytes[byte_idx]; // FIX: Breaks with SECURITY = 256
+                } else {
+                    bits_in_byte -= bits_to_grab;
+                }
+
+                value |= bits as u64;
+                if bits_wanted != 0 {
+                    value <<= cmp::min(8, bits_wanted);
+                }
+            }
+
+            // Grab as many full bytes as we need
+            // From the previous code we know that at this point either we want no more bits or the
+            // number of bits in the current byte from the hash will be equal to 8, thus we do not need
+            // to update bits_in_byte.
+            while bits_wanted >= 8 {
+                value |= byte as u64;
+                byte_idx += 1;
+                byte = bytes[byte_idx];
+                bits_wanted -= 8;
+
+                if bits_wanted < 8 {
+                    value <<= bits_wanted;
+                    break;
+                }
+
+                value <<= 8;
+            }
+
+            // Grab any remaining bits
+            if bits_wanted != 0 {
+                let mask_shift = 8 - bits_wanted;
+
+                let mask = ((0xFFu8 << mask_shift) >> mask_shift) as u8;
+                let bits = (byte & mask) as u8;
+
+                value |= bits as u64;
+                bits_in_byte -= bits_wanted;
+            }
+
+            values.push(value % domain);
+        }
+
+        debug_assert_eq!(values.len(), (lambda + 1) as usize);
+        debug_assert!(values.iter().all(|v| v < &domain), "value not under domain");
+
+        return ArithWire {
+            domain,
+            lambda,
+            values,
+        };
+    }
+
     fn to_bytes(&self) -> Vec<u8> {
-        self.values.iter().flat_map(|x| x.to_le_bytes()).collect()
+        let bits_per_value = log2(self.domain);
+        let wire_bits = self.lambda * bits_per_value;
+        let wire_bytes_truncated = wire_bits / 8;
+        let wire_bytes = if wire_bytes_truncated * 8 != wire_bits {
+            wire_bytes_truncated + 1
+        } else {
+            wire_bytes_truncated
+        };
+        let mut bytes = vec![0u8; wire_bytes as usize];
+
+        let mut byte_idx = 0;
+        let mut byte_bits = 8;
+        for value_ref in &self.values {
+            let mut value = *value_ref;
+            let mut bits_remaining = bits_per_value;
+            while bits_remaining != 0 {
+                let bits_to_grab = cmp::min(8, cmp::min(bits_remaining, byte_bits));
+                let mask_shift = 8 - bits_to_grab;
+                let source_mask = ((0xFFu8 << mask_shift) >> mask_shift) as u64;
+
+                bytes[byte_idx] <<= bits_to_grab;
+                bytes[byte_idx] |= (value & source_mask) as u8;
+                byte_bits -= bits_to_grab;
+                if byte_bits == 0 {
+                    byte_bits = 8;
+                    byte_idx += 1;
+                }
+
+                value >>= bits_to_grab;
+                bits_remaining -= bits_to_grab;
+            }
+        }
+
+        return  bytes;
     }
 }
 
@@ -201,83 +312,7 @@ fn hash_wire(index: u64, wire: &ArithWire, target: &ArithWire) -> ArithWire {
     // Makes values for the wire of target size from the output of the hash function, recall that
     // the hash function outputs 256 bits, which means that the number of values * the number of
     // bits in a value must be less than or equal to 256.
-    let mut values = Vec::with_capacity(target.lambda as usize);
-    let bits_per_value = log2(target.domain);
-    debug_assert!(bits_per_value * target.lambda <= 256);
-
-    let mut bits_in_byte = 8;
-    let mut byte_idx = 0;
-    let mut byte = bytes[0];
-    for _ in 0..=target.lambda {
-        let mut bits_wanted = bits_per_value;
-        let mut value: u64 = 0;
-
-        // Grab bits up until the next full byte
-        if bits_in_byte != 8 {
-            let bits_to_grab = cmp::min(bits_in_byte, bits_wanted);
-            bits_wanted -= bits_to_grab;
-
-            let mask_shift = 8 - bits_to_grab;
-            let mask = ((0xFFu8 << mask_shift) >> mask_shift) as u8;
-            let bits = byte & mask;
-
-            if bits_to_grab == bits_in_byte {
-                bits_in_byte = 8;
-                byte_idx += 1;
-                byte = bytes[byte_idx]; // FIX: Breaks with SECURITY = 256
-            } else {
-                bits_in_byte -= bits_to_grab;
-            }
-
-            value |= bits as u64;
-            if bits_wanted != 0 {
-                value <<= cmp::min(8, bits_wanted);
-            }
-        }
-
-        // Grab as many full bytes as we need
-        // From the previous code we know that at this point either we want no more bits or the
-        // number of bits in the current byte from the hash will be equal to 8, thus we do not need
-        // to update bits_in_byte.
-        while bits_wanted >= 8 {
-            value |= byte as u64;
-            byte_idx += 1;
-            byte = bytes[byte_idx];
-            bits_wanted -= 8;
-
-            if bits_wanted < 8 {
-                value <<= bits_wanted;
-                break;
-            }
-
-            value <<= 8;
-        }
-
-        // Grab any remaining bits
-        if bits_wanted != 0 {
-            let mask_shift = 8 - bits_wanted;
-
-            let mask = ((0xFFu8 << mask_shift) >> mask_shift) as u8;
-            let bits = (byte & mask) as u8;
-
-            value |= bits as u64;
-            bits_in_byte -= bits_wanted;
-        }
-
-        values.push(value % target.domain);
-    }
-
-    debug_assert_eq!(values.len(), (target.lambda + 1) as usize);
-    debug_assert!(
-        values.iter().all(|v| v < &target.domain),
-        "value not under domain"
-    );
-
-    ArithWire {
-        domain: target.domain,
-        lambda: target.lambda,
-        values,
-    }
+    return ArithWire::from_bytes(bytes, target.lambda, target.domain);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -295,43 +330,6 @@ fn tau(w: &ArithWire) -> u64 {
 #[inline]
 fn log2(x: u64) -> u64 {
     64 - ((x - 1).leading_zeros() as u64)
-}
-
-fn wire_to_bytes(wire: &ArithWire) -> Vec<u8> {
-    let bits_per_value = log2(wire.domain);
-    let wire_bits = wire.lambda * bits_per_value;
-    let wire_bytes_truncated = wire_bits / 8;
-    let wire_bytes = if wire_bytes_truncated * 8 != wire_bits {
-        wire_bytes_truncated + 1
-    } else {
-        wire_bytes_truncated
-    };
-    let mut bytes = vec![0u8; wire_bytes as usize];
-
-    let mut byte_idx = 0;
-    let mut byte_bits = 8;
-    for value_ref in &wire.values {
-        let mut value = *value_ref;
-        let mut bits_remaining = bits_per_value;
-        while bits_remaining != 0 {
-            let bits_to_grab = cmp::min(8, cmp::min(bits_remaining, byte_bits));
-            let mask_shift = 8 - bits_to_grab;
-            let source_mask = ((0xFFu8 << mask_shift) >> mask_shift) as u64;
-
-            bytes[byte_idx] <<= bits_to_grab;
-            bytes[byte_idx] |= (value & source_mask) as u8;
-            byte_bits -= bits_to_grab;
-            if byte_bits == 0 {
-                byte_bits = 8;
-                byte_idx += 1;
-            }
-
-            value >>= bits_to_grab;
-            bits_remaining -= bits_to_grab;
-        }
-    }
-
-    bytes
 }
 
 pub struct EncodingKey {
@@ -464,11 +462,7 @@ pub fn garble(
     (f, encode_key, decode_key)
 }
 
-pub fn evaluate(
-    circuit: &ArithCircuit,
-    f: &ProjMap,
-    x: Vec<ArithWire>,
-) -> Vec<ArithWire> {
+pub fn evaluate( circuit: &ArithCircuit, f: &ProjMap, x: Vec<ArithWire>) -> Vec<ArithWire> {
     debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
 
     let mut wires: Vec<MaybeUninit<ArithWire>> = Vec::with_capacity(circuit.num_wires);
