@@ -105,7 +105,7 @@ fn verify_circuit(circuit: &ArithCircuit) -> Result<(), CircuitError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{arith::*, fpake::build_circuit};
+    use crate::{arith::*, fpake::build_circuit, wires::hash};
 
     fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
         const SECURITY: u64 = 128;
