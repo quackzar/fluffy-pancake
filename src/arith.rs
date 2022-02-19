@@ -13,7 +13,7 @@ use std::io::{Read, Write};
 // -------------------------------------------------------------------------------------------------
 // Circuit Definition
 
-use crate::circuit::*;
+
 
 
 fn write_u8(value: u8, file: &mut File) {

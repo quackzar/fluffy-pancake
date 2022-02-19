@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 use magic_pake::arith::{garble, encode, evaluate};
 use magic_pake::fpake::build_circuit;
