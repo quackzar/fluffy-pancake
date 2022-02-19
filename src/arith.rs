@@ -22,7 +22,7 @@ fn write_u8(value: u8, file: &mut File) {
 fn read_u8(file: &mut File) -> u8 {
     let mut bytes = [0u8; 1];
     file.read(&mut bytes);
-    return bytes[0];
+    bytes[0]
 }
 
 fn write_u64(value: u64, file: &mut File) {
@@ -31,7 +31,7 @@ fn write_u64(value: u64, file: &mut File) {
 fn read_u64(file: &mut File) -> u64 {
     let mut bytes = [0u8; 8];
     file.read(&mut bytes);
-    return u64::from_be_bytes(bytes);
+    u64::from_be_bytes(bytes)
 }
 
 
@@ -75,13 +75,13 @@ impl ArithCircuit {
             input_domains.push(read_u64(file))
         }
 
-        return ArithCircuit {
+        ArithCircuit {
             num_wires,
             num_inputs,
             num_outputs,
             gates,
             input_domains
-        };
+        }
     }
 }
 
@@ -164,12 +164,12 @@ impl ArithGate {
             }
         };
 
-        return ArithGate {
+        ArithGate {
             output,
             domain,
             inputs,
             kind
-        };
+        }
     }
 }
 
@@ -367,11 +367,11 @@ impl ArithWire {
         debug_assert_eq!(values.len(), lambda as usize);
         debug_assert!(values.iter().all(|v| v < &domain), "value not under domain");
 
-        return ArithWire {
+        ArithWire {
             domain,
             lambda,
             values,
-        };
+        }
     }
 
     fn to_bytes(&self) -> Vec<u8> {
@@ -408,7 +408,7 @@ impl ArithWire {
             }
         }
 
-        return bytes;
+        bytes
     }
 
     fn serialize(&self, file: &mut File) {
@@ -427,7 +427,7 @@ impl ArithWire {
             values.push(read_u64(file));
         }
 
-        return ArithWire {
+        ArithWire {
             lambda,
             domain,
             values
@@ -450,7 +450,7 @@ fn deserialize_wires(file: &mut File) -> Vec<ArithWire> {
         wires.push(ArithWire::deserialize(file));
     }
 
-    return wires;
+    wires
 }
 
 
@@ -488,7 +488,7 @@ fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWire {
     // Makes values for the wire of target size from the output of the hash function, recall that
     // the hash function outputs 256 bits, which means that the number of values * the number of
     // bits in a value must be less than or equal to 256.
-    return ArithWire::from_bytes(bytes, target.lambda, target.domain);
+    ArithWire::from_bytes(bytes, target.lambda, target.domain)
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -534,34 +534,34 @@ impl fmt::Display for DecodeError {
 
 type ProjMap = HashMap<usize, Vec<ArithWire>>;
 
-fn projection_identity(value: u64) -> u64 { return value; }
-fn projection_less(value: u64, threshold: u64) -> u64 { return (value < threshold) as u64; }
+fn projection_identity(value: u64) -> u64 { value }
+fn projection_less(value: u64, threshold: u64) -> u64 { (value < threshold) as u64 }
 
 pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut lambda = HashMap::new();
     let mut delta = HashMap::new();
     for gate in &circuit.gates {
-        if !lambda.contains_key(&gate.domain) {
+        if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(gate.domain) {
             let lambda_domain = (security + log2(gate.domain) - 1) / log2(gate.domain);
-            lambda.insert(gate.domain, lambda_domain);
+            e.insert(lambda_domain);
             delta.insert(gate.domain, ArithWire::delta(gate.domain, lambda_domain));
         }
 
         match gate.kind {
             ArithGateKind::Map(target_domain) |
             ArithGateKind::Proj(target_domain, _) => {
-                if !lambda.contains_key(&target_domain) {
+                if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(target_domain) {
                     let lambda_domain = (security + log2(target_domain) - 1) / log2(target_domain);
-                    lambda.insert(target_domain, lambda_domain);
+                    e.insert(lambda_domain);
                     delta.insert(target_domain, ArithWire::delta(target_domain, lambda_domain));
                 }
             },
             ArithGateKind::Less(_) => {
                 let target_domain = 2;
-                if !lambda.contains_key(&target_domain) {
+                if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(target_domain) {
                     let lambda_domain = (security + log2(target_domain) - 1) / log2(target_domain);
-                    lambda.insert(target_domain, lambda_domain);
+                    e.insert(lambda_domain);
                     delta.insert(target_domain, ArithWire::delta(target_domain, lambda_domain));
                 }
             },
@@ -578,7 +578,7 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, D
 
     // 3. Encoding information
     let encode_key = EncodingKey {
-        wires: wires[..circuit.num_inputs].to_vec().clone(),
+        wires: wires[..circuit.num_inputs].to_vec(),
         delta: delta.clone(),
     };
 
@@ -686,7 +686,7 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, D
         offset: outputs_start_at,
     };
 
-    return (f, encode_key, decode_key);
+    (f, encode_key, decode_key)
 }
 
 pub fn evaluate(circuit: &ArithCircuit, f: &ProjMap, x: Vec<ArithWire>) -> Vec<ArithWire> {
@@ -722,7 +722,7 @@ pub fn evaluate(circuit: &ArithCircuit, f: &ProjMap, x: Vec<ArithWire>) -> Vec<A
     }
 
     let wires: Vec<ArithWire> = unsafe { transmute(wires) };
-    return wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec();
+    wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec()
 }
 
 
@@ -740,7 +740,7 @@ pub fn encode(e: &EncodingKey, x: &Vec<u64>) -> Vec<ArithWire> {
         z.push(wire + &(&delta[&wire.domain] * x));
     }
 
-    return z;
+    z
 }
 
 
@@ -765,7 +765,7 @@ pub fn decode(d: &DecodingKey, z: Vec<ArithWire>) -> Result<Vec<u64>, DecodeErro
         }
     }
 
-    return Ok(y);
+    Ok(y)
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -791,7 +791,7 @@ mod tests {
                 kind: ArithGateKind::Add,
                 inputs: vec![0, 1],
                 output: 2,
-                domain: domain,
+                domain,
             }],
             num_inputs: 2,
             num_outputs: 1,
@@ -811,7 +811,7 @@ mod tests {
                 kind: ArithGateKind::Add,
                 inputs: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
                 output: 10,
-                domain: domain,
+                domain,
             }],
             num_inputs: 10,
             num_outputs: 1,
@@ -831,7 +831,7 @@ mod tests {
                 kind: ArithGateKind::Mul(9),
                 inputs: vec![0],
                 output: 1,
-                domain: domain,
+                domain,
             }],
             num_inputs: 1,
             num_outputs: 1,

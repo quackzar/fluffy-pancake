@@ -20,7 +20,7 @@ fn write_u8(value: u8, file: &mut File) {
 fn read_u8(file: &mut File) -> u8 {
     let mut bytes = [0u8; 1];
     file.read(&mut bytes);
-    return bytes[0];
+    bytes[0]
 }
 
 fn write_u64(value: u64, file: &mut File) {
@@ -29,7 +29,7 @@ fn write_u64(value: u64, file: &mut File) {
 fn read_u64(file: &mut File) -> u64 {
     let mut bytes = [0u8; 8];
     file.read(&mut bytes);
-    return u64::from_be_bytes(bytes);
+    u64::from_be_bytes(bytes)
 }
 
 
@@ -73,13 +73,13 @@ impl ArithCircuit {
             input_domains.push(read_u64(file))
         }
 
-        return ArithCircuit {
+        ArithCircuit {
             num_wires,
             num_inputs,
             num_outputs,
             gates,
             input_domains
-        };
+        }
     }
 }
 
@@ -162,11 +162,11 @@ impl ArithGate {
             }
         };
 
-        return ArithGate {
+        ArithGate {
             output,
             domain,
             inputs,
             kind
-        };
+        }
     }
 }
