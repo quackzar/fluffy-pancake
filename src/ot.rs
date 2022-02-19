@@ -14,8 +14,6 @@ use rand_chacha::ChaCha12Rng;
 
 use sha2::{Digest, Sha256};
 
-// TODO: Create protocol for this.
-
 struct ObliviousSender<S> {
     state : S,
     secret: Scalar,
@@ -28,7 +26,6 @@ struct Init;
 struct Receiving {
     public : EdwardsPoint,
 }
-
 
 struct Retrieving {
     public : EdwardsPoint,
@@ -110,13 +107,13 @@ impl ObliviousReceiver<Init> {
     
     fn accept(&self, their_public : EdwardsPoint) -> ObliviousReceiver<Retrieving>{
         let public = if self.choice {
-            &ED25519_BASEPOINT_TABLE * &self.secret
-        } else {
             their_public + (&ED25519_BASEPOINT_TABLE * &self.secret)
+        } else {
+            &ED25519_BASEPOINT_TABLE * &self.secret
         };
         
         let mut hasher = Sha256::new();
-        hasher.update((their_public * &self.secret).to_montgomery().as_bytes());
+        hasher.update((their_public * self.secret).to_montgomery().as_bytes());
         let key = hasher.finalize().to_vec();
         ObliviousReceiver {
             state: Retrieving { public, key },
@@ -136,11 +133,7 @@ impl ObliviousReceiver<Retrieving> {
         let key = Key::from_slice(&self.state.key);
         let cipher = Aes256Gcm::new(key);
         let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
-        let m = if self.choice {
-            cipher.decrypt(nonce, e1.as_ref()).unwrap()
-        } else {
-            cipher.decrypt(nonce, e0.as_ref()).unwrap()
-        };
+        let m = cipher.decrypt(nonce, (if self.choice {e1} else {e0}).as_ref()).unwrap();
         ObliviousReceiver {
             state: Done { m },
             secret: self.secret,
@@ -157,7 +150,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ot_protocol() {
+    fn test_ot_protocol_zero() {
+        let m0 = b"Hello, world!";
+        let m1 = b"Hello, sweden!";
+        let receiver = ObliviousReceiver::new(false);
+        let sender = ObliviousSender::new(m0.to_vec(), m1.to_vec());
+
+        let receiver = receiver.accept(sender.public());
+        let sender = sender.accept(receiver.public());
+
+        let receiver = receiver.receive(sender.state.e0, sender.state.e1);
+
+        assert!(receiver.state.m == m0.to_vec());
+    }
+
+    #[test]
+    fn test_ot_protocol_one() {
         let m0 = b"Hello, world!";
         let m1 = b"Hello, sweden!";
         let receiver = ObliviousReceiver::new(true);
@@ -170,7 +178,6 @@ mod tests {
 
         assert!(receiver.state.m == m1.to_vec());
     }
-
     #[allow(non_snake_case)]
     #[test]
     fn oblivious_transfer() {
@@ -209,7 +216,7 @@ mod tests {
 
         let key = Key::from_slice(&kR);
         let cipher = Aes256Gcm::new(key);
-        let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
+        let nonce = Nonce::from_slice(b"unique nonce");
         let m_c = if c == 0 {
             cipher.decrypt(nonce, e0.as_ref()).unwrap()
         } else {
@@ -239,13 +246,13 @@ mod tests {
         // key encryption test.
         let key = Key::from_slice(&k_A);
         let cipher = Aes256Gcm::new(key);
-        let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
+        let nonce = Nonce::from_slice(b"unique nonce");
         let ciphertext = cipher.encrypt(nonce, b"Hello!".as_ref()).unwrap();
 
         // key decryption test.
         let key = Key::from_slice(&k_B);
         let cipher = Aes256Gcm::new(key);
-        let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
+        let nonce = Nonce::from_slice(b"unique nonce");
         let plaintext = cipher.decrypt(nonce, ciphertext.as_ref()).unwrap();
         let plaintext = std::str::from_utf8(&plaintext).unwrap();
         assert_eq!(plaintext, "Hello!");
