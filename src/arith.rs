@@ -16,6 +16,25 @@ use std::io::{Read, Write};
 use crate::circuit::*;
 
 
+fn write_u8(value: u8, file: &mut File) {
+    file.write(&value.to_be_bytes());
+}
+fn read_u8(file: &mut File) -> u8 {
+    let mut bytes = [0u8; 1];
+    file.read(&mut bytes);
+    return bytes[0];
+}
+
+fn write_u64(value: u64, file: &mut File) {
+    file.write(&value.to_be_bytes());
+}
+fn read_u64(file: &mut File) -> u64 {
+    let mut bytes = [0u8; 8];
+    file.read(&mut bytes);
+    return u64::from_be_bytes(bytes);
+}
+
+
 #[derive(Debug)]
 pub struct ArithCircuit {
     pub num_wires: usize,
@@ -434,24 +453,6 @@ fn deserialize_wires(file: &mut File) -> Vec<ArithWire> {
     return wires;
 }
 
-
-fn write_u8(value: u8, file: &mut File) {
-    file.write(&value.to_be_bytes());
-}
-fn read_u8(file: &mut File) -> u8 {
-    let mut bytes = [0u8; 1];
-    file.read(&mut bytes);
-    return bytes[0];
-}
-
-fn write_u64(value: u64, file: &mut File) {
-    file.write(&value.to_be_bytes());
-}
-fn read_u64(file: &mut File) -> u64 {
-    let mut bytes = [0u8; 8];
-    file.read(&mut bytes);
-    return u64::from_be_bytes(bytes);
-}
 
 // -------------------------------------------------------------------------------------------------
 // PRF/Hash function

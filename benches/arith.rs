@@ -17,7 +17,7 @@ fn bench_eval(c: &mut Criterion) {
     let circuit = build_circuit(BITS, 8);
     let (f, e, _) = garble(&circuit, SECURITY);
     let x = encode(&e, &vec![1; 2*BITS]);
-    c.bench_function("fib 20", |b| b.iter(|| evaluate(&circuit, &f, &x)));
+    c.bench_function("fib 20", |b| b.iter(|| evaluate(&circuit, &f, x.clone())));
 }
 
 criterion_group!(benches, bench_garble, bench_eval);
