@@ -10,9 +10,11 @@ use std::iter;
 use std::mem::{transmute, MaybeUninit};
 use std::fs::File;
 use std::io::{Read, Write};
-
 // -------------------------------------------------------------------------------------------------
 // Circuit Definition
+
+use crate::circuit::*;
+
 
 #[derive(Debug)]
 pub struct ArithCircuit {
