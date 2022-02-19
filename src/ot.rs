@@ -16,152 +16,161 @@ use sha2::{Digest, Sha256};
 
 // TODO: Create protocol for this.
 
-// // First message
-// struct ObliviousInit {
-//     g_a : MontgomeryPoint,
-// }
+struct ObliviousSender<S> {
+    state : S,
+    secret: Scalar,
+    m0: Vec<u8>,
+    m1: Vec<u8>,
+}
 
-// // Second message
-// struct ObliviousRequest {
-//     g_b : MontgomeryPoint,
-// }
+struct Init;
 
-// // Third message
-// struct ObliviousResponse {
-//     e0 : Vec<u8>,
-//     e1 : Vec<u8>,
-// }
-
-// #[derive(Debug)]
-// struct SenderTranscript {
-//     a : Scalar,
-//     g_a : MontgomeryPoint,
-//     m0 : Vec<u8>,
-//     m1 : Vec<u8>,
-// }
+struct Receiving {
+    public : EdwardsPoint,
+}
 
 
-// fn generate_point() -> Scalar {
-//     let mut rng = ChaCha12Rng::from_entropy();
-//     Scalar::random(&mut rng) // INFO: Maybe use edwards or ristretto?
-// }
+struct Retrieving {
+    public : EdwardsPoint,
+    key: Vec<u8>,
+}
 
-// impl SenderTranscript {
-//     pub fn new(m0 : Vec<u8>, m1 : Vec<u8>) -> SenderTranscript {
-//         let g = &RISTRETTO_BASEPOINT_TABLE;
-//         let a = generate_point();
-//         let g_a = g * &a;
-//         SenderTranscript {
-//             a, g_a, m0, m1,
-//         }
-//     }
+struct Complete {
+    e0 : Vec<u8>,
+    e1 : Vec<u8>,
+}
 
-//     pub fn init(&self) -> ObliviousInit {
-//         let g_a = self.g_a;
-//         ObliviousInit { g_a }
-//     }
+struct Done { m : Vec<u8> }
 
-//     pub fn retrieve(&self, ObliviousRequest { g_b }: ObliviousRequest) -> ObliviousResponse  {
-//         let a = self.a;
-//         let g_a = self.g_a;
-//         let g = &RISTRETTO_BASEPOINT_TABLE;
-//         let mut hasher = Sha256::new();
-//         let g_ba = g_b * a;
-//         hasher.update(g_ba);
-//         let k0 = hasher.finalize();
-//         let mut hasher = Sha256::new();
-//         let g_ba = (g_b - g_a) * a;
-//         hasher.update(g_ba);
-//         let k1 = hasher.finalize();
+struct ObliviousReceiver<S> {
+    state : S,
+    secret: Scalar,
+    choice: bool,
+}
 
-//         // Encryption part
-//         let m0 = &self.m0;
-//         let m1 = &self.m1;
+impl ObliviousSender<Receiving> {
+    fn new(m0 : Vec<u8>, m1: Vec<u8> ) -> Self {
+        // FUTURE: Take randomness as input.
+        let mut rng = ChaCha12Rng::from_entropy();
+        let secret = Scalar::random(&mut rng);
+        let public = &ED25519_BASEPOINT_TABLE * &secret;
+        Self {
+            state: Receiving { public },
+            secret,
+            m0,
+            m1,
+        }
+    }
 
-//         let cipher = Aes256Gcm::new(Key::from_slice(&k0));
-//         let nonce = Nonce::from_slice(b"unique nonce");
-//         let e0 = cipher.encrypt(nonce, m0.as_slice()).unwrap();
-//         let cipher = Aes256Gcm::new(Key::from_slice(&k1));
-//         let nonce = Nonce::from_slice(b"unique nonce");
-//         let e1 = cipher.encrypt(nonce, m1.as_slice()).unwrap();
-//         ObliviousResponse{e0, e1}
-//     }
-// }
+    fn public(&self) -> EdwardsPoint {
+        self.state.public
+    }
 
 
-// #[derive(Debug)]
-// struct ReceiverTranscript {
-//     b : Scalar,
-//     g_b : MontgomeryPoint,
-//     g_a : MontgomeryPoint,
-//     c : bool,
-// }
+    fn accept(&self, their_public : EdwardsPoint) -> ObliviousSender<Complete> {
+        let secret = self.secret;
+        let public = self.state.public;
+        let m0 = &self.m0;
+        let m1 = &self.m1;
 
-// impl ReceiverTranscript {
-//     pub fn new(c : bool) -> ReceiverTranscript {
-//         let g = &RISTRETTO_BASEPOINT_TABLE;
-//         let b = generate_point();
-//         let g_a = MontgomeryPoint::default();
-//         let g_b = MontgomeryPoint::default();
-//         ReceiverTranscript {
-//             b, g_b, g_a, c,
-//         }
-//     }
+        let mut hasher = Sha256::new();
+        hasher.update((their_public * secret).to_montgomery().as_bytes());
+        let k0 = hasher.finalize();
+        let mut hasher = Sha256::new();
+        hasher.update(((their_public - public) * secret).to_montgomery().as_bytes());
+        let k1 = hasher.finalize();
 
-//     pub fn request(&mut self, ObliviousInit { g_a }: ObliviousInit) -> ObliviousRequest {
-//         let c = self.c;
-//         let b = &self.b;
-//         let g = &ED25519_BASEPOINT_TABLE;
+        let cipher = Aes256Gcm::new(Key::from_slice(&k0));
+        let nonce = Nonce::from_slice(b"unique nonce");
+        let e0 = cipher.encrypt(nonce, m0.as_slice()).unwrap().to_vec();
+        let cipher = Aes256Gcm::new(Key::from_slice(&k1));
+        let nonce = Nonce::from_slice(b"unique nonce");
+        let e1 = cipher.encrypt(nonce, m1.as_slice()).unwrap().to_vec();
 
-//         let g_b = if c {
-//             g * b
-//         } else {
-//             g_a + (g * b)
-//         };
-//         self.g_b = g_b;
-//         self.g_a = g_a;
-//         ObliviousRequest { g_b }
-//     }
+        ObliviousSender {
+            state: Complete{ e0, e1 },
+            secret,
+            m0: m0.clone(),
+            m1: m1.clone(),
+        }
+    }
+}
 
-//     pub fn receive(&self, ObliviousResponse { e0, e1 }: ObliviousResponse) -> Vec<u8> {
-//         let b = self.b;
-//         let g_a = self.g_b;
+impl ObliviousReceiver<Init> {
+    fn new(choice : bool) -> Self {
+        // FUTURE: Take randomness as input.
+        let mut rng = ChaCha12Rng::from_entropy();
+        let secret = Scalar::random(&mut rng);
+        Self {
+            state: Init,
+            secret,
+            choice,
+        }
+    }
+    
+    fn accept(&self, their_public : EdwardsPoint) -> ObliviousReceiver<Retrieving>{
+        let public = if self.choice {
+            &ED25519_BASEPOINT_TABLE * &self.secret
+        } else {
+            their_public + (&ED25519_BASEPOINT_TABLE * &self.secret)
+        };
+        
+        let mut hasher = Sha256::new();
+        hasher.update((their_public * &self.secret).to_montgomery().as_bytes());
+        let key = hasher.finalize().to_vec();
+        ObliviousReceiver {
+            state: Retrieving { public, key },
+            secret: self.secret,
+            choice: self.choice,
+        }
+    }
+}
 
-//         // Decryption part
-//         let mut hasher = Sha256::new();
-//         hasher.update(g_a * b);
-//         let k_r = hasher.finalize();
+impl ObliviousReceiver<Retrieving> {
 
-//         let e = if self.c {e1} else {e0};
-//         let cipher = Aes256Gcm::new(Key::from_slice(&k_r));
-//         let nonce = Nonce::from_slice(b"unique nonce");
-//         println!("{:?}", self);
-//         let m = cipher.decrypt(nonce, e.as_ref()).unwrap(); // TODO: Proper error handling.
-//         m
-//     }
+    fn public(&self) -> EdwardsPoint {
+        self.state.public
+    }
 
-// }
+    fn receive(&self, e0 : Vec<u8>, e1 : Vec<u8>) -> ObliviousReceiver<Done> {
+        let key = Key::from_slice(&self.state.key);
+        let cipher = Aes256Gcm::new(key);
+        let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
+        let m = if self.choice {
+            cipher.decrypt(nonce, e1.as_ref()).unwrap()
+        } else {
+            cipher.decrypt(nonce, e0.as_ref()).unwrap()
+        };
+        ObliviousReceiver {
+            state: Done { m },
+            secret: self.secret,
+            choice: self.choice,
+        }
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
 
-    // #[allow(non_snake_case)]
-    // #[test]
-    // fn ot_api_test() {
-    //     let m0 = b"Hello World!";
-    //     let m1 = b"Hello Friend!";
-    //     let c = false;
-    //     let sender = SenderTranscript::new(m0.to_vec(), m1.to_vec());
-    //     let mut receiver = ReceiverTranscript::new(c);
-    //     let A = sender.init();
-    //     let B = receiver.request(A);
-    //     let e0e1 = sender.retrieve(B);
-    //     let m = receiver.receive(e0e1);
-    //     assert_eq!(m, m0);
-    // }
-    
+    #[test]
+    fn test_ot_protocol() {
+        let m0 = b"Hello, world!";
+        let m1 = b"Hello, sweden!";
+        let receiver = ObliviousReceiver::new(true);
+        let sender = ObliviousSender::new(m0.to_vec(), m1.to_vec());
+
+        let receiver = receiver.accept(sender.public());
+        let sender = sender.accept(receiver.public());
+
+        let receiver = receiver.receive(sender.state.e0, sender.state.e1);
+
+        assert!(receiver.state.m == m1.to_vec());
+    }
+
     #[allow(non_snake_case)]
     #[test]
     fn oblivious_transfer() {
