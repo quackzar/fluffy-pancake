@@ -17,6 +17,7 @@ curve25519-dalek = "4.0.0-pre.1"
 aes-gcm = "0.9.4"
 rand_chacha = "0.3.1"
 sha2 = "0.10.1"
+bytemuck = "1.7.3"
 
 [dev-dependencies]
 criterion = "0.3"

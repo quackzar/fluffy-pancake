@@ -198,7 +198,7 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, D
         if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(gate.domain) {
             let lambda_domain = (security + log2(gate.domain) - 1) / log2(gate.domain);
             e.insert(lambda_domain);
-            delta.insert(gate.domain, ArithWire::delta(gate.domain, lambda_domain));
+            delta.insert(gate.domain, ArithWire::delta(gate.domain));
         }
 
         match gate.kind {
@@ -207,7 +207,7 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, D
                 if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(target_domain) {
                     let lambda_domain = (security + log2(target_domain) - 1) / log2(target_domain);
                     e.insert(lambda_domain);
-                    delta.insert(target_domain, ArithWire::delta(target_domain, lambda_domain));
+                    delta.insert(target_domain, ArithWire::delta(target_domain));
                 }
             },
             ArithGateKind::Less(_) => {
@@ -215,7 +215,7 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, D
                 if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(target_domain) {
                     let lambda_domain = (security + log2(target_domain) - 1) / log2(target_domain);
                     e.insert(lambda_domain);
-                    delta.insert(target_domain, ArithWire::delta(target_domain, lambda_domain));
+                    delta.insert(target_domain, ArithWire::delta(target_domain));
                 }
             },
             _ =>  {}
@@ -226,7 +226,7 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, D
     let mut wires = Vec::with_capacity(circuit.num_wires);
     for input in 0..circuit.num_inputs {
         let domain = circuit.input_domains[input];
-        wires.push(ArithWire::new(domain, lambda[&domain]));
+        wires.push(ArithWire::new(domain));
     }
 
     // 3. Encoding information
