@@ -18,6 +18,7 @@ aes-gcm = "0.9.4"
 rand_chacha = "0.3.1"
 sha2 = "0.10.1"
 bytemuck = "1.7.3"
+num-traits = "0.2.14"
 
 [dev-dependencies]
 criterion = "0.3"

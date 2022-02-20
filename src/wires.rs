@@ -6,14 +6,16 @@ use sha2::{Sha256, Digest};
 use crate::util::*;
 
 
-const SECURITY_PARAM : usize = 256; // bits used total
-const WIRE_LENGTH: usize = SECURITY_PARAM / 8; // bytes used
+type Domain = u16;
 
-// TODO: Improve internal representation and implement from/into.
+const SECURITY_PARAM : usize = 256; // bits used total
+const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
+
+// Maybe use domain as const generic?
 #[derive(Debug, Clone)]
 pub struct ArithWire {
-    pub domain: u64,
-    values: [u8; WIRE_LENGTH],
+    pub domain: u16,
+    values: [u8; LENGTH],
 }
 
 impl ops::Add<&ArithWire> for &ArithWire {
@@ -37,11 +39,11 @@ impl ops::Neg for &ArithWire {
     }
 }
 
-impl ops::Mul<u64> for &ArithWire {
+impl ops::Mul<u16> for &ArithWire {
     type Output = ArithWire;
     #[inline]
-    fn mul(self, rhs: u64) -> ArithWire {
-        self.map(|x| (x * rhs) % self.domain )
+    fn mul(self, rhs: u16) -> ArithWire {
+        self.map(|x| (((x as u32) * (rhs as u32)) % (self.domain as u32)) as u16)
     }
 }
 
@@ -56,16 +58,16 @@ impl ArithWire {
     pub(crate) fn empty() -> ArithWire {
         ArithWire {
             domain: 0,
-            values: [0; WIRE_LENGTH],
+            values: [0; LENGTH],
         }
     }
 
     fn map<F>(&self, op : F) -> ArithWire where
-        F: Fn(u64) -> u64 {
+        F: Fn(u16) -> u16 {
         let domain = self.domain;
         // TODO: change size based on domain
-        let input : [u64; WIRE_LENGTH / 8] = bytemuck::cast(self.values);
-        let mut output = [0u64; WIRE_LENGTH / 8];
+        let input : [u16; LENGTH / 2] = bytemuck::cast(self.values);
+        let mut output = [0u16; LENGTH / 2];
         for i in 0..output.len() {
             output[i] = op(input[i]);
         }
@@ -79,11 +81,12 @@ impl ArithWire {
     }
 
     fn map_with<F>(&self, other : &ArithWire, op : F) -> ArithWire where
-        F: Fn(u64, u64) -> u64 {
+        F: Fn(u16, u16) -> u16 {
         debug_assert_eq!(self.domain, other.domain, "Domain not matching");
-        let l1 : [u64; WIRE_LENGTH / 8] = bytemuck::cast(self.values);
-        let l2 : [u64; WIRE_LENGTH / 8] = bytemuck::cast(other.values);
-        let mut output = [0u64; WIRE_LENGTH / 8];
+        let l1 : [u16; LENGTH / 2] = bytemuck::cast(self.values);
+        let l2 : [u16; LENGTH / 2] = bytemuck::cast(other.values);
+        
+        let mut output = [0u16; LENGTH / 2];
         for i in 0..output.len() {
             output[i] = op(l1[i], l2[i]);
         }
@@ -97,9 +100,9 @@ impl ArithWire {
     }
 
 
-    pub(crate) fn new(domain: u64) -> ArithWire {
-        let mut values = [0u64; WIRE_LENGTH / 8];
-        for i in 0..(WIRE_LENGTH/8) {
+    pub(crate) fn new(domain: u16) -> ArithWire {
+        let mut values = [0u16; LENGTH / 2];
+        for i in 0..(LENGTH/8) {
             values[i] = rng(domain);
         }
         debug_assert!(values.iter().all(|&x| x < domain));
@@ -110,12 +113,12 @@ impl ArithWire {
         }
     }
 
-    pub(crate) fn delta(domain: u64) -> ArithWire {
-        let mut values = [0u64; WIRE_LENGTH / 8];
-        for i in 0..(WIRE_LENGTH/8) {
+    pub(crate) fn delta(domain: u16) -> ArithWire {
+        let mut values = [0u16; LENGTH / 2];
+        for i in 0..(LENGTH/8) {
             values[i] = rng(domain);
         }
-        values[WIRE_LENGTH/8 - 1] = 1;
+        values[LENGTH/2 - 1] = 1;
         debug_assert!(values.iter().all(|&x| x < domain));
         let values = bytemuck::cast(values);
         ArithWire {
@@ -125,8 +128,8 @@ impl ArithWire {
     }
 
     #[inline]
-    pub(crate) fn tau(&self) -> u64 {
-        bytemuck::cast::<[u8; WIRE_LENGTH], [u64; WIRE_LENGTH/8]>(self.values)[WIRE_LENGTH/8 - 1]
+    pub(crate) fn tau(&self) -> u16 {
+        bytemuck::cast::<[u8; LENGTH], [u16; LENGTH/2]>(self.values)[LENGTH/2 - 1]
     }
 
 }
@@ -136,7 +139,7 @@ pub fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWir
     hasher.update(index.to_be_bytes());
     hasher.update(wire.values);
     let digest = hasher.finalize(); // TODO: use variable size hashing
-    let bytes = <[u8; WIRE_LENGTH]>::try_from(digest.as_ref()).expect("digest too long");
+    let bytes = <[u8; LENGTH]>::try_from(digest.as_ref()).expect("digest too long");
     
     // Makes values for the wire of target size from the output of the hash function, recall that
     // the hash function outputs 256 bits, which means that the number of values * the number of
@@ -150,13 +153,23 @@ pub fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWir
 
 
 
-pub fn hash(index: u64, x: u64, wire: &ArithWire) -> u64 {
+pub type Bytes = [u8; LENGTH];
+
+pub fn hash(index: usize, x: u16, wire: &ArithWire) -> Bytes {
     let mut hasher = Sha256::new();
     hasher.update(index.to_be_bytes());
     hasher.update(x.to_be_bytes());
     hasher.update(wire.values);
     let digest = hasher.finalize();
-    let bytes = <[u8; WIRE_LENGTH]>::try_from(digest.as_ref()).expect("digest too long");
+    let bytes = <[u8; LENGTH]>::try_from(digest.as_ref()).expect("digest too long");
 
-    u64::from_be_bytes(bytes[..8].try_into().unwrap())
+    bytes
+}
+
+pub fn xor(a : Bytes, b : Bytes) -> Bytes {
+    let mut result = [0u8; LENGTH];
+    for i in 0..LENGTH {
+        result[i] = a[i] ^ b[i];
+    }
+    result
 }

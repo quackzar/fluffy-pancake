@@ -1,10 +1,12 @@
 use itertools::Itertools;
 
 use crate::arith::*;
+use crate::circuit::*;
+use crate::wires::{hash, xor};
 
 pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     let mut gates: Vec<ArithGate> = Vec::new();
-    let comparison_domain = bitsize as u64 / 2 + 1;
+    let comparison_domain = bitsize as u16 / 2 + 1;
     let bitdomain = 2;
 
     // xor gates
@@ -34,7 +36,7 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
         kind: ArithGateKind::Add,
         inputs: (3 * bitsize..4 * bitsize).collect(),
         output: 4 * bitsize,
-        domain: bitsize as u64,
+        domain: bitsize as u16,
     };
     gates.push(gate);
 
@@ -105,11 +107,10 @@ fn verify_circuit(circuit: &ArithCircuit) -> Result<(), CircuitError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{arith::*, fpake::build_circuit, wires::hash};
+    use super::*;
 
-    fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
-        const SECURITY: u64 = 128;
-        let (f, e, d) = garble(c, SECURITY);
+    fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u16>) -> Vec<u16> {
+        let (f, e, d) = garble(c);
         let x = encode(&e, x);
         let z = evaluate(c, &f, x);
         decode(&d, z).unwrap()
@@ -137,30 +138,30 @@ mod tests {
         let (out_b, one_a) = {
             // Round 1
             let circuit = build_circuit(4, 1);
-            let (f, e, d) = garble(&circuit, SECURITY);
+            let (f, e, d) = garble(&circuit);
             let mut input = Vec::new();
             input.extend(&pwsd_a); // Provided by OT
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
             let out = evaluate(&circuit, &f, garbled_input)[0].clone();
-            (hash((circuit.num_wires - 1) as u64, 1, &out), d.hashes[0][1])
+            (hash(circuit.num_wires - 1, 1, &out), d.hashes[0][1])
         };
 
         // Bob's garbled circuit and Alice's eval
         let (out_a, one_b) = {
             // Round 2
             let circuit = build_circuit(4, 1);
-            let (f, e, d) = garble(&circuit, SECURITY);
+            let (f, e, d) = garble(&circuit);
             let mut input = Vec::new();
             input.extend(&pwsd_a); // Provided by OT
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
             let out = evaluate(&circuit, &f, garbled_input)[0].clone();
-            (hash((circuit.num_wires - 1) as u64, 1, &out), d.hashes[0][1])
+            (hash(circuit.num_wires - 1, 1, &out), d.hashes[0][1])
 
         };
-        let key_a = out_a ^ one_a;
-        let key_b = out_b ^ one_b;
+        let key_a = xor(out_a, one_a);
+        let key_b = xor(out_b, one_b);
         assert_eq!(key_a, key_b)
     }
 }

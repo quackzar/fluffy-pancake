@@ -2,172 +2,24 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::mem::{transmute, MaybeUninit};
-use std::fs::File;
+use crate::circuit::*;
 
 use crate::wires::ArithWire;
 use crate::wires::hash;
 use crate::wires::hash_wire;
-
-use crate::util::*;
-// -------------------------------------------------------------------------------------------------
-// Circuit Definition
-
-
-#[derive(Debug)]
-pub struct ArithCircuit {
-    pub num_wires: usize,
-    pub num_inputs: usize,
-    pub num_outputs: usize,
-    pub(crate) gates: Vec<ArithGate>,
-    pub input_domains: Vec<u64>,
-}
-
-impl ArithCircuit {
-    fn serialize(&self, file: &mut File) {
-        write_u64(self.num_wires as u64, file);
-        write_u64(self.num_inputs as u64, file);
-        write_u64(self.num_outputs as u64, file);
-
-        write_u64(self.gates.len() as u64, file);
-        for gate in &self.gates {
-            gate.serialize(file);
-        }
-
-        for domain in &self.input_domains {
-            write_u64(*domain, file);
-        }
-    }
-    fn deserialize(file: &mut File) -> ArithCircuit {
-        let num_wires = read_u64(file) as usize;
-        let num_inputs = read_u64(file) as usize;
-        let num_outputs = read_u64(file) as usize;
-
-        let num_gates = read_u64(file) as usize;
-        let mut gates = Vec::with_capacity(num_gates);
-        for _ in 0..num_gates {
-            gates.push(ArithGate::deserialize(file));
-        }
-
-        let mut input_domains = Vec::with_capacity(num_inputs);
-        for _ in 0..num_inputs {
-            input_domains.push(read_u64(file))
-        }
-
-        ArithCircuit {
-            num_wires,
-            num_inputs,
-            num_outputs,
-            gates,
-            input_domains
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum ArithGateKind {
-    Add,
-    Mul(u64),
-    Proj(u64, fn(u64) -> u64),
-
-    // Special cases of the projection gate
-    Map(u64),
-    Less(u64),
-}
-
-#[derive(Debug)]
-pub(crate) struct ArithGate {
-    pub output: usize,
-    pub domain: u64,
-    pub inputs: Vec<usize>,
-    pub kind: ArithGateKind,
-}
-
-const GATE_ADD:  u8 = 0x00;
-const GATE_MUL:  u8 = 0x01;
-const GATE_MAP:  u8 = 0x02;
-const GATE_LESS: u8 = 0x03;
-
-impl ArithGate {
-    fn serialize(&self, file: &mut File) {
-        write_u64(self.output as u64, file);
-        write_u64(self.domain, file);
-        // TODO(frm): We could probably do with a u16 or u24!
-        write_u64(self.inputs.len() as u64, file);
-        for input in &self.inputs {
-            write_u64(*input as u64, file);
-        }
-
-        match self.kind {
-            ArithGateKind::Add => {
-                write_u8(GATE_ADD, file);
-            },
-            ArithGateKind::Mul(c) => {
-                write_u8(GATE_ADD, file);
-                write_u64(c, file);
-            },
-            ArithGateKind::Map(range) => {
-                write_u8(GATE_MAP, file);
-                write_u64(range, file);
-            },
-            ArithGateKind::Less(threshold) => {
-                write_u8(GATE_LESS, file);
-                write_u64(threshold, file);
-            },
-
-            ArithGateKind::Proj(_, _) => {
-                debug_assert!(false, "Cannot serialize gate of this type!");
-            }
-        };
-    }
-    fn deserialize(file: &mut File) -> ArithGate {
-        let output = read_u64(file) as usize;
-        let domain = read_u64(file);
-
-        let input_count = read_u64(file);
-        let mut inputs = Vec::with_capacity(input_count as usize);
-        for _ in 0..input_count {
-            inputs.push(read_u64(file) as usize);
-        }
-
-        let gate_kind = read_u8(file);
-        let kind = match gate_kind {
-            GATE_ADD  => { ArithGateKind::Add },
-            GATE_MUL  => { ArithGateKind::Mul(read_u64(file)) },
-            GATE_MAP  => { ArithGateKind::Map(read_u64(file)) },
-            GATE_LESS => { ArithGateKind::Less(read_u64(file)) },
-
-            _ => {
-                debug_assert!(false, "Unsupported gate kind identifier!");
-                ArithGateKind::Add
-            }
-        };
-
-        ArithGate {
-            output,
-            domain,
-            inputs,
-            kind
-        }
-    }
-}
-
-
-// -------------------------------------------------------------------------------------------------
-// PRF/Hash function
-
+use crate::wires::Bytes;
 
 // -------------------------------------------------------------------------------------------------
 // Helpers / Definitions
 
 
-
 pub struct EncodingKey {
     wires: Vec<ArithWire>,
-    delta: HashMap<u64, ArithWire>,
+    delta: HashMap<u16, ArithWire>,
 }
 
 pub struct DecodingKey {
-    pub(crate) hashes: Vec<Vec<u64>>,
+    pub(crate) hashes: Vec<Vec<Bytes>>,
     pub(crate) offset: usize,
 }
 
@@ -187,34 +39,27 @@ impl fmt::Display for DecodeError {
 
 type ProjMap = HashMap<usize, Vec<ArithWire>>;
 
-fn projection_identity(value: u64) -> u64 { value }
-fn projection_less(value: u64, threshold: u64) -> u64 { (value < threshold) as u64 }
+fn projection_identity(value: u16) -> u16 { value }
+fn projection_less(value: u16, threshold: u16) -> u16 { (value < threshold) as u16 }
 
-pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, DecodingKey) {
+pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
-    let mut lambda = HashMap::new();
     let mut delta = HashMap::new();
     for gate in &circuit.gates {
-        if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(gate.domain) {
-            let lambda_domain = (security + log2(gate.domain) - 1) / log2(gate.domain);
-            e.insert(lambda_domain);
+        if !delta.contains_key(&gate.domain) {
             delta.insert(gate.domain, ArithWire::delta(gate.domain));
         }
 
         match gate.kind {
             ArithGateKind::Map(target_domain) |
             ArithGateKind::Proj(target_domain, _) => {
-                if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(target_domain) {
-                    let lambda_domain = (security + log2(target_domain) - 1) / log2(target_domain);
-                    e.insert(lambda_domain);
+                if !delta.contains_key(&target_domain) {
                     delta.insert(target_domain, ArithWire::delta(target_domain));
                 }
             },
             ArithGateKind::Less(_) => {
                 let target_domain = 2;
-                if let std::collections::hash_map::Entry::Vacant(e) = lambda.entry(target_domain) {
-                    let lambda_domain = (security + log2(target_domain) - 1) / log2(target_domain);
-                    e.insert(lambda_domain);
+                if !delta.contains_key(&target_domain) {
                     delta.insert(target_domain, ArithWire::delta(target_domain));
                 }
             },
@@ -324,9 +169,9 @@ pub fn garble(circuit: &ArithCircuit, security: u64) -> (ProjMap, EncodingKey, D
                 ArithGateKind::Less(_) => 2,
             };
 
-            let mut values = vec![0; output_domain as usize];
+            let mut values = vec![[0u8; 32]; output_domain as usize];
             for x in 0..output_domain {
-                let hash = hash(gate.output as u64, x as u64, &(&wires[gate.output] + &(&delta[&output_domain] * x)));
+                let hash = hash(gate.output, x, &(&wires[gate.output] + &(&delta[&output_domain] * x)));
                 values[x as usize] = hash;
             }
 
@@ -379,7 +224,7 @@ pub fn evaluate(circuit: &ArithCircuit, f: &ProjMap, x: Vec<ArithWire>) -> Vec<A
 }
 
 
-pub fn encode(e: &EncodingKey, x: &Vec<u64>) -> Vec<ArithWire> {
+pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<ArithWire> {
     let wires = &e.wires;
     let delta = &e.delta;
     debug_assert_eq!(
@@ -397,7 +242,7 @@ pub fn encode(e: &EncodingKey, x: &Vec<u64>) -> Vec<ArithWire> {
 }
 
 
-pub fn decode(d: &DecodingKey, z: Vec<ArithWire>) -> Result<Vec<u64>, DecodeError> {
+pub fn decode(d: &DecodingKey, z: Vec<ArithWire>) -> Result<Vec<u16>, DecodeError> {
     let mut y = vec![0; d.hashes.len()];
     for i in 0..z.len() {
         let output = d.offset + i;
@@ -405,7 +250,7 @@ pub fn decode(d: &DecodingKey, z: Vec<ArithWire>) -> Result<Vec<u64>, DecodeErro
 
         let mut success = false;
         for k in 0..z[i].domain {
-            let hash = hash(output as u64, k, &z[i]);
+            let hash = hash(output, k, &z[i]);
             if hash == hashes[k as usize] {
                 y[i as usize] = k;
                 success = true;
@@ -428,9 +273,8 @@ pub fn decode(d: &DecodingKey, z: Vec<ArithWire>) -> Result<Vec<u64>, DecodeErro
 mod tests {
     use super::*;
 
-    fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u64>) -> Vec<u64> {
-        const SECURITY: u64 = 128;
-        let (f, e, d) = garble(c, SECURITY);
+    fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u16>) -> Vec<u16> {
+        let (f, e, d) = garble(c);
         let x = encode(&e, x);
         let z = evaluate(c, &f, x);
         decode(&d, z).unwrap()
@@ -564,8 +408,8 @@ mod tests {
     fn make_me_the_threshold() -> ArithCircuit {
         // 8 inputs, 4 "comparators"
         const INPUT_COUNT: usize = 8;
-        const BIT_DOMAIN: u64 = 2;
-        const COMAPRISON_DOMAIN: u64 = 8;
+        const BIT_DOMAIN: u16 = 2;
+        const COMAPRISON_DOMAIN: u16 = 8;
 
         let threshold = 2;
         ArithCircuit {
