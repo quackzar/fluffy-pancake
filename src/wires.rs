@@ -134,10 +134,12 @@ impl ArithWire {
         bytemuck::cast::<[u8; LENGTH], [u16; LENGTH/2]>(self.values)[LENGTH/2 - 1]
     }
 
-    pub fn as_bytes(&self) -> [u8; LENGTH] {
-        self.values
-    }
+}
 
+impl AsRef<[u8]> for &ArithWire {
+    fn as_ref(&self) -> &[u8] {
+        &self.values
+    }
 }
 
 pub fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWire {
@@ -162,20 +164,5 @@ pub fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWir
 pub type Bytes = [u8; LENGTH];
 
 pub fn hash(index: usize, x: u16, wire: &ArithWire) -> Bytes {
-    let mut hasher = Sha256::new();
-    hasher.update(index.to_be_bytes());
-    hasher.update(x.to_be_bytes());
-    hasher.update(wire.values);
-    let digest = hasher.finalize();
-    let bytes = <[u8; LENGTH]>::try_from(digest.as_ref()).expect("digest too long");
-
-    bytes
-}
-
-pub fn xor(a : Bytes, b : Bytes) -> Bytes {
-    let mut result = [0u8; LENGTH];
-    for i in 0..LENGTH {
-        result[i] = a[i] ^ b[i];
-    }
-    result
+    hash!(index.to_be_bytes(), x.to_be_bytes(), wire)
 }

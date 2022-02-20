@@ -46,22 +46,16 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut delta = HashMap::new();
     for gate in &circuit.gates {
-        if !delta.contains_key(&gate.domain) {
-            delta.insert(gate.domain, ArithWire::delta(gate.domain));
-        }
+        delta.entry(gate.domain).or_insert_with(|| ArithWire::delta(gate.domain));
 
         match gate.kind {
             ArithGateKind::Map(target_domain) |
             ArithGateKind::Proj(target_domain, _) => {
-                if !delta.contains_key(&target_domain) {
-                    delta.insert(target_domain, ArithWire::delta(target_domain));
-                }
+                delta.entry(target_domain).or_insert_with(|| ArithWire::delta(target_domain));
             },
             ArithGateKind::Less(_) => {
                 let target_domain = 2;
-                if !delta.contains_key(&target_domain) {
-                    delta.insert(target_domain, ArithWire::delta(target_domain));
-                }
+                delta.entry(target_domain).or_insert_with(|| ArithWire::delta(target_domain));
             },
             _ =>  {}
         }

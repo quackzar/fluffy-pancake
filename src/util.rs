@@ -1,35 +1,10 @@
-use std::io::{Read, Write};
 use num_traits::PrimInt;
 use rand::Rng;
-use std::fs::File;
-use sha2::{Sha256, Digest};
 
 #[inline]
 pub fn rng(max: u16) -> u16 {
     rand::thread_rng().gen_range(0..max)
 }
-
-
-pub fn write_u8(value: u8, file: &mut File) {
-    file.write(&value.to_be_bytes());
-}
-
-pub fn read_u8(file: &mut File) -> u8 {
-    let mut bytes = [0u8; 1];
-    file.read(&mut bytes);
-    bytes[0]
-}
-
-pub fn write_u64(value: u64, file: &mut File) {
-    file.write(&value.to_be_bytes());
-}
-
-pub fn read_u64(file: &mut File) -> u64 {
-    let mut bytes = [0u8; 8];
-    file.read(&mut bytes);
-    u64::from_be_bytes(bytes)
-}
-
 
 #[inline]
 pub fn log2<N : PrimInt>(x: N) -> u32 {
@@ -37,29 +12,29 @@ pub fn log2<N : PrimInt>(x: N) -> u32 {
 }
 
 
+const SECURITY_PARAM : usize = 256; // bits used total
+const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
+
+pub type Bytes = [u8; LENGTH];
 
 /// Variadic Hashing
 /// Hashing based on Sha256 producing a 32 byte hash
 /// Arguments are hashed in order.
 #[macro_export]
 macro_rules! hash {
-    ($e:expr) => {{
-        let mut hasher = Sha256::new();
-        hasher.update($e);
-        hasher.finalize()
-    }};
     // Decompose
-    ($e:expr, $($ls:expr),*) => {{
+    ($($ls:expr),+) => {{
+        use sha2::{Sha256, Digest};
         let mut hasher = Sha256::new();
-        hasher.update($e);
-        hash!(@next hasher, $($ls),*);
-        hasher.finalize()
+        hash!(@next hasher, $($ls),+);
+        let digest = hasher.finalize();
+        <[u8; 256/8]>::try_from(digest.as_ref()).expect("digest too long")
     }};
 
     // Recursive update
-    (@next $hasher:expr, $e:expr, $ls:tt) => {{
+    (@next $hasher:expr, $e:expr, $($ls:expr),+) => {{
         $hasher.update($e);
-        hash!(@next $hasher, $e);
+        hash!(@next $hasher, $($ls),+)
     }};
 
     // Last
@@ -67,9 +42,22 @@ macro_rules! hash {
         $hasher.update($e);
     }};
 }
+pub(crate) use hash;
+
+
+pub fn xor(a : Bytes, b : Bytes) -> Bytes {
+    let mut result = [0u8; LENGTH];
+    for i in 0..LENGTH {
+        result[i] = a[i] ^ b[i];
+    }
+    result
+}
+
 
 #[cfg(test)]
 mod tests {
+    use sha2::{Sha256, Digest};
+
     use super::*;
 
     #[test]
@@ -79,6 +67,7 @@ mod tests {
         hasher.update("hello");
         hasher.update("world");
         let h2 = hasher.finalize();
+        let h2 = <[u8; LENGTH]>::try_from(h2.as_ref()).expect("digest too long");
         assert_eq!(h1, h2);
     }
 

@@ -1,8 +1,9 @@
 use itertools::Itertools;
 
-use crate::arith::*;
+use crate::util::*;
 use crate::circuit::*;
-use crate::wires::{hash, xor};
+use crate::arith::*;
+
 
 pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     let mut gates: Vec<ArithGate> = Vec::new();
@@ -130,7 +131,6 @@ mod tests {
 
     #[test]
     fn fpake() {
-        const SECURITY: u64 = 256;
         let pwsd_a = vec![1, 1, 1, 1];
         let pwsd_b = vec![1, 1, 1, 0];
 
@@ -144,8 +144,7 @@ mod tests {
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
             let out = evaluate(&circuit, &f, garbled_input)[0].clone();
-            (hash(circuit.num_wires - 1, 1, &out), d.hashes[0][1])
-        };
+            (hash!((circuit.num_wires - 1).to_be_bytes(), 1u16.to_be_bytes(), &out), d.hashes[0][1]) };
 
         // Bob's garbled circuit and Alice's eval
         let (out_a, one_b) = {
@@ -157,7 +156,7 @@ mod tests {
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
             let out = evaluate(&circuit, &f, garbled_input)[0].clone();
-            (hash(circuit.num_wires - 1, 1, &out), d.hashes[0][1])
+            (hash!((circuit.num_wires - 1).to_be_bytes(), 1u16.to_be_bytes(), &out), d.hashes[0][1])
 
         };
         let key_a = xor(out_a, one_a);
