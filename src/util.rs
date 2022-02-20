@@ -2,7 +2,9 @@ use std::io::{Read, Write};
 use num_traits::PrimInt;
 use rand::Rng;
 use std::fs::File;
+use sha2::{Sha256, Digest};
 
+#[inline]
 pub fn rng(max: u16) -> u16 {
     rand::thread_rng().gen_range(0..max)
 }
@@ -31,16 +33,59 @@ pub fn read_u64(file: &mut File) -> u64 {
 
 #[inline]
 pub fn log2<N : PrimInt>(x: N) -> u32 {
-    // TODO: Test
-    (std::mem::size_of::<N>() * 8) as u32 - x.leading_zeros()
+    (std::mem::size_of::<N>() * 8) as u32 - (x - N::one()).leading_zeros()
 }
 
-#[cfg(tests)]
+#[macro_export]
+macro_rules! hash {
+    ($e:expr) => {{
+        let mut hasher = Sha256::new();
+        hasher.update($e);
+        hasher.finalize()
+    }};
+    // Decompose
+    ($e:expr, $($ls:expr),*) => {{
+        let mut hasher = Sha256::new();
+        hasher.update($e);
+        hash!(@next hasher, $($ls),*);
+        hasher.finalize()
+    }};
+
+    // Recursive update
+    (@next $hasher:expr, $e:expr, $ls:tt) => {{
+        $hasher.update($e);
+        hash!(@next $hasher, $e);
+    }};
+
+    // Last
+    (@next $hasher:expr, $e:expr) => {{
+        $hasher.update($e);
+    }};
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    fn test_log2<N : PrimInt>(x: N) {
-        assert_eq!(log2(2), 1);
+    #[test]
+    fn test_hash() {
+        let h1 = hash!("hello", "world");
+        let mut hasher = Sha256::new();
+        hasher.update("hello");
+        hasher.update("world");
+        let h2 = hasher.finalize();
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_log2() {
+        assert!(log2(1)==0);
+        assert!(log2(2)==1);
+        assert!(log2(3)==2);
+        assert!(log2(4)==2);
+        assert!(log2(5)==3);
+        assert!(log2(8)==3);
+        assert!(log2(9)==4);
     }
 }
 

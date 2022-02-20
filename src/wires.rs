@@ -132,6 +132,10 @@ impl ArithWire {
         bytemuck::cast::<[u8; LENGTH], [u16; LENGTH/2]>(self.values)[LENGTH/2 - 1]
     }
 
+    pub fn as_bytes(&self) -> [u8; LENGTH] {
+        self.values
+    }
+
 }
 
 pub fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWire {
