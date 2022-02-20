@@ -36,6 +36,11 @@ pub fn log2<N : PrimInt>(x: N) -> u32 {
     (std::mem::size_of::<N>() * 8) as u32 - (x - N::one()).leading_zeros()
 }
 
+
+
+/// Variadic Hashing
+/// Hashing based on Sha256 producing a 32 byte hash
+/// Arguments are hashed in order.
 #[macro_export]
 macro_rules! hash {
     ($e:expr) => {{

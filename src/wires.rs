@@ -8,6 +8,8 @@ use crate::util::*;
 
 type Domain = u16;
 
+
+// NOTE: Security paramter depends on hash function.
 const SECURITY_PARAM : usize = 256; // bits used total
 const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
 
@@ -128,7 +130,7 @@ impl ArithWire {
     }
 
     #[inline]
-    pub(crate) fn tau(&self) -> u16 {
+    pub(crate) fn color(&self) -> u16 {
         bytemuck::cast::<[u8; LENGTH], [u16; LENGTH/2]>(self.values)[LENGTH/2 - 1]
     }
 

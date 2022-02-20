@@ -90,7 +90,7 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
             ArithGateKind::Mul(constant) => &wires[gate.inputs[0]] * constant,
             ArithGateKind::Proj(range, phi) => {
                 let input_index = gate.inputs[0];
-                let color = &wires[input_index].tau();
+                let color = &wires[input_index].color();
 
                 let delta_m = &delta[&gate.domain];
                 let delta_n = &delta[&range];
@@ -114,7 +114,7 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
             // Special cases of projection
             ArithGateKind::Map(range) => {
                 let input_index = gate.inputs[0];
-                let color = &wires[input_index].tau();
+                let color = &wires[input_index].color();
 
                 let delta_m = &delta[&gate.domain];
                 let delta_n = &delta[&range];
@@ -136,7 +136,7 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
             },
             ArithGateKind::Less(threshold) => {
                 let input_index = gate.inputs[0];
-                let color = &wires[input_index].tau();
+                let color = &wires[input_index].color();
 
                 let range = 2;
                 let delta_m = &delta[&gate.domain];
@@ -210,7 +210,7 @@ pub fn evaluate(circuit: &ArithCircuit, f: &ProjMap, x: Vec<ArithWire>) -> Vec<A
             ArithGateKind::Less(_) |
             ArithGateKind::Proj(_, _) => {
                 let wire = unsafe { wires[gate.inputs[0]].assume_init_ref() };
-                let color = wire.tau();
+                let color = wire.color();
                 let cipher = &f[&gate.output][color as usize];
                 let hw = hash_wire(gate.output, wire, cipher);
                 cipher - &hw
