@@ -36,13 +36,13 @@ pub struct Public<const N: usize> ([EdwardsPoint; N]);
 // === Sender ====
 pub struct ObliviousSender<const N : usize> {
     secrets: [Scalar; N],
-    messages: Message<N>,
     publics: Public<N>,
+    messages: Message<N>,
 }
 
 
 impl<const N: usize> ObliviousSender<N> {
-    pub fn new(messages: Message<N>) -> Self {
+    pub fn new(messages: &Message<N>) -> Self {
         // FUTURE: Take randomness as input.
         let mut rng = ChaCha12Rng::from_entropy();
         let secrets = (0..N).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
@@ -51,8 +51,8 @@ impl<const N: usize> ObliviousSender<N> {
         let publics = Public(publics.try_into().unwrap());
         Self {
             secrets,
-            messages,
             publics,
+            messages: messages.clone(),
         }
     }
 
@@ -61,7 +61,7 @@ impl<const N: usize> ObliviousSender<N> {
     }
 
 
-    pub fn accept(&self, their_public : Public<N>) -> Payload<N> {
+    pub fn accept(&self, their_public : &Public<N>) -> Payload<N> {
         let secrets = self.secrets;
         let publics = &self.publics;
         let messages = &self.messages;
@@ -126,7 +126,7 @@ impl<const N : usize> ObliviousReceiver<Init, N> {
         }
     }
 
-    pub fn accept(&self, their_publics : Public<N>) -> ObliviousReceiver<RetrievingPayload<N>, N>{
+    pub fn accept(&self, their_publics : &Public<N>) -> ObliviousReceiver<RetrievingPayload<N>, N>{
         let mut keys : Vec<Vec<u8>>= Vec::with_capacity(N);
         let mut publics : Vec<EdwardsPoint>= Vec::with_capacity(N);
         for i in 0..N {
@@ -158,7 +158,7 @@ impl<const N : usize> ObliviousReceiver<RetrievingPayload<N>, N> {
         self.state.publics.clone()
     }
     
-    pub fn receive(&self, payload : Payload<N>) -> [Vec<u8>; N] {
+    pub fn receive(&self, payload : &Payload<N>) -> [Vec<u8>; N] {
         let mut messages : Vec<Vec<u8>>= Vec::with_capacity(N);
         for i in 0..N {
             let [e0, e1] = &payload.0[i];
@@ -187,15 +187,15 @@ mod tests {
 
         // round 0
         let receiver = ObliviousReceiver::new([false]);
-        let sender = ObliviousSender::new(Message([[m0.clone(), m1.clone()]]));
+        let sender = ObliviousSender::new(&Message([[m0.clone(), m1.clone()]]));
 
         // round 1
-        let receiver = receiver.accept(sender.public());
+        let receiver = receiver.accept(&sender.public());
 
         // round 2
-        let payload = sender.accept(receiver.publics());
+        let payload = sender.accept(&receiver.publics());
 
-        let msg = receiver.receive(payload);
+        let msg = receiver.receive(&payload);
 
         assert!(msg[0] == m0);
     }
@@ -207,15 +207,15 @@ mod tests {
 
         // round 0
         let receiver = ObliviousReceiver::new([true]);
-        let sender = ObliviousSender::new(Message([[m0.clone(), m1.clone()]]));
+        let sender = ObliviousSender::new(&Message([[m0.clone(), m1.clone()]]));
 
         // round 1
-        let receiver = receiver.accept(sender.public());
+        let receiver = receiver.accept(&sender.public());
 
         // round 2
-        let payload = sender.accept(receiver.publics());
+        let payload = sender.accept(&receiver.publics());
 
-        let msg = receiver.receive(payload);
+        let msg = receiver.receive(&payload);
 
         assert!(msg[0] == m1);
     }
