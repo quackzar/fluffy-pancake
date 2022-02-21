@@ -19,11 +19,6 @@ fn bench_eval(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_garble, bench_eval);
-criterion_main!(benches);
-
-
-
 
 use magic_pake::ot::*;
 
@@ -48,5 +43,5 @@ fn bench_ot(c: &mut Criterion) {
     c.bench_function("OT 1 bit", |b| b.iter(run_one_ot));
 }
 
-criterion_group!(benches, bench_ot);
+criterion_group!(benches, bench_garble, bench_eval, bench_ot);
 criterion_main!(benches);
