@@ -7,17 +7,17 @@ use crate::arith::*;
 
 // TODO: fPAKE protocol
 
-pub fn build_circuit(bitsize: usize, threshold: u16) -> ArithCircuit {
-    let mut gates: Vec<ArithGate> = Vec::new();
+pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
+    let mut gates: Vec<Gate> = Vec::new();
     let comparison_domain = bitsize as u16 / 2 + 1;
     let bitdomain = 2;
 
     // xor gates
     for i in 0..bitsize {
-        let gate = ArithGate {
+        let gate = Gate {
             inputs: vec![i, i + bitsize],
             output: i + 2 * bitsize,
-            kind: ArithGateKind::Add,
+            kind: GateKind::Add,
             domain: bitdomain,
         };
         gates.push(gate);
@@ -25,18 +25,18 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> ArithCircuit {
 
     // proj gates
     for i in 0..bitsize {
-        let gate = ArithGate {
+        let gate = Gate {
             inputs: vec![i + 2 * bitsize],
             output: i + 3 * bitsize,
-            kind: ArithGateKind::Proj(ProjectionGate::Map(comparison_domain)),
+            kind: GateKind::Proj(ProjKind::Map(comparison_domain)),
             domain: bitdomain,
         };
         gates.push(gate);
     }
 
     // sum
-    let gate = ArithGate {
-        kind: ArithGateKind::Add,
+    let gate = Gate {
+        kind: GateKind::Add,
         inputs: (3 * bitsize..4 * bitsize).collect(),
         output: 4 * bitsize,
         domain: bitsize as u16,
@@ -44,14 +44,14 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> ArithCircuit {
     gates.push(gate);
 
     // comparison
-    let gate = ArithGate {
-        kind: ArithGateKind::Proj(ProjectionGate::Less(threshold)),
+    let gate = Gate {
+        kind: GateKind::Proj(ProjKind::Less(threshold)),
         inputs: vec![4 * bitsize],
         output: 4 * bitsize + 1,
         domain: comparison_domain,
     };
     gates.push(gate);
-    ArithCircuit {
+    Circuit {
         gates,
         num_inputs: bitsize * 2,
         num_outputs: 1,
@@ -60,59 +60,14 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> ArithCircuit {
     }
 }
 
-use std::collections::HashSet;
-use std::error::Error;
-use std::fmt;
 
-// TODO: Move this to circuit file.
-#[derive(Debug)]
-pub enum CircuitError {
-    BadOutputCount,
-    BadInputCount,
-    BadWireCount(usize, usize),
-    BadDomain,
-}
-impl Error for CircuitError {}
-impl fmt::Display for CircuitError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            CircuitError::BadInputCount => {
-                write!(f, "Error, circuit input wires are used as output.")
-            }
-            CircuitError::BadOutputCount => write!(f, "Bad output count"),
-            CircuitError::BadWireCount(a, b) => {
-                write!(f, "Bad wire count, actual {a}, but {b} defined")
-            }
-            CircuitError::BadDomain => write!(f, "Bad domain"),
-        }
-    }
-}
 
-fn verify_circuit(circuit: &ArithCircuit) -> Result<(), CircuitError> {
-    let num_wires = circuit
-        .gates
-        .iter()
-        .flat_map(|g| &g.inputs)
-        .chain(circuit.gates.iter().map(|g| &g.output))
-        .unique()
-        .count();
-    if num_wires != circuit.num_wires {
-        // circuit has different amount of wires
-        return Err(CircuitError::BadWireCount(num_wires, circuit.num_wires));
-    }
-    let mut uniq = HashSet::new();
-    let ok = circuit.gates.iter().map(|g| g.output).all(move |i| uniq.insert(i));
-    if !ok {
-        return Err(CircuitError::BadOutputCount);
-    }
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u16>) -> Vec<u16> {
+    fn garble_encode_eval_decode(c: &Circuit, x: &Vec<u16>) -> Vec<u16> {
         let (f, e, d) = garble(c);
         let x = encode(&e, x);
         let z = evaluate(c, &f, x);

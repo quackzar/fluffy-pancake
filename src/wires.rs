@@ -8,62 +8,62 @@ use crate::util::*;
 type Domain = u16;
 
 
-// NOTE: Security paramter depends on hash function.
+// NOTE: Security parameter depends on hash function.
 const SECURITY_PARAM : usize = 256; // bits used total
-const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
+const LENGTH : usize = SECURITY_PARAM / 8; // bytes used
 
 // Maybe use domain as const generic?
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ArithWire {
+pub struct Wire {
     pub domain: u16,
     values: [u8; LENGTH],
 }
 
-impl ops::Add<&ArithWire> for &ArithWire {
-    type Output = ArithWire;
-    fn add(self, rhs: &ArithWire) -> ArithWire {
+impl ops::Add<&Wire> for &Wire {
+    type Output = Wire;
+    fn add(self, rhs: &Wire) -> Wire {
         self.map_with(rhs, |a,b| (a + b) % self.domain)
     }
 }
 
-impl ops::Sub<&ArithWire> for &ArithWire {
-    type Output = ArithWire;
-    fn sub(self, rhs: &ArithWire) -> Self::Output {
+impl ops::Sub<&Wire> for &Wire {
+    type Output = Wire;
+    fn sub(self, rhs: &Wire) -> Self::Output {
         self.map_with(rhs, |a,b| (a + (self.domain - b)) % self.domain)
     }
 }
 
-impl ops::Neg for &ArithWire {
-    type Output = ArithWire;
-    fn neg(self) -> ArithWire {
+impl ops::Neg for &Wire {
+    type Output = Wire;
+    fn neg(self) -> Wire {
         self.map(|x| (self.domain - x) % self.domain)
     }
 }
 
-impl ops::Mul<u16> for &ArithWire {
-    type Output = ArithWire;
+impl ops::Mul<u16> for &Wire {
+    type Output = Wire;
     #[inline]
-    fn mul(self, rhs: u16) -> ArithWire {
+    fn mul(self, rhs: u16) -> Wire {
         self.map(|x| (((x as u32) * (rhs as u32)) % (self.domain as u32)) as u16)
     }
 }
 
-impl iter::Sum for ArithWire {
+impl iter::Sum for Wire {
     fn sum<I: Iterator<Item=Self>>(mut iter: I) -> Self {
         let init = iter.next().unwrap();
-        iter.fold(init, |acc: ArithWire, w: ArithWire| &acc + &w)
+        iter.fold(init, |acc: Wire, w: Wire| &acc + &w)
     }
 }
 
-impl ArithWire {
-    pub(crate) fn empty() -> ArithWire {
-        ArithWire {
+impl Wire {
+    pub(crate) fn empty() -> Wire {
+        Wire {
             domain: 0,
             values: [0; LENGTH],
         }
     }
 
-    fn map<F>(&self, op : F) -> ArithWire where
+    fn map<F>(&self, op : F) -> Wire where
         F: Fn(u16) -> u16 {
         let domain = self.domain;
         // TODO: change size based on domain
@@ -75,13 +75,13 @@ impl ArithWire {
         debug_assert!(output.iter().all(|&x| x < self.domain),
             "output out of domain {} {:?}", domain, output);
         let values = bytemuck::cast(output);
-        ArithWire {
+        Wire {
             domain,
             values,
         }
     }
 
-    fn map_with<F>(&self, other : &ArithWire, op : F) -> ArithWire where
+    fn map_with<F>(&self, other : &Wire, op : F) -> Wire where
         F: Fn(u16, u16) -> u16 {
         debug_assert_eq!(self.domain, other.domain, "Domain not matching");
         let l1 : [u16; LENGTH / 2] = bytemuck::cast(self.values);
@@ -94,27 +94,27 @@ impl ArithWire {
         debug_assert!(output.iter().all(|&x| x < self.domain));
         let values = bytemuck::cast(output);
         let domain = self.domain;
-        ArithWire {
+        Wire {
             domain,
             values,
         }
     }
 
 
-    pub(crate) fn new(domain: u16) -> ArithWire {
+    pub(crate) fn new(domain: u16) -> Wire {
         let mut values = [0u16; LENGTH / 2];
         for i in 0..(LENGTH/8) {
             values[i] = rng(domain);
         }
         debug_assert!(values.iter().all(|&x| x < domain));
         let values = bytemuck::cast(values);
-        ArithWire {
+        Wire {
             values,
             domain,
         }
     }
 
-    pub(crate) fn delta(domain: u16) -> ArithWire {
+    pub(crate) fn delta(domain: u16) -> Wire {
         let mut values = [0u16; LENGTH / 2];
         for i in 0..(LENGTH/8) {
             values[i] = rng(domain);
@@ -122,7 +122,7 @@ impl ArithWire {
         values[LENGTH/2 - 1] = 1;
         debug_assert!(values.iter().all(|&x| x < domain));
         let values = bytemuck::cast(values);
-        ArithWire {
+        Wire {
             values,
             domain,
         }
@@ -135,13 +135,13 @@ impl ArithWire {
 
 }
 
-impl AsRef<[u8]> for &ArithWire {
+impl AsRef<[u8]> for &Wire {
     fn as_ref(&self) -> &[u8] {
         &self.values
     }
 }
 
-pub fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWire {
+pub fn hash_wire(index: usize, wire: &Wire, target: &Wire) -> Wire {
     let mut hasher = Sha256::new();
     hasher.update(index.to_be_bytes());
     hasher.update(wire.values);
@@ -151,7 +151,7 @@ pub fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWir
     // Makes values for the wire of target size from the output of the hash function, recall that
     // the hash function outputs 256 bits, which means that the number of values * the number of
     // bits in a value must be less than or equal to 256.
-    let wire = ArithWire {
+    let wire = Wire {
         domain: target.domain,
         values: bytes,
     };
@@ -162,6 +162,6 @@ pub fn hash_wire(index: usize, wire: &ArithWire, target: &ArithWire) -> ArithWir
 
 pub type Bytes = [u8; LENGTH];
 
-pub fn hash(index: usize, x: u16, wire: &ArithWire) -> Bytes {
+pub fn hash(index: usize, x: u16, wire: &Wire) -> Bytes {
     hash!(index.to_be_bytes(), x.to_be_bytes(), wire)
 }

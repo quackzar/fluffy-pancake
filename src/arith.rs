@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::circuit::*;
 
-use crate::wires::ArithWire;
+use crate::wires::Wire;
 use crate::wires::hash;
 use crate::wires::hash_wire;
 use crate::wires::Bytes;
@@ -14,11 +14,27 @@ use crate::wires::Bytes;
 // -------------------------------------------------------------------------------------------------
 // Helpers / Definitions
 
-
+// TODO: Const generic? force domain to bits?
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncodingKey {
-    wires: Vec<ArithWire>,
-    delta: HashMap<u16, ArithWire>,
+    wires: Vec<Wire>,
+    delta: HashMap<u16, Wire>,
+}
+
+impl EncodingKey {
+    pub fn split(&self, ids : Vec<usize>) -> EncodingKey {
+        let mut delta = HashMap::new();
+        let wires : Vec<Wire> = ids.iter().map(|i| self.wires[*i].clone()).collect();
+        for wire in &wires {
+            let domain : u16 = wire.domain;
+            let d = self.delta[&domain].clone();
+            delta.insert(domain, d);
+        }
+        EncodingKey {
+            wires,
+            delta,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,29 +54,30 @@ impl fmt::Display for DecodeError {
     }
 }
 
+
 // -------------------------------------------------------------------------------------------------
 // Garbling Scheme Implementations
 
 // TODO: Proper struct for serialize/deserialize.
-type ProjMap = HashMap<usize, Vec<ArithWire>>;
+type ProjMap = HashMap<usize, Vec<Wire>>;
 
 fn projection_identity(value: u16) -> u16 { value }
 fn projection_less(value: u16, threshold: u16) -> u16 { (value < threshold) as u16 }
 
-pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
+pub fn garble(circuit: &Circuit) -> (ProjMap, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut delta = HashMap::new();
     for gate in &circuit.gates {
-        delta.entry(gate.domain).or_insert_with(|| ArithWire::delta(gate.domain));
+        delta.entry(gate.domain).or_insert_with(|| Wire::delta(gate.domain));
         
-        if let ArithGateKind::Proj(p) = &gate.kind {
+        if let GateKind::Proj(p) = &gate.kind {
             match *p {
-                ProjectionGate::Map(target_domain) => {
-                    delta.entry(target_domain).or_insert_with(|| ArithWire::delta(target_domain));
+                ProjKind::Map(target_domain) => {
+                    delta.entry(target_domain).or_insert_with(|| Wire::delta(target_domain));
                 },
-                ProjectionGate::Less(_) => {
+                ProjKind::Less(_) => {
                     let target_domain = 2;
-                    delta.entry(target_domain).or_insert_with(|| ArithWire::delta(target_domain));
+                    delta.entry(target_domain).or_insert_with(|| Wire::delta(target_domain));
                 },
             }
         }
@@ -70,7 +87,7 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
     let mut wires = Vec::with_capacity(circuit.num_wires);
     for input in 0..circuit.num_inputs {
         let domain = circuit.input_domains[input];
-        wires.push(ArithWire::new(domain));
+        wires.push(Wire::new(domain));
     }
 
     // 3. Encoding information
@@ -85,15 +102,12 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
     let mut d = Vec::with_capacity(circuit.num_outputs);
     for gate in &circuit.gates {
         let wire = match &gate.kind {
-            ArithGateKind::Add => gate.inputs.iter().map(|&input| wires[input].clone()).sum(),
-            ArithGateKind::Mul(constant) => &wires[gate.inputs[0]] * *constant,
+            GateKind::Add => gate.inputs.iter().map(|&input| wires[input].clone()).sum(),
+            GateKind::Mul(constant) => &wires[gate.inputs[0]] * *constant,
 
             // Special cases of projection
-            ArithGateKind::Proj(proj) => {
-                let range : u16 = match *proj {
-                    ProjectionGate::Map(range) => range,
-                    ProjectionGate::Less(_) => 2,
-                };
+            GateKind::Proj(proj) => {
+                let range = proj.domain();
                 let input_index = gate.inputs[0];
                 let color = wires[input_index].color();
 
@@ -102,20 +116,13 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
 
                 let hashed_wire = hash_wire(gate.output, &(&wires[input_index] - &(delta_m * color)), delta_n);
 
-                #[inline]
-                fn project(x : u16, kind : &ProjectionGate) -> u16 {
-                    match *kind {
-                        ProjectionGate::Map(_) =>  x,
-                        ProjectionGate::Less(threshold) => (x < threshold) as u16,
-                    }
-                }
-                let wire = &hashed_wire + &(delta_n * project(gate.domain - color, proj));
+                let wire = &hashed_wire + &(delta_n * proj.project(gate.domain - color));
                 let wire = -&wire;
 
-                let mut g: Vec<ArithWire> = vec![ArithWire::empty(); gate.domain as usize];
+                let mut g: Vec<Wire> = vec![Wire::empty(); gate.domain as usize];
                 for x in 0..gate.domain {
                     let hashed_wire = hash_wire(gate.output, &(&wires[input_index] + &(delta_m * x)), &wire);
-                    let ciphertext = &(&hashed_wire + &wire) + &(delta_n * project(x, proj));
+                    let ciphertext = &(&hashed_wire + &wire) + &(delta_n * proj.project(x));
 
                     g[((x + color) % gate.domain) as usize] = ciphertext;
                 }
@@ -129,10 +136,10 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
         // 5. Decoding information for outputs
         if gate.output >= outputs_start_at {
             let output_domain = match &gate.kind {
-                ArithGateKind::Add | ArithGateKind::Mul(_) => gate.domain,
-                ArithGateKind::Proj(proj) => match *proj {
-                    ProjectionGate::Map(range) => range,
-                    ProjectionGate::Less(_) => 2,
+                GateKind::Add | GateKind::Mul(_) => gate.domain,
+                GateKind::Proj(proj) => match *proj {
+                    ProjKind::Map(range) => range,
+                    ProjKind::Less(_) => 2,
                 }
             };
 
@@ -154,10 +161,10 @@ pub fn garble(circuit: &ArithCircuit) -> (ProjMap, EncodingKey, DecodingKey) {
     (f, encode_key, decode_key)
 }
 
-pub fn evaluate(circuit: &ArithCircuit, f: &ProjMap, x: Vec<ArithWire>) -> Vec<ArithWire> {
+pub fn evaluate(circuit: &Circuit, f: &ProjMap, x: Vec<Wire>) -> Vec<Wire> {
     debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
 
-    let mut wires: Vec<MaybeUninit<ArithWire>> = Vec::with_capacity(circuit.num_wires);
+    let mut wires: Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);
     unsafe {
         wires.set_len(circuit.num_wires);
     }
@@ -166,14 +173,14 @@ pub fn evaluate(circuit: &ArithCircuit, f: &ProjMap, x: Vec<ArithWire>) -> Vec<A
     }
 
     for gate in &circuit.gates {
-        let wire: ArithWire = match gate.kind {
-            ArithGateKind::Add => gate
+        let wire: Wire = match gate.kind {
+            GateKind::Add => gate
                 .inputs
                 .iter()
                 .map(|&x| unsafe { wires[x].assume_init_ref() }.clone())
-                .sum::<ArithWire>(),
-            ArithGateKind::Mul(c) => unsafe { wires[gate.inputs[0]].assume_init_ref() * c },
-            ArithGateKind::Proj(_) => {
+                .sum::<Wire>(),
+            GateKind::Mul(c) => unsafe { wires[gate.inputs[0]].assume_init_ref() * c },
+            GateKind::Proj(_) => {
                 let wire = unsafe { wires[gate.inputs[0]].assume_init_ref() };
                 let color = wire.color();
                 let cipher = &f[&gate.output][color as usize];
@@ -184,12 +191,12 @@ pub fn evaluate(circuit: &ArithCircuit, f: &ProjMap, x: Vec<ArithWire>) -> Vec<A
         wires[gate.output].write(wire);
     }
 
-    let wires: Vec<ArithWire> = unsafe { transmute(wires) };
+    let wires: Vec<Wire> = unsafe { transmute(wires) };
     wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec()
 }
 
 
-pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<ArithWire> {
+pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<Wire> {
     let wires = &e.wires;
     let delta = &e.delta;
     debug_assert_eq!(
@@ -207,7 +214,7 @@ pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<ArithWire> {
 }
 
 
-pub fn decode(d: &DecodingKey, z: Vec<ArithWire>) -> Result<Vec<u16>, DecodeError> {
+pub fn decode(d: &DecodingKey, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
     let mut y = vec![0; d.hashes.len()];
     for i in 0..z.len() {
         let output = d.offset + i;
@@ -238,7 +245,7 @@ pub fn decode(d: &DecodingKey, z: Vec<ArithWire>) -> Result<Vec<u16>, DecodeErro
 mod tests {
     use super::*;
 
-    fn garble_encode_eval_decode(c: &ArithCircuit, x: &Vec<u16>) -> Vec<u16> {
+    fn garble_encode_eval_decode(c: &Circuit, x: &Vec<u16>) -> Vec<u16> {
         let (f, e, d) = garble(c);
         let x = encode(&e, x);
         let z = evaluate(c, &f, x);
@@ -248,9 +255,9 @@ mod tests {
     #[test]
     fn sum_circuit() {
         let domain = 128;
-        let circuit = ArithCircuit {
-            gates: vec![ArithGate {
-                kind: ArithGateKind::Add,
+        let circuit = Circuit {
+            gates: vec![Gate {
+                kind: GateKind::Add,
                 inputs: vec![0, 1],
                 output: 2,
                 domain,
@@ -268,9 +275,9 @@ mod tests {
     #[test]
     fn sum_multiple_circuit() {
         let domain = 128;
-        let circuit = ArithCircuit {
-            gates: vec![ArithGate {
-                kind: ArithGateKind::Add,
+        let circuit = Circuit {
+            gates: vec![Gate {
+                kind: GateKind::Add,
                 inputs: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
                 output: 10,
                 domain,
@@ -288,9 +295,9 @@ mod tests {
     #[test]
     fn mult_circuit() {
         let domain = 600;
-        let circuit = ArithCircuit {
-            gates: vec![ArithGate {
-                kind: ArithGateKind::Mul(9),
+        let circuit = Circuit {
+            gates: vec![Gate {
+                kind: GateKind::Mul(9),
                 inputs: vec![0],
                 output: 1,
                 domain,
@@ -309,9 +316,9 @@ mod tests {
     fn proj_circuit_identity() {
         let target_domain = 8;
         let source_domain = 16;
-        let circuit = ArithCircuit {
-            gates: vec![ArithGate {
-                kind: ArithGateKind::Proj(ProjectionGate::Map(target_domain)),
+        let circuit = Circuit {
+            gates: vec![Gate {
+                kind: GateKind::Proj(ProjKind::Map(target_domain)),
                 inputs: vec![0],
                 output: 1,
                 domain: source_domain,
@@ -326,76 +333,76 @@ mod tests {
         assert_eq!(output[0], input[0]);
     }
 
-    fn make_me_the_threshold() -> ArithCircuit {
+    fn make_me_the_threshold() -> Circuit {
         // 8 inputs, 4 "comparators"
         const INPUT_COUNT: usize = 8;
         const BIT_DOMAIN: u16 = 2;
         const COMAPRISON_DOMAIN: u16 = 8;
 
         let threshold = 2;
-        use crate::circuit::ArithGateKind::*;
-        use crate::circuit::ProjectionGate::*;
-        ArithCircuit {
+        use crate::circuit::GateKind::*;
+        use crate::circuit::ProjKind::*;
+        Circuit {
             // Comparison
             gates: vec![
-                ArithGate {
+                Gate {
                     kind: Add,
                     inputs: vec![0, 4],
                     output: 8,
                     domain: BIT_DOMAIN,
                 },
-                ArithGate {
+                Gate {
                     kind: Add,
                     inputs: vec![1, 5],
                     output: 9,
                     domain: BIT_DOMAIN,
                 },
-                ArithGate {
+                Gate {
                     kind: Add,
                     inputs: vec![2, 6],
                     output: 10,
                     domain: BIT_DOMAIN,
                 },
-                ArithGate {
+                Gate {
                     kind: Add,
                     inputs: vec![3, 7],
                     output: 11,
                     domain: BIT_DOMAIN,
                 },
                 // Second half of comparison
-                ArithGate {
+                Gate {
                     kind: Proj(Map(COMAPRISON_DOMAIN)),
                     inputs: vec![8],
                     output: 12,
                     domain: BIT_DOMAIN,
                 },
-                ArithGate {
+                Gate {
                     kind: Proj(Map(COMAPRISON_DOMAIN)),
                     inputs: vec![9],
                     output: 13,
                     domain: BIT_DOMAIN,
                 },
-                ArithGate {
+                Gate {
                     kind: Proj(Map(COMAPRISON_DOMAIN)),
                     inputs: vec![10],
                     output: 14,
                     domain: BIT_DOMAIN,
                 },
-                ArithGate {
+                Gate {
                     kind: Proj(Map(COMAPRISON_DOMAIN)),
                     inputs: vec![11],
                     output: 15,
                     domain: BIT_DOMAIN,
                 },
                 // Adder
-                ArithGate {
+                Gate {
                     kind: Add,
                     inputs: vec![12, 13, 14, 15],
                     output: 16,
                     domain: COMAPRISON_DOMAIN,
                 },
                 // Threshold
-                ArithGate {
+                Gate {
                     kind: Proj(Less(threshold)),
                     inputs: vec![16],
                     output: 17,

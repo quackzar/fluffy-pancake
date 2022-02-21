@@ -5,7 +5,6 @@ use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_TABLE, ED25519_BASEPOINT_T
 use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use curve25519_dalek::scalar::Scalar;
-// use curve25519_dalek::edwards;
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 
@@ -14,11 +13,6 @@ use rand_chacha::ChaCha12Rng;
 
 use serde::{Serialize, Deserialize};
 use sha2::{Digest, Sha256};
-
-// TODO: Extend to n-bit OTs
-
-
-
 
 // Common
 type CiphertextPair = [Vec<u8>; 2];
@@ -66,7 +60,7 @@ impl<const N: usize> ObliviousSender<N> {
         let publics = &self.publics;
         let messages = &self.messages;
         let mut payload : Vec<[Vec<u8>; 2]>= Vec::with_capacity(N);
-        for i in 0..N {
+        for i in 0..N { // TODO: Use maybe uninit
             let their_public = &their_public.0[i];
             let public = &publics.0[i];
             let secret = &secrets[i];
@@ -129,7 +123,7 @@ impl<const N : usize> ObliviousReceiver<Init, N> {
     pub fn accept(&self, their_publics : &Public<N>) -> ObliviousReceiver<RetrievingPayload<N>, N>{
         let mut keys : Vec<Vec<u8>>= Vec::with_capacity(N);
         let mut publics : Vec<EdwardsPoint>= Vec::with_capacity(N);
-        for i in 0..N {
+        for i in 0..N { // TODO: Use maybe uninit
             let public = if self.choices[i] {
                 their_publics.0[i] + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
             } else {
@@ -154,7 +148,7 @@ impl<const N : usize> ObliviousReceiver<Init, N> {
 
 impl<const N : usize> ObliviousReceiver<RetrievingPayload<N>, N> {
 
-    pub fn publics(&self) -> Public<N> {
+    pub fn public(&self) -> Public<N> {
         self.state.publics.clone()
     }
     
@@ -193,7 +187,7 @@ mod tests {
         let receiver = receiver.accept(&sender.public());
 
         // round 2
-        let payload = sender.accept(&receiver.publics());
+        let payload = sender.accept(&receiver.public());
 
         let msg = receiver.receive(&payload);
 
@@ -213,7 +207,7 @@ mod tests {
         let receiver = receiver.accept(&sender.public());
 
         // round 2
-        let payload = sender.accept(&receiver.publics());
+        let payload = sender.accept(&receiver.public());
 
         let msg = receiver.receive(&payload);
 
@@ -266,7 +260,7 @@ mod tests {
         };
         assert_eq!(m_c, m0);
     }
-
+    
     #[allow(non_snake_case)]
     #[test]
     fn diffie_hellman() {
