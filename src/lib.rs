@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-pub mod arith;
+pub mod garble;
 pub mod fpake;
 pub mod ot;
 pub mod circuit;

@@ -2,7 +2,7 @@ use itertools::Itertools;
 
 use crate::util::*;
 use crate::circuit::*;
-use crate::arith::*;
+use crate::garble::*;
 
 
 // TODO: fPAKE protocol
@@ -61,7 +61,7 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
 }
 
 
-
+// TODO: Handle OT for encoding.
 
 #[cfg(test)]
 mod tests {
