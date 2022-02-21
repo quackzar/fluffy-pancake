@@ -5,7 +5,9 @@ use crate::circuit::*;
 use crate::arith::*;
 
 
-pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
+// TODO: fPAKE protocol
+
+pub fn build_circuit(bitsize: usize, threshold: u16) -> ArithCircuit {
     let mut gates: Vec<ArithGate> = Vec::new();
     let comparison_domain = bitsize as u16 / 2 + 1;
     let bitdomain = 2;
@@ -42,7 +44,6 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     gates.push(gate);
 
     // comparison
-    let threshold = 2; // TODO: Make threshold dynamic.
     let gate = ArithGate {
         kind: ArithGateKind::Proj(ProjectionGate::Less(threshold)),
         inputs: vec![4 * bitsize],
@@ -63,6 +64,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
+// TODO: Move this to circuit file.
 #[derive(Debug)]
 pub enum CircuitError {
     BadOutputCount,
@@ -119,7 +121,7 @@ mod tests {
 
     #[test]
     fn simple_test() {
-        let circuit = build_circuit(16, 1);
+        let circuit = build_circuit(16, 2);
         println!("{:?}", circuit);
         let x = vec![
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -137,7 +139,7 @@ mod tests {
         // Alice's garbled circuit and Bob's eval
         let (out_b, one_a) = {
             // Round 1
-            let circuit = build_circuit(4, 1);
+            let circuit = build_circuit(4, 2);
             let (f, e, d) = garble(&circuit);
             let mut input = Vec::new();
             input.extend(&pwsd_a); // Provided by OT
@@ -149,7 +151,7 @@ mod tests {
         // Bob's garbled circuit and Alice's eval
         let (out_a, one_b) = {
             // Round 2
-            let circuit = build_circuit(4, 1);
+            let circuit = build_circuit(4, 2);
             let (f, e, d) = garble(&circuit);
             let mut input = Vec::new();
             input.extend(&pwsd_a); // Provided by OT

@@ -14,39 +14,41 @@ use rand_chacha::ChaCha12Rng;
 
 use sha2::{Digest, Sha256};
 
-struct ObliviousSender<S> {
+// TODO: Extend to n-bit OTs
+
+pub struct ObliviousSender<S> {
     state : S,
     secret: Scalar,
     m0: Vec<u8>,
     m1: Vec<u8>,
 }
 
-struct Init;
+pub struct Init;
 
-struct Receiving {
+pub struct Receiving {
     public : EdwardsPoint,
 }
 
-struct Retrieving {
+pub struct Retrieving {
     public : EdwardsPoint,
     key: Vec<u8>,
 }
 
-struct Complete {
+pub struct Complete {
     e0 : Vec<u8>,
     e1 : Vec<u8>,
 }
 
-struct Done { m : Vec<u8> }
+pub struct Done { m : Vec<u8> }
 
-struct ObliviousReceiver<S> {
+pub struct ObliviousReceiver<S> {
     state : S,
     secret: Scalar,
     choice: bool,
 }
 
 impl ObliviousSender<Receiving> {
-    fn new(m0 : Vec<u8>, m1: Vec<u8> ) -> Self {
+    pub fn new(m0 : Vec<u8>, m1: Vec<u8> ) -> Self {
         // FUTURE: Take randomness as input.
         let mut rng = ChaCha12Rng::from_entropy();
         let secret = Scalar::random(&mut rng);
@@ -59,12 +61,12 @@ impl ObliviousSender<Receiving> {
         }
     }
 
-    fn public(&self) -> EdwardsPoint {
+    pub fn public(&self) -> EdwardsPoint {
         self.state.public
     }
 
 
-    fn accept(&self, their_public : EdwardsPoint) -> ObliviousSender<Complete> {
+    pub fn accept(&self, their_public : EdwardsPoint) -> ObliviousSender<Complete> {
         let secret = self.secret;
         let public = self.state.public;
         let m0 = &self.m0;
@@ -93,8 +95,14 @@ impl ObliviousSender<Receiving> {
     }
 }
 
+impl ObliviousSender<Complete> {
+    pub fn send(&self) -> (Vec<u8>, Vec<u8>) {
+        (self.state.e0.clone(), self.state.e1.clone())
+    }
+}
+
 impl ObliviousReceiver<Init> {
-    fn new(choice : bool) -> Self {
+    pub fn new(choice : bool) -> Self {
         // FUTURE: Take randomness as input.
         let mut rng = ChaCha12Rng::from_entropy();
         let secret = Scalar::random(&mut rng);
@@ -105,7 +113,7 @@ impl ObliviousReceiver<Init> {
         }
     }
     
-    fn accept(&self, their_public : EdwardsPoint) -> ObliviousReceiver<Retrieving>{
+    pub fn accept(&self, their_public : EdwardsPoint) -> ObliviousReceiver<Retrieving>{
         let public = if self.choice {
             their_public + (&ED25519_BASEPOINT_TABLE * &self.secret)
         } else {
@@ -125,11 +133,11 @@ impl ObliviousReceiver<Init> {
 
 impl ObliviousReceiver<Retrieving> {
 
-    fn public(&self) -> EdwardsPoint {
+    pub fn public(&self) -> EdwardsPoint {
         self.state.public
     }
 
-    fn receive(&self, e0 : Vec<u8>, e1 : Vec<u8>) -> ObliviousReceiver<Done> {
+    pub fn receive(&self, e0 : Vec<u8>, e1 : Vec<u8>) -> ObliviousReceiver<Done> {
         let key = Key::from_slice(&self.state.key);
         let cipher = Aes256Gcm::new(key);
         let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
