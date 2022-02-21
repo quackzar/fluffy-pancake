@@ -26,7 +26,7 @@ impl EncodingKey {
         let mut delta = HashMap::new();
         let wires: Vec<Wire> = ids.iter().map(|i| self.wires[*i].clone()).collect();
         for wire in &wires {
-            let domain: u16 = wire.domain;
+            let domain: u16 = wire.domain();
             let d = self.delta[&domain].clone();
             delta.insert(domain, d);
         }
@@ -221,7 +221,7 @@ pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<Wire> {
 
     let mut z = Vec::with_capacity(wires.len());
     for (wire, &x) in wires.iter().zip(x) {
-        z.push(wire + &(&delta[&wire.domain] * x));
+        z.push(wire + &(&delta[&wire.domain()] * x));
     }
 
     z
@@ -234,7 +234,7 @@ pub fn decode(d: &DecodingKey, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
         let hashes = &d.hashes[i];
 
         let mut success = false;
-        for k in 0..z[i].domain {
+        for k in 0..z[i].domain() {
             let hash = hash(output, k, &z[i]);
             if hash == hashes[k as usize] {
                 y[i as usize] = k;
@@ -244,6 +244,8 @@ pub fn decode(d: &DecodingKey, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
         }
 
         if !success {
+            println!("{:?}", d);
+            println!("{:?}", z);
             return Err(DecodeError {});
         }
     }
@@ -350,7 +352,7 @@ mod tests {
         // 8 inputs, 4 "comparators"
         const INPUT_COUNT: usize = 8;
         const BIT_DOMAIN: u16 = 2;
-        const COMAPRISON_DOMAIN: u16 = 8;
+        const COMPARISON_DOMAIN: u16 = 8;
 
         let threshold = 2;
         use crate::circuit::GateKind::*;
@@ -384,25 +386,25 @@ mod tests {
                 },
                 // Second half of comparison
                 Gate {
-                    kind: Proj(Map(COMAPRISON_DOMAIN)),
+                    kind: Proj(Map(COMPARISON_DOMAIN)),
                     inputs: vec![8],
                     output: 12,
                     domain: BIT_DOMAIN,
                 },
                 Gate {
-                    kind: Proj(Map(COMAPRISON_DOMAIN)),
+                    kind: Proj(Map(COMPARISON_DOMAIN)),
                     inputs: vec![9],
                     output: 13,
                     domain: BIT_DOMAIN,
                 },
                 Gate {
-                    kind: Proj(Map(COMAPRISON_DOMAIN)),
+                    kind: Proj(Map(COMPARISON_DOMAIN)),
                     inputs: vec![10],
                     output: 14,
                     domain: BIT_DOMAIN,
                 },
                 Gate {
-                    kind: Proj(Map(COMAPRISON_DOMAIN)),
+                    kind: Proj(Map(COMPARISON_DOMAIN)),
                     inputs: vec![11],
                     output: 15,
                     domain: BIT_DOMAIN,
@@ -412,14 +414,14 @@ mod tests {
                     kind: Add,
                     inputs: vec![12, 13, 14, 15],
                     output: 16,
-                    domain: COMAPRISON_DOMAIN,
+                    domain: COMPARISON_DOMAIN,
                 },
                 // Threshold
                 Gate {
                     kind: Proj(Less(threshold)),
                     inputs: vec![16],
                     output: 17,
-                    domain: COMAPRISON_DOMAIN,
+                    domain: COMPARISON_DOMAIN,
                 },
             ],
             num_inputs: INPUT_COUNT,
