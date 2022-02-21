@@ -19,9 +19,16 @@ type CiphertextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone)]
 pub struct Payload<const N: usize>([CiphertextPair; N]);
 
+
 type PlaintextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone)]
 pub struct Message<const N: usize>([PlaintextPair; N]);
+
+impl<const N : usize> Message<N> {
+    pub fn new(msg : [CiphertextPair; N]) -> Message<N> {
+        Message(msg)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Public<const N: usize>([EdwardsPoint; N]);

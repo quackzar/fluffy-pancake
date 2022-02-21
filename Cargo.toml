@@ -26,5 +26,5 @@ serde = {version = "1.0.136",  features = ["derive"]}
 criterion = "0.3"
 
 [[bench]]
-name = "arith"
+name = "bench"
 harness = false

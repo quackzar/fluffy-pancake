@@ -6,6 +6,7 @@ use std::iter;
 
 type Domain = u16;
 
+
 // NOTE: Security parameter depends on hash function.
 const SECURITY_PARAM: usize = 256; // bits used total
 const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
@@ -82,6 +83,7 @@ impl Wire {
         Wire { domain, values }
     }
 
+
     fn map_with<F>(&self, other: &Wire, op: F) -> Wire
     where
         F: Fn(u16, u16) -> u16,
@@ -102,7 +104,7 @@ impl Wire {
 
     pub(crate) fn new(domain: u16) -> Wire {
         let mut values = [0u16; LENGTH / 2];
-        for i in 0..(LENGTH / 8) {
+        for i in 0..(LENGTH / 2) {
             values[i] = rng(domain);
         }
         debug_assert!(values.iter().all(|&x| x < domain));
@@ -112,7 +114,7 @@ impl Wire {
 
     pub(crate) fn delta(domain: u16) -> Wire {
         let mut values = [0u16; LENGTH / 2];
-        for i in 0..(LENGTH / 8) {
+        for i in 0..(LENGTH / 2) {
             values[i] = rng(domain);
         }
         values[LENGTH / 2 - 1] = 1;
@@ -136,7 +138,7 @@ impl AsRef<[u8]> for &Wire {
 pub fn hash_wire(index: usize, wire: &Wire, target: &Wire) -> Wire {
     let mut hasher = Sha256::new();
     hasher.update(index.to_be_bytes());
-    hasher.update(wire.values);
+    hasher.update(wire);
     let digest = hasher.finalize(); // TODO: use variable size hashing
     let bytes = <[u8; LENGTH]>::try_from(digest.as_ref()).expect("digest too long");
 
