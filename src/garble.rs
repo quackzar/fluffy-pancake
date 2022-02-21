@@ -1,15 +1,15 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::mem::{transmute, MaybeUninit};
-use serde::{Serialize, Deserialize};
 
 use crate::circuit::*;
 
-use crate::wires::Wire;
 use crate::wires::hash;
 use crate::wires::hash_wire;
 use crate::wires::Bytes;
+use crate::wires::Wire;
 
 // -------------------------------------------------------------------------------------------------
 // Helpers / Definitions
@@ -22,18 +22,15 @@ pub struct EncodingKey {
 }
 
 impl EncodingKey {
-    pub fn split(&self, ids : Vec<usize>) -> EncodingKey {
+    pub fn split(&self, ids: Vec<usize>) -> EncodingKey {
         let mut delta = HashMap::new();
-        let wires : Vec<Wire> = ids.iter().map(|i| self.wires[*i].clone()).collect();
+        let wires: Vec<Wire> = ids.iter().map(|i| self.wires[*i].clone()).collect();
         for wire in &wires {
-            let domain : u16 = wire.domain;
+            let domain: u16 = wire.domain;
             let d = self.delta[&domain].clone();
             delta.insert(domain, d);
         }
-        EncodingKey {
-            wires,
-            delta,
-        }
+        EncodingKey { wires, delta }
     }
 }
 
@@ -54,31 +51,40 @@ impl fmt::Display for DecodeError {
     }
 }
 
-
 // -------------------------------------------------------------------------------------------------
 // Garbling Scheme Implementations
 
 // TODO: Proper struct for serialize/deserialize.
 type ProjMap = HashMap<usize, Vec<Wire>>;
 
-fn projection_identity(value: u16) -> u16 { value }
-fn projection_less(value: u16, threshold: u16) -> u16 { (value < threshold) as u16 }
+fn projection_identity(value: u16) -> u16 {
+    value
+}
+fn projection_less(value: u16, threshold: u16) -> u16 {
+    (value < threshold) as u16
+}
 
 pub fn garble(circuit: &Circuit) -> (ProjMap, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut delta = HashMap::new();
     for gate in &circuit.gates {
-        delta.entry(gate.domain).or_insert_with(|| Wire::delta(gate.domain));
-        
+        delta
+            .entry(gate.domain)
+            .or_insert_with(|| Wire::delta(gate.domain));
+
         if let GateKind::Proj(p) = &gate.kind {
             match *p {
                 ProjKind::Map(target_domain) => {
-                    delta.entry(target_domain).or_insert_with(|| Wire::delta(target_domain));
-                },
+                    delta
+                        .entry(target_domain)
+                        .or_insert_with(|| Wire::delta(target_domain));
+                }
                 ProjKind::Less(_) => {
                     let target_domain = 2;
-                    delta.entry(target_domain).or_insert_with(|| Wire::delta(target_domain));
-                },
+                    delta
+                        .entry(target_domain)
+                        .or_insert_with(|| Wire::delta(target_domain));
+                }
             }
         }
     }
@@ -114,14 +120,19 @@ pub fn garble(circuit: &Circuit) -> (ProjMap, EncodingKey, DecodingKey) {
                 let delta_m = &delta[&gate.domain];
                 let delta_n = &delta[&range];
 
-                let hashed_wire = hash_wire(gate.output, &(&wires[input_index] - &(delta_m * color)), delta_n);
+                let hashed_wire = hash_wire(
+                    gate.output,
+                    &(&wires[input_index] - &(delta_m * color)),
+                    delta_n,
+                );
 
                 let wire = &hashed_wire + &(delta_n * proj.project(gate.domain - color));
                 let wire = -&wire;
 
                 let mut g: Vec<Wire> = vec![Wire::empty(); gate.domain as usize];
                 for x in 0..gate.domain {
-                    let hashed_wire = hash_wire(gate.output, &(&wires[input_index] + &(delta_m * x)), &wire);
+                    let hashed_wire =
+                        hash_wire(gate.output, &(&wires[input_index] + &(delta_m * x)), &wire);
                     let ciphertext = &(&hashed_wire + &wire) + &(delta_n * proj.project(x));
 
                     g[((x + color) % gate.domain) as usize] = ciphertext;
@@ -129,7 +140,7 @@ pub fn garble(circuit: &Circuit) -> (ProjMap, EncodingKey, DecodingKey) {
 
                 f.insert(gate.output, g);
                 wire
-            },
+            }
         };
         wires.push(wire);
 
@@ -140,12 +151,16 @@ pub fn garble(circuit: &Circuit) -> (ProjMap, EncodingKey, DecodingKey) {
                 GateKind::Proj(proj) => match *proj {
                     ProjKind::Map(range) => range,
                     ProjKind::Less(_) => 2,
-                }
+                },
             };
 
             let mut values = vec![[0u8; 32]; output_domain as usize];
             for x in 0..output_domain {
-                let hash = hash(gate.output, x, &(&wires[gate.output] + &(&delta[&output_domain] * x)));
+                let hash = hash(
+                    gate.output,
+                    x,
+                    &(&wires[gate.output] + &(&delta[&output_domain] * x)),
+                );
                 values[x as usize] = hash;
             }
 
@@ -195,7 +210,6 @@ pub fn evaluate(circuit: &Circuit, f: &ProjMap, x: Vec<Wire>) -> Vec<Wire> {
     wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec()
 }
 
-
 pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<Wire> {
     let wires = &e.wires;
     let delta = &e.delta;
@@ -212,7 +226,6 @@ pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<Wire> {
 
     z
 }
-
 
 pub fn decode(d: &DecodingKey, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
     let mut y = vec![0; d.hashes.len()];

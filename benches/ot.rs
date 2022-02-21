@@ -13,10 +13,9 @@ fn run_one_ot() {
     let _receiver = receiver.receive(e0, e1);
 }
 
-fn bench_ot(c : &mut Criterion) {
+fn bench_ot(c: &mut Criterion) {
     c.bench_function("OT 1 bit", |b| b.iter(run_one_ot));
 }
-
 
 criterion_group!(benches, bench_ot);
 criterion_main!(benches);

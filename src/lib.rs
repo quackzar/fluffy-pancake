@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-pub mod garble;
-pub mod fpake;
-pub mod ot;
 pub mod circuit;
-mod wires;
+pub mod fpake;
+pub mod garble;
+pub mod ot;
 mod util;
+mod wires;

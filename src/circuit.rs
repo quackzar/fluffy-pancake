@@ -1,4 +1,4 @@
-use std::{error::Error, fmt, collections::HashSet};
+use std::{collections::HashSet, error::Error, fmt};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -13,15 +13,12 @@ pub struct Circuit {
     pub input_domains: Vec<u16>,
 }
 
-
-
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) enum GateKind {
     Add,
     Mul(u16),
-    Proj(ProjKind)
+    Proj(ProjKind),
 }
-
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) enum ProjKind {
@@ -31,7 +28,7 @@ pub(crate) enum ProjKind {
 
 impl ProjKind {
     #[inline]
-    pub fn project(&self, x : u16) -> u16 {
+    pub fn project(&self, x: u16) -> u16 {
         use ProjKind::*;
         match *self {
             Map(_) => x,
@@ -49,7 +46,6 @@ impl ProjKind {
     }
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Gate {
     pub output: usize,
@@ -62,8 +58,6 @@ pub(crate) struct Gate {
 
 // TODO: Make non-garbled eval.
 //
-
-
 
 #[derive(Debug)]
 pub enum CircuitError {
@@ -101,7 +95,11 @@ fn verify_circuit(circuit: &Circuit) -> Result<(), CircuitError> {
         return Err(CircuitError::BadWireCount(num_wires, circuit.num_wires));
     }
     let mut uniq = HashSet::new();
-    let ok = circuit.gates.iter().map(|g| g.output).all(move |i| uniq.insert(i));
+    let ok = circuit
+        .gates
+        .iter()
+        .map(|g| g.output)
+        .all(move |i| uniq.insert(i));
     if !ok {
         return Err(CircuitError::BadOutputCount);
     }

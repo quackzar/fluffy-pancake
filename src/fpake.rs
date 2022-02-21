@@ -1,9 +1,8 @@
 use itertools::Itertools;
 
-use crate::util::*;
 use crate::circuit::*;
 use crate::garble::*;
-
+use crate::util::*;
 
 // TODO: fPAKE protocol
 
@@ -60,7 +59,6 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     }
 }
 
-
 // TODO: Handle OT for encoding.
 
 #[cfg(test)]
@@ -101,7 +99,15 @@ mod tests {
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
             let out = evaluate(&circuit, &f, garbled_input)[0].clone();
-            (hash!((circuit.num_wires - 1).to_be_bytes(), 1u16.to_be_bytes(), &out), d.hashes[0][1]) };
+            (
+                hash!(
+                    (circuit.num_wires - 1).to_be_bytes(),
+                    1u16.to_be_bytes(),
+                    &out
+                ),
+                d.hashes[0][1],
+            )
+        };
 
         // Bob's garbled circuit and Alice's eval
         let (out_a, one_b) = {
@@ -113,8 +119,14 @@ mod tests {
             input.extend(&pwsd_b);
             let garbled_input = encode(&e, &input);
             let out = evaluate(&circuit, &f, garbled_input)[0].clone();
-            (hash!((circuit.num_wires - 1).to_be_bytes(), 1u16.to_be_bytes(), &out), d.hashes[0][1])
-
+            (
+                hash!(
+                    (circuit.num_wires - 1).to_be_bytes(),
+                    1u16.to_be_bytes(),
+                    &out
+                ),
+                d.hashes[0][1],
+            )
         };
         let key_a = xor(out_a, one_a);
         let key_b = xor(out_b, one_b);

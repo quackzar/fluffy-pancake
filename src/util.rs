@@ -7,12 +7,11 @@ pub fn rng(max: u16) -> u16 {
 }
 
 #[inline]
-pub fn log2<N : PrimInt>(x: N) -> u32 {
+pub fn log2<N: PrimInt>(x: N) -> u32 {
     (std::mem::size_of::<N>() * 8) as u32 - (x - N::one()).leading_zeros()
 }
 
-
-const SECURITY_PARAM : usize = 256; // bits used total
+const SECURITY_PARAM: usize = 256; // bits used total
 const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
 
 pub type Bytes = [u8; LENGTH];
@@ -44,8 +43,7 @@ macro_rules! hash {
 }
 pub(crate) use hash;
 
-
-pub fn xor(a : Bytes, b : Bytes) -> Bytes {
+pub fn xor(a: Bytes, b: Bytes) -> Bytes {
     let mut result = [0u8; LENGTH];
     for i in 0..LENGTH {
         result[i] = a[i] ^ b[i];
@@ -53,10 +51,9 @@ pub fn xor(a : Bytes, b : Bytes) -> Bytes {
     result
 }
 
-
 #[cfg(test)]
 mod tests {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
 
     use super::*;
 
@@ -73,13 +70,12 @@ mod tests {
 
     #[test]
     fn test_log2() {
-        assert!(log2(1)==0);
-        assert!(log2(2)==1);
-        assert!(log2(3)==2);
-        assert!(log2(4)==2);
-        assert!(log2(5)==3);
-        assert!(log2(8)==3);
-        assert!(log2(9)==4);
+        assert!(log2(1) == 0);
+        assert!(log2(2) == 1);
+        assert!(log2(3) == 2);
+        assert!(log2(4) == 2);
+        assert!(log2(5) == 3);
+        assert!(log2(8) == 3);
+        assert!(log2(9) == 4);
     }
 }
-
