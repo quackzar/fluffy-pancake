@@ -1,9 +1,11 @@
+use serde::{Deserialize, Serialize};
+
 
 
 
 
 // Tools for building circuits.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ArithCircuit {
     pub num_wires: usize,
     pub num_inputs: usize,
@@ -12,18 +14,23 @@ pub struct ArithCircuit {
     pub input_domains: Vec<u16>,
 }
 
-#[derive(Debug, PartialEq)]
+type Map = Box<dyn Fn(u16) -> u16>;
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) enum ArithGateKind {
     Add,
     Mul(u16),
-    Proj(u16, fn(u16) -> u16),
+    Proj(ProjectionGate)
+}
 
-    // Special cases of the projection gate
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) enum ProjectionGate {
     Map(u16),
     Less(u16),
 }
 
-#[derive(Debug)]
+
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct ArithGate {
     pub output: usize,
     pub domain: u16,

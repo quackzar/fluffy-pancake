@@ -1,8 +1,7 @@
 use core::ops;
 use std::iter;
-
 use sha2::{Sha256, Digest};
-
+use serde::{Serialize, Deserialize};
 use crate::util::*;
 
 
@@ -14,7 +13,7 @@ const SECURITY_PARAM : usize = 256; // bits used total
 const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
 
 // Maybe use domain as const generic?
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArithWire {
     pub domain: u16,
     values: [u8; LENGTH],

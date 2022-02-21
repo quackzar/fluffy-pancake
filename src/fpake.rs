@@ -26,7 +26,7 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
         let gate = ArithGate {
             inputs: vec![i + 2 * bitsize],
             output: i + 3 * bitsize,
-            kind: ArithGateKind::Map(comparison_domain),
+            kind: ArithGateKind::Proj(ProjectionGate::Map(comparison_domain)),
             domain: bitdomain,
         };
         gates.push(gate);
@@ -44,7 +44,7 @@ pub fn build_circuit(bitsize: usize, _threshold: u64) -> ArithCircuit {
     // comparison
     let threshold = 2; // TODO: Make threshold dynamic.
     let gate = ArithGate {
-        kind: ArithGateKind::Less(threshold),
+        kind: ArithGateKind::Proj(ProjectionGate::Less(threshold)),
         inputs: vec![4 * bitsize],
         output: 4 * bitsize + 1,
         domain: comparison_domain,
