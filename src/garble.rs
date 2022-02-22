@@ -21,20 +21,69 @@ pub struct EncodingKey {
     delta: HashMap<u16, Wire>,
 }
 
+struct BinaryEncodingKey ([Vec<Wire>; 2]);
+
+
 impl EncodingKey {
-    pub fn split(&self, ids: Vec<usize>) -> EncodingKey {
-        let mut delta = HashMap::new();
-        let wires: Vec<Wire> = ids.iter().map(|i| self.wires[*i].clone()).collect();
-        for wire in &wires {
-            let domain: u16 = wire.domain();
-            let d = self.delta[&domain].clone();
-            delta.insert(domain, d);
+    pub fn encode(&self, x: Vec<u16>) -> Vec<Wire> {
+        let wires = &self.wires;
+        let delta = &self.delta;
+        debug_assert_eq!(
+            wires.len(),
+            x.len(),
+            "Wire and input vector lengths do not match"
+        );
+
+        let mut z = Vec::with_capacity(x.len());
+        for (wire, x) in wires.iter().zip(x) {
+            z.push(wire + &(&delta[&wire.domain()] * x));
         }
-        EncodingKey { wires, delta }
+
+        z
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl From<EncodingKey> for BinaryEncodingKey {
+    fn from(key: EncodingKey) -> Self {
+        assert!(key.wires.iter().all(|w| w.domain() == 2));
+        let delta = key.delta[&2].clone();
+        let zeros = key.wires;
+        let ones : Vec<Wire> = zeros.iter().map(|w| w + &delta).collect();
+        let ones = ones.try_into().unwrap(); // should never fail
+        BinaryEncodingKey([zeros, ones])
+    }
+}
+
+impl From<BinaryEncodingKey> for EncodingKey {
+    fn from(key: BinaryEncodingKey) -> Self {
+        let mut delta = HashMap::new();
+        let d = &key.0[0][1] + &key.0[0][0];
+        delta.insert(2, d);
+        let wires = key.0[0].clone();
+        EncodingKey {
+            wires, delta,
+        }
+    }
+}
+
+
+impl BinaryEncodingKey {
+    fn encode(&self, bits: Vec<bool>) -> Vec<Wire> {
+        let mut wires = Vec::new();
+        for (i, bit) in bits.iter().enumerate() {
+            let wire = if *bit {
+                self.0[i][1].clone()
+            } else {
+                self.0[i][0].clone()
+            };
+            wires.push(wire);
+        }
+        wires
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub struct DecodingKey {
     pub(crate) hashes: Vec<Vec<Bytes>>,
     pub(crate) offset: usize,
@@ -49,6 +98,33 @@ impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Error decoding result")
     }
+}
+
+impl DecodingKey {
+    pub fn decode(&self, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
+        let mut y = Vec::with_capacity(z.len());
+        for i in 0..z.len() {
+            let output = self.offset + i;
+            let hashes = &self.hashes[i];
+
+            let mut success = false;
+            for k in 0..z[i].domain() {
+                let hash = hash(output, k, &z[i]);
+                if hash == hashes[k as usize] {
+                    y.push(k);
+                    success = true;
+                    break;
+                }
+            }
+
+            if !success {
+                return Err(DecodeError {});
+            }
+        }
+
+        Ok(y)
+    }
+
 }
 
 // -------------------------------------------------------------------------------------------------
