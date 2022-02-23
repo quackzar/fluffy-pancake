@@ -17,6 +17,7 @@ const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
 pub type Bytes = [u8; LENGTH];
 
 pub fn to_array(bytes : &[u8]) -> [u8; LENGTH] {
+    debug_assert!(bytes.len() == LENGTH, "Should be {} bytes", LENGTH);
     let mut array = [0u8; LENGTH];
     array.copy_from_slice(bytes);
     array

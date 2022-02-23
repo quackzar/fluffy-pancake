@@ -1,6 +1,5 @@
 use crate::util::*;
 use core::ops;
-use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::iter;
@@ -13,7 +12,7 @@ const SECURITY_PARAM: usize = 256; // bits used total
 const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
 
 // Maybe use domain as const generic?
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Wire {
     domain: Domain,
     values: [u8; LENGTH],
@@ -44,6 +43,8 @@ impl Domain {
         const U16_MAX: u16 = u16::max_value();
         if m == 0 {
             Domain::U16MAX
+        } else if m == 2 {
+            Domain::Binary
         } else if m < U8_MAX {
             Domain::U8(m as u8)
         } else if m == U8_MAX + 1 {
@@ -61,7 +62,7 @@ impl ops::Add<&Wire> for &Wire {
     fn add(self, rhs: &Wire) -> Wire {
         match self.domain {
             Domain::Binary => {
-                self.map_with(rhs, |a, b| (a + b) % 2)
+                self.map_with(rhs, |a, b| a ^ b)
             },
             Domain::U8(m) => {
                 self.map_with(rhs, |a, b| (a + b) % m)
@@ -79,7 +80,7 @@ impl ops::Sub<&Wire> for &Wire {
     fn sub(self, rhs: &Wire) -> Self::Output {
         match self.domain {
             Domain::Binary => {
-                self.map_with(rhs, |a, b| (a ^ b))
+                self.map_with(rhs, |a, b| a ^ b)
             },
             Domain::U8(m) => {
                 self.map_with(rhs, |a, b| (a + (m - b)) % m)
@@ -97,7 +98,7 @@ impl ops::Neg for &Wire {
     fn neg(self) -> Wire {
         match self.domain {
             Domain::Binary => {
-                self.map(|x : u8| 2 - x )
+                self.map(|x : u8| 0xFF ^ x )
             },
             Domain::U8(m) => {
                 self.map(|x : u8| m - x)
@@ -114,9 +115,10 @@ impl ops::Mul<u16> for &Wire {
     type Output = Wire;
     #[inline]
     fn mul(self, rhs: u16) -> Wire {
+        debug_assert!(rhs < self.domain());
         match self.domain {
             Domain::Binary => {
-                self.map(|_| 1)
+                self.map(|b| if b == 0 {0} else {b})
             },
             Domain::U8(m) => {
                 self.map(|x| (((x as u16) * (rhs as u16)) % (m as u16)) as u8)
@@ -241,7 +243,7 @@ impl Wire {
         let mut wire = Wire::new(domain);
         match wire.domain {
             Domain::Binary => { // endianness?
-                wire.values[LENGTH - 1] &= 1;
+                wire.values[LENGTH - 1] |= 1;
             },
             Domain::U8(_) | Domain::U8MAX => {
                 wire.values[LENGTH - 1] = 1;
@@ -258,7 +260,7 @@ impl Wire {
     #[inline]
     pub fn color(&self) -> u16 {
         match self.domain {
-            Domain::Binary => (self.values[LENGTH - 1] | 1) as u16, // endianness?
+            Domain::Binary => (self.values[LENGTH - 1] & 1) as u16, // endianness?
             Domain::U8(_) | Domain::U8MAX => self.values[LENGTH - 1] as u16,
             Domain::U16(_) | Domain::U16MAX => {
                 let v : [u16; LENGTH / 2] = bytemuck::cast(self.values);

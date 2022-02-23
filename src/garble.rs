@@ -21,6 +21,8 @@ pub struct EncodingKey {
     delta: HashMap<u16, Wire>,
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BinaryEncodingKey (pub Vec<Wire>, pub Vec<Wire>);
 
 
@@ -49,7 +51,7 @@ impl From<EncodingKey> for BinaryEncodingKey {
         let delta = key.delta[&2].clone();
         let zeros = key.wires;
         let ones : Vec<Wire> = zeros.iter().map(|w| w + &delta).collect();
-        let ones = ones.try_into().unwrap(); // should never fail
+        let ones = TryInto::try_into(ones).unwrap(); // should never fail
         BinaryEncodingKey(zeros, ones)
     }
 }
@@ -59,7 +61,7 @@ impl From<BinaryEncodingKey> for EncodingKey {
         let mut delta = HashMap::new();
         let d = &key.0[0] + &key.1[0];
         delta.insert(2, d);
-        let wires = key.0.clone();
+        let wires = key.0;
         EncodingKey {
             wires, delta,
         }
@@ -553,5 +555,38 @@ mod tests {
 
         let output = garble_encode_eval_decode(&circuit, &input);
         assert_eq!(output[0], 0);
+    }
+
+    #[test]
+    fn binary_encode_test() {
+        let circuit = Circuit {
+            gates: vec![Gate {
+                kind: GateKind::Add,
+                inputs: vec![0, 1, 2, 3, 5],
+                output: 6,
+                domain: 2,
+            }],
+            num_inputs: 6,
+            num_outputs: 1,
+            num_wires: 7,
+            input_domains: vec![2; 6],
+        };
+
+        let zeros = vec![0, 0, 0, 0, 0, 0];
+        let ones = vec![1, 1, 1, 1, 1, 1];
+        let (_, enc, _) = garble(&circuit);
+        let bin_enc = BinaryEncodingKey::from(enc.clone()); 
+        let new_enc = EncodingKey::from(bin_enc.clone());
+        for i in 0..6 {
+            assert!(enc.wires[i] == new_enc.wires[i], "new and old doesn't match'");
+        }
+        let ones = encode(&enc, &ones);
+        let zeros = encode(&enc, &zeros);
+        for (i, one) in ones.iter().enumerate() {
+            assert_eq!(one, &bin_enc.1[i], "encoding bad!");
+        }
+        for (i, zero) in zeros.iter().enumerate() {
+            assert_eq!(zero, &bin_enc.0[i], "encoding bad!");
+        }
     }
 }

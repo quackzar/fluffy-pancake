@@ -99,8 +99,10 @@ mod tests {
             1, 1, 1, 1,
         ];
         assert!(x.len() == 16);
-        let x : Vec<bool> = x.iter().map(|x| (*x) != 0).collect();
         let (f, e, d) = garble(&circuit);
+        let x_enc = encode(&e, &x);
+        let x : Vec<bool> = x.iter().map(|x| (*x) != 0).collect();
+
         // encoding OT.
         let e = BinaryEncodingKey::from(e);
         let msg : Vec<PlaintextPair> = e.0.iter().zip(e.1).map(|(w0, w1)| [w0.as_ref().to_vec(), (&w1).as_ref().to_vec()]).collect();
@@ -117,9 +119,30 @@ mod tests {
             .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
             .collect();
 
+        // expected input
+        assert!(x_enc == x_gb);
+        
         let res = evaluate(&circuit, &f, x_gb);
         let res = d.decode(res).expect("Error at decode");
         assert!(res[0] == 1);
+    }
+
+    #[test]
+    fn test_ot_wire() {
+        let wire1 = &Wire::new(2);
+        let wire2 = &Wire::new(2);
+        let msg = Message::new([[wire1.as_ref().to_vec(), wire2.as_ref().to_vec()]]);
+
+        // ot protocol
+        let sender = ObliviousSender::new(&msg);
+        let receiver = ObliviousReceiver::<Init, 1>::new([true].try_into().unwrap());
+        let receiver = receiver.accept(&sender.public());
+        let payload = sender.accept(&receiver.public());
+        let wire = &receiver.receive(&payload)[0];
+        let wire = Wire::from_bytes(to_array(&wire), Domain::Binary);
+        println!("{:?}", wire);
+        println!("{:?}", wire2);
+        assert!(&wire == wire2);
     }
 
     #[test]

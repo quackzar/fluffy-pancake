@@ -28,6 +28,7 @@ impl<const N : usize> Message<N> {
     pub fn new(msg : [CiphertextPair; N]) -> Message<N> {
         Message(msg)
     }
+
 }
 
 #[derive(Debug, Clone)]
@@ -224,6 +225,38 @@ mod tests {
         let msg = receiver.receive(&payload);
 
         assert!(msg[0] == m1);
+    }
+
+    #[test]
+    fn test_n_ots() {
+        let m : [[Vec<u8>; 2]; 5] = [
+           [vec![1], vec![6]],
+           [vec![2], vec![7]],
+           [vec![3], vec![8]],
+           [vec![4], vec![9]],
+           [vec![5], vec![10]],
+        ];
+
+        let msg = Message::new(m.clone());
+
+        let c = [true, false, true, false, true];
+        let receiver = ObliviousReceiver::new(c);
+        let sender = ObliviousSender::new(&msg);
+
+        // round 1
+        let receiver = receiver.accept(&sender.public());
+
+        // round 2
+        let payload = sender.accept(&receiver.public());
+
+        let msg = receiver.receive(&payload);
+        for m in &msg {
+            println!("{:?}", m);
+        }
+        for (i,&b) in c.iter().enumerate() {
+            assert!(msg[i] == m[i][b as usize],
+                "b={} has {:?} =! {:?} at i={}", b, msg[i], m[i][b as usize], i);
+        }
     }
 
     #[allow(non_snake_case)]
