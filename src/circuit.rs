@@ -31,7 +31,7 @@ impl ProjKind {
     pub fn project(&self, x: u16) -> u16 {
         use ProjKind::*;
         match *self {
-            Map(_) => x,
+            Map(m) => x % m,
             Less(t) => (x < t) as u16,
         }
     }
