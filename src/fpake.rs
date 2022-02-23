@@ -3,6 +3,8 @@ use itertools::Itertools;
 use crate::circuit::*;
 use crate::garble::*;
 use crate::util::*;
+use crate::ot::*;
+use crate::wires::*;
 
 // TODO: fPAKE protocol
 
@@ -61,6 +63,9 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
 
 // TODO: Handle OT for encoding.
 
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,6 +86,39 @@ mod tests {
             1, 1, 0,
         ];
         let res = garble_encode_eval_decode(&circuit, &x);
+        assert!(res[0] == 1);
+    }
+
+    #[test]
+    fn ot_encode_test() {
+        let circuit = build_circuit(8, 2);
+        let x = vec![
+            1, 1, 1, 1,
+            1, 1, 1, 1,
+            1, 1, 1, 1,
+            1, 1, 1, 1,
+        ];
+        assert!(x.len() == 16);
+        let x : Vec<bool> = x.iter().map(|x| (*x) != 0).collect();
+        let (f, e, d) = garble(&circuit);
+        // encoding OT.
+        let e = BinaryEncodingKey::from(e);
+        let msg : Vec<PlaintextPair> = e.0.iter().zip(e.1).map(|(w0, w1)| [w0.as_ref().to_vec(), (&w1).as_ref().to_vec()]).collect();
+        println!("msg len: {}", msg.len());
+        let msg = Message::<16>::new(msg.try_into().expect("too many wires"));
+        // ot protocol
+        let sender = ObliviousSender::new(&msg);
+        let receiver = ObliviousReceiver::<Init, 16>::new(x.try_into().unwrap());
+        let receiver = receiver.accept(&sender.public());
+        let payload = sender.accept(&receiver.public());
+        let x_gb = receiver.receive(&payload);
+        let x_gb = x_gb.iter()
+            .map(|b| to_array(b))
+            .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
+            .collect();
+
+        let res = evaluate(&circuit, &f, x_gb);
+        let res = d.decode(res).expect("Error at decode");
         assert!(res[0] == 1);
     }
 

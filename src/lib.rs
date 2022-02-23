@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+#![feature(slice_as_chunks)]
+
 
 pub mod circuit;
 pub mod fpake;

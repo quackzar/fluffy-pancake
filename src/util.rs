@@ -16,6 +16,12 @@ const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
 
 pub type Bytes = [u8; LENGTH];
 
+pub fn to_array(bytes : &[u8]) -> [u8; LENGTH] {
+    let mut array = [0u8; LENGTH];
+    array.copy_from_slice(bytes);
+    array
+}
+
 /// Variadic Hashing
 /// Hashing based on Sha256 producing a 32 byte hash
 /// Arguments are hashed in order.

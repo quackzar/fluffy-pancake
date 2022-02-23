@@ -20,7 +20,7 @@ pub struct Wire {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-enum Domain {
+pub enum Domain {
     Binary,
     U8(u8),
     U16(u16),
@@ -273,7 +273,7 @@ impl Wire {
         self.domain.num()
     }
 
-    fn from_bytes(values: [u8; LENGTH], domain : Domain) -> Wire {
+    pub fn from_bytes(values: [u8; LENGTH], domain : Domain) -> Wire {
         let wire = Wire { domain, values };
         match domain {
             Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,

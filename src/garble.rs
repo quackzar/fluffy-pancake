@@ -21,7 +21,7 @@ pub struct EncodingKey {
     delta: HashMap<u16, Wire>,
 }
 
-struct BinaryEncodingKey ([Vec<Wire>; 2]);
+pub struct BinaryEncodingKey (pub Vec<Wire>, pub Vec<Wire>);
 
 
 impl EncodingKey {
@@ -50,16 +50,16 @@ impl From<EncodingKey> for BinaryEncodingKey {
         let zeros = key.wires;
         let ones : Vec<Wire> = zeros.iter().map(|w| w + &delta).collect();
         let ones = ones.try_into().unwrap(); // should never fail
-        BinaryEncodingKey([zeros, ones])
+        BinaryEncodingKey(zeros, ones)
     }
 }
 
 impl From<BinaryEncodingKey> for EncodingKey {
     fn from(key: BinaryEncodingKey) -> Self {
         let mut delta = HashMap::new();
-        let d = &key.0[0][1] + &key.0[0][0];
+        let d = &key.0[0] + &key.1[0];
         delta.insert(2, d);
-        let wires = key.0[0].clone();
+        let wires = key.0.clone();
         EncodingKey {
             wires, delta,
         }
@@ -72,9 +72,9 @@ impl BinaryEncodingKey {
         let mut wires = Vec::new();
         for (i, bit) in bits.iter().enumerate() {
             let wire = if *bit {
-                self.0[i][1].clone()
+                self.1[i].clone()
             } else {
-                self.0[i][0].clone()
+                self.0[i].clone()
             };
             wires.push(wire);
         }
