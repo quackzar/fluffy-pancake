@@ -118,7 +118,7 @@ impl ops::Mul<u16> for &Wire {
         debug_assert!(rhs < self.domain());
         match self.domain {
             Domain::Binary => {
-                self.map(|b| if b == 0 {0} else {b})
+                self.map(|b| if rhs == 0 {0} else {b})
             },
             Domain::U8(m) => {
                 self.map(|x| (((x as u16) * (rhs as u16)) % (m as u16)) as u8)
