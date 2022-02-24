@@ -107,10 +107,10 @@ mod tests {
         let e = BinaryEncodingKey::from(e);
         let msg : Vec<PlaintextPair> = e.0.iter().zip(e.1).map(|(w0, w1)| [w0.as_ref().to_vec(), (&w1).as_ref().to_vec()]).collect();
         println!("msg len: {}", msg.len());
-        let msg = Message::<16>::new(msg.try_into().expect("too many wires"));
+        let msg = Message::new(&msg);
         // ot protocol
         let sender = ObliviousSender::new(&msg);
-        let receiver = ObliviousReceiver::<Init, 16>::new(x.try_into().unwrap());
+        let receiver = ObliviousReceiver::<Init>::new(&x);
         let receiver = receiver.accept(&sender.public());
         let payload = sender.accept(&receiver.public());
         let x_gb = receiver.receive(&payload);
@@ -131,11 +131,11 @@ mod tests {
     fn test_ot_wire() {
         let wire1 = &Wire::new(2);
         let wire2 = &Wire::new(2);
-        let msg = Message::new([[wire1.as_ref().to_vec(), wire2.as_ref().to_vec()]]);
+        let msg = Message::new(&[[wire1.as_ref().to_vec(), wire2.as_ref().to_vec()]]);
 
         // ot protocol
         let sender = ObliviousSender::new(&msg);
-        let receiver = ObliviousReceiver::<Init, 1>::new([true].try_into().unwrap());
+        let receiver = ObliviousReceiver::<Init>::new(&[true]);
         let receiver = receiver.accept(&sender.public());
         let payload = sender.accept(&receiver.public());
         let wire = &receiver.receive(&payload)[0];
@@ -155,10 +155,30 @@ mod tests {
             // Round 1
             let circuit = build_circuit(4, 2);
             let (f, e, d) = garble(&circuit);
+            let e = BinaryEncodingKey::from(e).zipped();
+            let e_alice = e[..4].to_vec();//.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
+            let e_bob = e[4..].to_vec();
+            // OT
+
+            // alice sender, bob receiver.
+            let msg = Message::new(e_alice);
+            let sender = ObliviousSender::new(&msg);
+            let x : Vec<bool> = pwsd_b.iter().map(|&x| x == 1).collect();
+            let receiver = ObliviousReceiver::<Init>::new(&x);
+            let receiver = receiver.accept(&sender.public());
+            let payload = sender.accept(&receiver.public());
+            let x_gb = receiver.receive(&payload);
+            let x_gb = x_gb.iter()
+                .map(|b| to_array(b))
+                .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
+                .collect();
+            
+            
+            
             let mut input = Vec::new();
+        
             input.extend(&pwsd_a); // Provided by OT
             input.extend(&pwsd_b);
-            let garbled_input = encode(&e, &input);
             let out = evaluate(&circuit, &f, garbled_input)[0].clone();
             (
                 hash!(

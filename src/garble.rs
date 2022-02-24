@@ -82,6 +82,19 @@ impl BinaryEncodingKey {
         }
         wires
     }
+
+    pub fn zipped(&self) -> Vec<[Wire; 2]> {
+        let mut wires = Vec::new();
+        for i in 0..self.0.len() {
+            wires.push([self.0[i].clone(), self.1[i].clone()]);
+        }
+        wires
+    }
+
+    
+    pub fn unzipped(zipped : Vec<[Wire; 2]>) -> Self {
+        unimplemented!()
+    }
 }
 
 

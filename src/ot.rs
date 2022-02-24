@@ -16,36 +16,38 @@ use sha2::{Digest, Sha256};
 
 // Common
 pub type CiphertextPair = [Vec<u8>; 2];
-#[derive(Debug, Clone)]
-pub struct Payload<const N: usize>([CiphertextPair; N]);
+#[derive(Debug)]
+pub struct Payload(Vec<CiphertextPair>);
 
 
 pub type PlaintextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone)]
-pub struct Message<const N: usize>([PlaintextPair; N]);
+pub struct Message(Vec<PlaintextPair>);
 
-impl<const N : usize> Message<N> {
-    pub fn new(msg : [CiphertextPair; N]) -> Message<N> {
-        Message(msg)
+impl Message {
+    pub fn new(msg : &[PlaintextPair]) -> Message {
+        Message(msg.to_vec())
     }
 
 }
 
+
 #[derive(Debug, Clone)]
-pub struct Public<const N: usize>([EdwardsPoint; N]);
+pub struct Public(Vec<EdwardsPoint>);
 
 // === Sender ====
-pub struct ObliviousSender<const N: usize> {
-    secrets: [Scalar; N],
-    publics: Public<N>,
-    messages: Message<N>,
+pub struct ObliviousSender {
+    secrets: Vec<Scalar>,
+    publics: Public,
+    messages: Message,
 }
 
-impl<const N: usize> ObliviousSender<N> {
-    pub fn new(messages: &Message<N>) -> Self {
+impl ObliviousSender {
+    pub fn new(messages: &Message) -> Self {
         // FUTURE: Take randomness as input.
+        let n = messages.0.len();
         let mut rng = ChaCha12Rng::from_entropy();
-        let secrets = (0..N).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
+        let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
         let publics = secrets
             .iter()
             .map(|secret| &ED25519_BASEPOINT_TABLE * secret)
@@ -59,16 +61,17 @@ impl<const N: usize> ObliviousSender<N> {
         }
     }
 
-    pub fn public(&self) -> Public<N> {
+    pub fn public(&self) -> Public {
         self.publics.clone()
     }
 
-    pub fn accept(&self, their_public: &Public<N>) -> Payload<N> {
-        let secrets = self.secrets;
+    pub fn accept(&self, their_public: &Public) -> Payload {
+        let n = self.messages.0.len();
+        let secrets = &self.secrets;
         let publics = &self.publics;
         let messages = &self.messages;
-        let mut payload: Vec<[Vec<u8>; 2]> = Vec::with_capacity(N);
-        for i in 0..N {
+        let mut payload: Vec<[Vec<u8>; 2]> = Vec::with_capacity(n);
+        for i in 0..n {
             // TODO: Use maybe uninit
             let their_public = &their_public.0[i];
             let public = &publics.0[i];
@@ -106,23 +109,25 @@ impl<const N: usize> ObliviousSender<N> {
 
 pub struct Init;
 
-pub struct RetrievingPayload<const N: usize> {
-    keys: [Vec<u8>; N],
-    publics: Public<N>,
+pub struct RetrievingPayload {
+    keys: Vec<Vec<u8>>,
+    publics: Public,
 }
 
-pub struct ObliviousReceiver<S, const N: usize> {
+pub struct ObliviousReceiver<S> {
     state: S,
-    secrets: [Scalar; N],
-    choices: [bool; N],
+    secrets: Vec<Scalar>,
+    choices: Vec<bool>,
 }
 
-impl<const N: usize> ObliviousReceiver<Init, N> {
-    pub fn new(choices: [bool; N]) -> Self {
+impl ObliviousReceiver<Init> {
+    pub fn new(choices: &[bool]) -> Self {
         // FUTURE: Take randomness as input.
+        let n = choices.len();
         let mut rng = ChaCha12Rng::from_entropy();
-        let secrets = (0..N).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
+        let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
         let secrets = secrets.try_into().unwrap();
+        let choices = choices.to_vec();
         Self {
             state: Init,
             secrets,
@@ -130,10 +135,11 @@ impl<const N: usize> ObliviousReceiver<Init, N> {
         }
     }
 
-    pub fn accept(&self, their_publics: &Public<N>) -> ObliviousReceiver<RetrievingPayload<N>, N> {
-        let mut keys: Vec<Vec<u8>> = Vec::with_capacity(N);
-        let mut publics: Vec<EdwardsPoint> = Vec::with_capacity(N);
-        for i in 0..N {
+    pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
+        let n = their_publics.0.len();
+        let mut keys: Vec<Vec<u8>> = Vec::with_capacity(n);
+        let mut publics: Vec<EdwardsPoint> = Vec::with_capacity(n);
+        for i in 0..n {
             // TODO: Use maybe uninit
             let public = if self.choices[i] {
                 their_publics.0[i] + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
@@ -150,25 +156,26 @@ impl<const N: usize> ObliviousReceiver<Init, N> {
             keys.push(key);
             publics.push(public);
         }
-        let keys = keys.try_into().unwrap();
-        let publics = Public(publics.try_into().unwrap());
+        let keys = keys;
+        let publics = Public(publics);
 
         ObliviousReceiver {
             state: RetrievingPayload { keys, publics },
-            secrets: self.secrets,
-            choices: self.choices,
+            secrets: self.secrets.clone(),
+            choices: self.choices.clone(),
         }
     }
 }
 
-impl<const N: usize> ObliviousReceiver<RetrievingPayload<N>, N> {
-    pub fn public(&self) -> Public<N> {
+impl ObliviousReceiver<RetrievingPayload> {
+    pub fn public(&self) -> Public {
         self.state.publics.clone()
     }
 
-    pub fn receive(&self, payload: &Payload<N>) -> [Vec<u8>; N] {
-        let mut messages: Vec<Vec<u8>> = Vec::with_capacity(N);
-        for i in 0..N {
+    pub fn receive(&self, payload: &Payload) -> Vec<Vec<u8>> {
+        let n = payload.0.len();
+        let mut messages: Vec<Vec<u8>> = Vec::with_capacity(n);
+        for i in 0..n {
             let [e0, e1] = &payload.0[i];
             let key = Key::from_slice(&self.state.keys[i]);
             let cipher = Aes256Gcm::new(key);
@@ -193,8 +200,8 @@ mod tests {
         let m1 = b"Hello, sweden!".to_vec();
 
         // round 0
-        let receiver = ObliviousReceiver::new([false]);
-        let sender = ObliviousSender::new(&Message([[m0.clone(), m1.clone()]]));
+        let receiver = ObliviousReceiver::new(&[false]);
+        let sender = ObliviousSender::new(&Message(vec![[m0.clone(), m1.clone()]]));
 
         // round 1
         let receiver = receiver.accept(&sender.public());
@@ -213,8 +220,8 @@ mod tests {
         let m1 = b"Hello, sweden!".to_vec();
 
         // round 0
-        let receiver = ObliviousReceiver::new([true]);
-        let sender = ObliviousSender::new(&Message([[m0.clone(), m1.clone()]]));
+        let receiver = ObliviousReceiver::new(&[true]);
+        let sender = ObliviousSender::new(&Message(vec![[m0.clone(), m1.clone()]]));
 
         // round 1
         let receiver = receiver.accept(&sender.public());
@@ -237,10 +244,10 @@ mod tests {
            [vec![5], vec![10]],
         ];
 
-        let msg = Message::new(m.clone());
+        let msg = Message::new(&m);
 
         let c = [true, false, true, false, true];
-        let receiver = ObliviousReceiver::new(c);
+        let receiver = ObliviousReceiver::new(&c);
         let sender = ObliviousSender::new(&msg);
 
         // round 1
