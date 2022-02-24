@@ -283,6 +283,10 @@ impl Wire {
             Domain::U16(m) => wire.map_as_u16(|x| x % m),
         }
     }
+
+    pub fn to_bytes(&self) -> [u8; LENGTH] {
+        self.values
+    }
 }
 
 impl AsRef<[u8]> for &Wire {

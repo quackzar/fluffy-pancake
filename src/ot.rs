@@ -29,6 +29,17 @@ impl Message {
         Message(msg.to_vec())
     }
 
+    pub fn from(msg : &[[&[u8]; 2]]) -> Message {
+        let mut vec = Vec::with_capacity(msg.len());
+        for m in msg {
+            let m0 = m[0].to_vec();
+            let m1 = m[1].to_vec();
+            let pair : PlaintextPair = [m0, m1];
+            vec.push(pair);
+        }
+        Message(vec)
+    }
+
 }
 
 
