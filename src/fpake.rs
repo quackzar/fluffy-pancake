@@ -156,42 +156,30 @@ mod tests {
             let circuit = build_circuit(4, 2);
             let (f, e, d) = garble(&circuit);
             let e = BinaryEncodingKey::from(e).zipped();
-            let e_alice = [[(&e[0][0]).as_ref().to_vec(), (&e[0][1]).as_ref().to_vec()], [(&e[1][0]).as_ref().to_vec(), (&e[1][1]).as_ref().to_vec()], [(&e[2][0]).as_ref().to_vec(), (&e[2][1]).as_ref().to_vec()], [(&e[3][0]).as_ref().to_vec(), (&e[3][1]).as_ref().to_vec()]];
-            let e_bob = [[(&e[4][0]).as_ref().to_vec(), (&e[4][1]).as_ref().to_vec()], [(&e[5][0]).as_ref().to_vec(), (&e[5][1]).as_ref().to_vec()], [(&e[6][0]).as_ref().to_vec(), (&e[6][1]).as_ref().to_vec()], [(&e[7][0]).as_ref().to_vec(), (&e[7][1]).as_ref().to_vec()]];
+            let e_alice = e[..4].to_vec();//.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
+            let e_bob = e[4..].to_vec();
             // OT
 
             // alice sender, bob receiver.
-            let msg = Message::new(&e_alice);
+            let msg = Message::new(e_alice);
             let sender = ObliviousSender::new(&msg);
             let x : Vec<bool> = pwsd_b.iter().map(|&x| x == 1).collect();
             let receiver = ObliviousReceiver::<Init>::new(&x);
             let receiver = receiver.accept(&sender.public());
             let payload = sender.accept(&receiver.public());
             let x_gb = receiver.receive(&payload);
-            let x_gb: Vec<Wire> = x_gb.iter()
+            let x_gb = x_gb.iter()
                 .map(|b| to_array(b))
                 .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
                 .collect();
-
-            let mut encoded_input: Vec<Wire> = vec![
-                x_gb[0],
-                x_gb[1],
-                x_gb[2],
-                x_gb[3],
-            ];
-
-            for i in 0..4 {
-                // TODO: How to get LENGTH?
-                let mut arr = [0u8; 32];
-                for j in 0..32 {
-                    arr[j] = e_bob[i][pwsd_b[i]][j];
-                }
-
-                // TODO: How to get domain?
-                encoded_input.push(Wire::from_bytes(arr, Domain::U8(4)));
-            }
-
-            let out = evaluate(&circuit, &f, encoded_input)[0].clone();
+            
+            
+            
+            let mut input = Vec::new();
+        
+            input.extend(&pwsd_a); // Provided by OT
+            input.extend(&pwsd_b);
+            let out = evaluate(&circuit, &f, garbled_input)[0].clone();
             (
                 hash!(
                     (circuit.num_wires - 1).to_be_bytes(),
@@ -204,46 +192,14 @@ mod tests {
 
         // Bob's garbled circuit and Alice's eval
         let (out_a, one_b) = {
-            // Round 1
+            // Round 2
             let circuit = build_circuit(4, 2);
             let (f, e, d) = garble(&circuit);
-            let e = BinaryEncodingKey::from(e).zipped();
-            let e_alice = [[(&e[0][0]).as_ref().to_vec(), (&e[0][1]).as_ref().to_vec()], [(&e[1][0]).as_ref().to_vec(), (&e[1][1]).as_ref().to_vec()], [(&e[2][0]).as_ref().to_vec(), (&e[2][1]).as_ref().to_vec()], [(&e[3][0]).as_ref().to_vec(), (&e[3][1]).as_ref().to_vec()]];
-            let e_bob = [[(&e[4][0]).as_ref().to_vec(), (&e[4][1]).as_ref().to_vec()], [(&e[5][0]).as_ref().to_vec(), (&e[5][1]).as_ref().to_vec()], [(&e[6][0]).as_ref().to_vec(), (&e[6][1]).as_ref().to_vec()], [(&e[7][0]).as_ref().to_vec(), (&e[7][1]).as_ref().to_vec()]];
-            // OT
-
-            // alice receiver, bob sender.
-            let msg = Message::new(&e_alice);
-            let sender = ObliviousSender::new(&msg);
-            let x : Vec<bool> = pwsd_a.iter().map(|&x| x == 1).collect();
-            let receiver = ObliviousReceiver::<Init>::new(&x);
-            let receiver = receiver.accept(&sender.public());
-            let payload = sender.accept(&receiver.public());
-            let x_gba = receiver.receive(&payload);
-            let x_gba: Vec<Wire> = x_gba.iter()
-                .map(|b| to_array(b))
-                .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
-                .collect();
-
-            let mut encoded_input: Vec<Wire> = vec![
-                x_gba[0],
-                x_gba[1],
-                x_gba[2],
-                x_gba[3],
-            ];
-
-            for i in 0..4 {
-                // TODO: How to get LENGTH?
-                let mut arr = [0u8; 32];
-                for j in 0..32 {
-                    arr[j] = e_alice[i][pwsd_a[i]][j];
-                }
-
-                // TODO: How to get domain?
-                encoded_input.push(Wire::from_bytes(arr, Domain::U8(4)));
-            }
-
-            let out = evaluate(&circuit, &f, encoded_input)[0].clone();
+            let mut input = Vec::new();
+            input.extend(&pwsd_a); // Provided by OT
+            input.extend(&pwsd_b);
+            let garbled_input = encode(&e, &input);
+            let out = evaluate(&circuit, &f, garbled_input)[0].clone();
             (
                 hash!(
                     (circuit.num_wires - 1).to_be_bytes(),
@@ -253,7 +209,6 @@ mod tests {
                 d.hashes[0][1],
             )
         };
-
         let key_a = xor(out_a, one_a);
         let key_b = xor(out_b, one_b);
         assert_eq!(key_a, key_b)
