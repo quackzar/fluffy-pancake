@@ -223,27 +223,33 @@ fn fk(key: &[u8; 32], choice: u16) -> [u8; 32] {
 // 3. Choose
 // 4. Finish
 
-fn one_to_n_initiate(domain: u16, x: &Vec<[u8; 32]>)
-{
-    const wire_bytes: usize = 32;
+const WIRE_BYTES: usize = 32;
 
+// Bob: Initiate 1-to-n OT (initiated by the sender, Bob):
+// - Prepares keys and uses these to generate the required y values sent to Alice
+// - Creates challenges for Alice
+fn one_to_n_challenge_create(domain: u16, messages: &Vec<[u8; WIRE_BYTES]>) -> (Vec<ObliviousSender>, Vec<Public>, Vec<[u8; WIRE_BYTES]>)
+{
     // 1. B: Prepare random keys
-    let l = x.len();
+    let l = messages.len();
+    debug_assert!(l == (1 << domain));
+
     let mut rng = ChaCha12Rng::from_entropy();
-    let mut keys: Vec<[[u8; wire_bytes]; 2]> = Vec::with_capacity(l);
+    let mut keys: Vec<[[u8; WIRE_BYTES]; 2]> = Vec::with_capacity(l);
     for i in 0..l {
         let left = Scalar::random(&mut rng).to_bytes();
         let right = Scalar::random(&mut rng).to_bytes();
+
         keys.push([left, right]);
     }
 
     let domain_max = 1 << domain; // 2^domain
     let mut y = Vec::with_capacity(domain_max);
     for i in 0..domain_max {
-        let mut value = x[i];
+        let mut value = messages[i];
         for j in 0..domain {
-            let bit = 1; // TODO: Grab the j'th bit from i
-            let hash = fk(&keys[j as usize][bit as usize], j);
+            let bit = (i & (1 << j)) >> j;
+            let hash = fk(&keys[j as usize][bit as usize], i as u16);
             xor_bytes(&mut value, &hash);
         }
 
@@ -260,39 +266,46 @@ fn one_to_n_initiate(domain: u16, x: &Vec<[u8; 32]>)
         let message = Message::new(&[[m0, m1]]);
         let sender = ObliviousSender::new(&message);
 
-        senders.push(sender);
         challenges.push(sender.public());
+        senders.push(sender);
     }
 
-    // TODO: Send challenges to other party
+    return (senders, challenges, y);
 }
 
-fn one_to_n_challenge_respond(domain: u16, choice: u16) {
+// Alice: Respond to challenge from Bob
+// - Setup receivers
+// - Create responses for Bob
+fn one_to_n_challenge_respond(domain: u16, choice: u16, challenges: &Vec<Public>) -> (Vec<ObliviousReceiver<RetrievingPayload>>, Vec<Public>) {
     let l = 1 << domain;
+
+    println!();
+    let mut initial_receivers = Vec::with_capacity(l);
+    for i in 0..l {
+        let bit = (choice & (1 << i)) >> i;
+        let receiver = ObliviousReceiver::new(&[bit == 1]);
+        initial_receivers.push(receiver);
+    }
+
+    // NOTE: This assume we get them in order!
+    debug_assert!(initial_receivers.len() == challenges.len());
+    debug_assert!(challenges.len() == l);
+    let mut responses = Vec::with_capacity(l);
     let mut receivers = Vec::with_capacity(l);
     for i in 0..l {
-        // TODO: Grab the corresponding bit from choice!
-        let receiver = ObliviousReceiver::new(&[true]);
+        let receiver = initial_receivers[i].accept(&challenges[i]);
+        responses.push(receiver.public());
         receivers.push(receiver);
     }
 
-    // TODO: Actually receive the challenges
-    // NOTE: This assume we get them in order!
-    let challenges: Vec<Public> = Vec::new();
-    debug_assert!(receivers.len() == challenges.len());
-    debug_assert!(challenges.len() == l);
-    for i in 0..l {
-        receivers[i].accept(&challenges[i]);
-    }
-
-    // TODO: Send responses to other party
+    return (receivers, responses);
 }
 
-fn one_to_n_choose(domain: u16) {
-    // TODO: Actually receive responses from other party
-    let responses: Vec<Public> = Vec::new();
+// Bob: Create payloads for Alice
+fn one_to_n_create_payloads(domain: u16, senders: &Vec<ObliviousSender>, responses: &Vec<Public>) -> Vec<Payload> {
+    let l = 1 << domain;
+
     let mut payloads: Vec<Payload> = Vec::with_capacity(l);
-    debug_assert!(challenges.len() == responses.len());
     debug_assert!(responses.len() == l);
     for i in 0..l {
         let payload = senders[i].accept(&responses[i]);
@@ -300,35 +313,71 @@ fn one_to_n_choose(domain: u16) {
     }
 
     // 3. B: Send the strings Y to A
-    // TODO: Send payloads to other party
-    // TODO: Send Ys to other party
+    return payloads;
 }
 
-fn one_to_n_finish(domain: u16, choice: u16, receivers: &Vec<ObliviousReceiver<S>>) {
+// Alice: Chose a value
+fn one_to_n_choose(domain: u16, choice: u16, receivers: &Vec<ObliviousReceiver<RetrievingPayload>>, payloads: &Vec<Payload>, y: &Vec<[u8; WIRE_BYTES]>) -> [u8; 32] {
     let l = 1 << domain;
 
-    // TODO: Receive payloads
-    // TODO: Receive Ys
-    let payloads: Vec<Payload> = Vec::new();
-    let y: Vec<[u8; 32]> = Vec::new();
+    println!();
 
     // Convert payloads to keys
-    let mut keys: Vec<[u8; 32]> = Vec::new();
+    let mut keys: Vec<[u8; 32]> = Vec::with_capacity(l);
     for i in 0..l {
-        let message = receivers[i].retrieve(payloads[i]);
+        let messages = receivers[i].receive(&payloads[i]);
+        let message = &messages[0];
+        debug_assert!(messages.len() == 1);
+        debug_assert!(message.len() == WIRE_BYTES);
+
+        let mut key = [0u8; WIRE_BYTES];
+        for j in 0..WIRE_BYTES {
+            key[j] = message[j];
+        }
+
+        keys.push(key);
     }
 
-    // Reconstruct X_I
-    let mut x = y[choice];
-    for i in 0..l {
-        xor_bytes(&mut x, &fk(&keys[i], choice));
+    // Reconstruct X from keys and choice
+    let mut x = y[choice as usize];
+    for i in 0..domain {
+        let hash = fk(&keys[i as usize], choice);
+        xor_bytes(&mut x, &hash);
     }
+
+    return x;
 }
 
 #[cfg(test)]
 mod tests {
-
+    use crate::util::log2;
     use super::*;
+
+    #[test]
+    fn test_1_to_n() {
+        let n = 8u8;
+        let domain = log2(n) as u16;
+        let mut messages = Vec::with_capacity(n as usize);
+        for i in 0u8..n {
+            messages.push([i; WIRE_BYTES]);
+        }
+        let choice = 4;
+
+        // Initiate the OT by creating and responding to challenges
+        let (senders, challenges, y) = one_to_n_challenge_create(domain, &messages);
+        let (receivers, responses) = one_to_n_challenge_respond(domain, choice, &challenges);
+
+        // Bob: Creates payloads for Alice
+        let payloads = one_to_n_create_payloads(domain, &senders, &responses);
+
+        // Alice: Choose a value
+        let output = one_to_n_choose(domain, choice, &receivers, &payloads, &y);
+
+        // Check that we actually got the thing we wanted
+        for i in 0..WIRE_BYTES {
+            assert_eq!(messages[choice as usize][i], output[i]);
+        }
+    }
 
     #[test]
     fn test_ot_protocol_zero() {
