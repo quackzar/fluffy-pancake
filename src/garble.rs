@@ -70,7 +70,7 @@ impl From<BinaryEncodingKey> for EncodingKey {
 
 
 impl BinaryEncodingKey {
-    fn encode(&self, bits: Vec<bool>) -> Vec<Wire> {
+    pub fn encode(&self, bits: &[bool]) -> Vec<Wire> {
         let mut wires = Vec::new();
         for (i, bit) in bits.iter().enumerate() {
             let wire = if *bit {
@@ -92,8 +92,9 @@ impl BinaryEncodingKey {
     }
 
     
-    pub fn unzipped(zipped : Vec<[Wire; 2]>) -> Self {
-        unimplemented!()
+    pub fn unzipped(zipped : &[[Wire; 2]]) -> Self {
+        let (zero, one) = zipped.iter().map(|[w0, w1]| (w0.clone(), w1.clone())).unzip();
+        Self(zero, one)
     }
 }
 
@@ -116,7 +117,7 @@ impl fmt::Display for DecodeError {
 }
 
 impl DecodingKey {
-    pub fn decode(&self, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
+    pub fn decode(&self, z: &[Wire]) -> Result<Vec<u16>, DecodeError> {
         let mut y = Vec::with_capacity(z.len());
         for i in 0..z.len() {
             let output = self.offset + i;
@@ -267,7 +268,7 @@ pub fn garble(circuit: &Circuit) -> (ProjMap, EncodingKey, DecodingKey) {
     (f, encode_key, decode_key)
 }
 
-pub fn evaluate(circuit: &Circuit, f: &ProjMap, x: Vec<Wire>) -> Vec<Wire> {
+pub fn evaluate(circuit: &Circuit, f: &ProjMap, x: &[Wire]) -> Vec<Wire> {
     debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
 
     let mut wires: Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);
@@ -354,7 +355,7 @@ mod tests {
     fn garble_encode_eval_decode(c: &Circuit, x: &Vec<u16>) -> Vec<u16> {
         let (f, e, d) = garble(c);
         let x = encode(&e, x);
-        let z = evaluate(c, &f, x);
+        let z = evaluate(c, &f, &x);
         decode(&d, z).unwrap()
     }
 

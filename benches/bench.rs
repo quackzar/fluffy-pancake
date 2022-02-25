@@ -15,7 +15,7 @@ fn bench_eval(c: &mut Criterion) {
     let (f, e, _) = garble(&circuit);
     let x = encode(&e, &vec![1; 2 * BITS]);
     c.bench_function("Eval garbled", |b| {
-        b.iter(|| evaluate(&circuit, &f, x.clone()))
+        b.iter(|| evaluate(&circuit, &f, &x))
     });
 }
 
@@ -27,8 +27,8 @@ fn run_one_ot() {
         let m1 = b"Hello, sweden!".to_vec();
 
         // round 0
-        let receiver = ObliviousReceiver::new([false]);
-        let sender = ObliviousSender::new(&Message::new([[m0.clone(), m1.clone()]]));
+        let receiver = ObliviousReceiver::new(&[false]);
+        let sender = ObliviousSender::new(&Message::new(&[[m0, m1]]));
 
         // round 1
         let receiver = receiver.accept(&sender.public());
