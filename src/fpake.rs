@@ -64,6 +64,83 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
 // TODO: Handle OT for encoding.
 
 
+fn u8_vec_to_bool_vec(str: &[u8]) -> Vec<bool> {
+    let mut bits = Vec::with_capacity(8*str.len());
+    for s in str {
+        for i in 0..8 {
+            bits.push((s >> i) & 1 == 1);
+        }
+    }
+    bits
+}
+
+
+pub struct HalfKey ([u8; 32]);
+
+pub struct Key([u8; 32]);
+
+impl HalfKey {
+    pub fn sender(password : &[u8], threshold: u16) -> HalfKey {
+        let n = password.len();
+        let circuit = build_circuit(n, threshold);
+        let (f, e, d) = garble(&circuit);
+        let e = BinaryEncodingKey::from(e).zipped();
+        let e_own = e[..n].to_vec();//.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
+        let e_theirs = e[n..].to_vec(); // encoding for receiver's password'
+        let e_theirs : Vec<_> = e_theirs.iter().map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()]).collect();
+
+
+        let msg = Message::new(&e_theirs);
+        let sender = ObliviousSender::new(&msg);
+        // send OT public key and receive their public.
+        let payload = sender.accept(todo!());
+        // send payload.
+
+        // send garbled circuit.
+        
+        let e_own = BinaryEncodingKey::unzipped(&e_own);
+        let password = u8_vec_to_bool_vec(password);
+        let enc_password = e_own.encode(&password);
+        // send garbled password.
+
+        HalfKey(d.hashes[0][1])
+    }
+
+    pub fn receiver(password : &[u8], threshold: u16) -> Self {
+        let password = u8_vec_to_bool_vec(password);
+        let receiver = ObliviousReceiver::<Init>::new(&password);
+        // receive ot public key.
+        let receiver = receiver.accept(todo!());
+        let payload = todo!(); // receive payload.
+        let enc_password = receiver.receive(payload);
+        let enc_password : Vec<Wire> = enc_password.iter()
+            .map(|b| to_array(b))
+            .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
+            .collect();
+
+        let our_password = enc_password;
+        // receive garbled circuit.
+        let circuit = todo!();
+        let projs = todo!();
+        // receive garbled password.
+        let their_password : Vec<Wire> = todo!();
+
+        // eval circuit
+        let input = Vec::<Wire>::new();
+        input.extend(our_password);
+        input.extend(their_password);
+        let output = evaluate(circuit, projs, &input);
+        HalfKey(hash!(
+            (circuit.num_wires - 1).to_be_bytes(),
+            1u16.to_be_bytes(),
+            &output[0]
+        ))
+    }
+
+    pub fn combine(self, other: Self) -> Key {
+        Key(xor(self.0, other.0))
+    }
+}
 
 
 #[cfg(test)]

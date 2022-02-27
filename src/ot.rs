@@ -4,7 +4,7 @@
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use curve25519_dalek::constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
-use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::edwards::{EdwardsPoint,CompressedEdwardsY};
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use curve25519_dalek::scalar::Scalar;
 
@@ -17,12 +17,12 @@ use crate::hash;
 
 // Common
 pub type CiphertextPair = [Vec<u8>; 2];
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Payload(Vec<CiphertextPair>);
 
 
 pub type PlaintextPair = [Vec<u8>; 2];
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message(Vec<PlaintextPair>);
 
 impl Message {
@@ -45,7 +45,18 @@ impl Message {
 
 
 #[derive(Debug, Clone)]
-pub struct Public(Vec<EdwardsPoint>);
+pub struct Public(Vec<CompressedEdwardsY>);
+
+impl From<&[[u8; 32]]> for Public {
+    fn from(bytes : &[[u8; 32]]) -> Public {
+        let mut vec = Vec::with_capacity(bytes.len());
+        for b in bytes {
+            let p = CompressedEdwardsY::from_slice(b);
+            vec.push(p);
+        }
+        Public(vec)
+    }
+}
 
 // === Sender ====
 pub struct ObliviousSender {
@@ -63,6 +74,7 @@ impl ObliviousSender {
         let publics = secrets
             .iter()
             .map(|secret| &ED25519_BASEPOINT_TABLE * secret)
+            .map(|public| public.compress())
             .collect::<Vec<_>>();
         let secrets = secrets.try_into().unwrap();
         let publics = Public(publics.try_into().unwrap());
@@ -84,9 +96,10 @@ impl ObliviousSender {
         let messages = &self.messages;
         let mut payload: Vec<[Vec<u8>; 2]> = Vec::with_capacity(n);
         for i in 0..n {
-            // TODO: Use maybe uninit
-            let their_public = &their_public.0[i];
-            let public = &publics.0[i];
+            // TODO: Use maybe uninit.
+            // TODO: Proper error handling.
+            let their_public = &their_public.0[i].decompress().unwrap();
+            let public = &publics.0[i].decompress().unwrap();
             let secret = &secrets[i];
             let [m0, m1] = &messages.0[i];
 
@@ -150,23 +163,24 @@ impl ObliviousReceiver<Init> {
     pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
         let n = their_publics.0.len();
         let mut keys: Vec<Vec<u8>> = Vec::with_capacity(n);
-        let mut publics: Vec<EdwardsPoint> = Vec::with_capacity(n);
+        let mut publics = Vec::with_capacity(n);
         for i in 0..n {
             // TODO: Use maybe uninit
+            let their_public = their_publics.0[i].decompress().unwrap();
             let public = if self.choices[i] {
-                their_publics.0[i] + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
+                their_public + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
             } else {
                 &ED25519_BASEPOINT_TABLE * &self.secrets[i]
             };
             let mut hasher = Sha256::new();
             hasher.update(
-                (their_publics.0[i] * self.secrets[i])
+                (their_public * self.secrets[i])
                     .to_montgomery()
                     .as_bytes(),
             );
             let key = hasher.finalize().to_vec();
             keys.push(key);
-            publics.push(public);
+            publics.push(public.compress());
         }
         let keys = keys;
         let publics = Public(publics);
