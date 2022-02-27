@@ -156,7 +156,7 @@ fn projection_less(value: u16, threshold: u16) -> u16 {
     (value < threshold) as u16
 }
 
-pub fn garble(circuit: &Circuit) -> (ProjMap, EncodingKey, DecodingKey) {
+pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut delta = HashMap::new();
     for gate in &circuit.gates {
@@ -265,10 +265,22 @@ pub fn garble(circuit: &Circuit) -> (ProjMap, EncodingKey, DecodingKey) {
         offset: outputs_start_at,
     };
 
-    (f, encode_key, decode_key)
+    let gc = GarbledCircuit {
+        circuit, f
+    };
+
+    (gc, encode_key, decode_key)
 }
 
-pub fn evaluate(circuit: &Circuit, f: &ProjMap, x: &[Wire]) -> Vec<Wire> {
+pub struct GarbledCircuit<'a> {
+    pub circuit : &'a Circuit,
+    f : ProjMap,
+}
+
+
+pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
+    let f = &circuit.f;
+    let circuit = circuit.circuit;
     debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
 
     let mut wires: Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);
@@ -353,9 +365,9 @@ mod tests {
     use super::*;
 
     fn garble_encode_eval_decode(c: &Circuit, x: &Vec<u16>) -> Vec<u16> {
-        let (f, e, d) = garble(c);
+        let (gc, e, d) = garble(c);
         let x = encode(&e, x);
-        let z = evaluate(c, &f, &x);
+        let z = evaluate(&gc, &x);
         decode(&d, z).unwrap()
     }
 

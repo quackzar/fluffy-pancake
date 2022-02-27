@@ -12,10 +12,10 @@ fn bench_garble(c: &mut Criterion) {
 fn bench_eval(c: &mut Criterion) {
     const BITS: usize = 16;
     let circuit = build_circuit(BITS, 8);
-    let (f, e, _) = garble(&circuit);
+    let (gc, e, _) = garble(&circuit);
     let x = encode(&e, &vec![1; 2 * BITS]);
     c.bench_function("Eval garbled", |b| {
-        b.iter(|| evaluate(&circuit, &f, &x))
+        b.iter(|| evaluate(&gc, &x))
     });
 }
 

@@ -97,7 +97,7 @@ impl HalfKey {
         // send payload.
 
         // send garbled circuit.
-        
+
         let e_own = BinaryEncodingKey::unzipped(&e_own);
         let password = u8_vec_to_bool_vec(password);
         let enc_password = e_own.encode(&password);
@@ -120,8 +120,7 @@ impl HalfKey {
 
         let our_password = enc_password;
         // receive garbled circuit.
-        let circuit = todo!();
-        let projs = todo!();
+        let gc = todo!();
         // receive garbled password.
         let their_password : Vec<Wire> = todo!();
 
@@ -129,9 +128,9 @@ impl HalfKey {
         let input = Vec::<Wire>::new();
         input.extend(our_password);
         input.extend(their_password);
-        let output = evaluate(circuit, projs, &input);
+        let output = evaluate(gc, &input);
         HalfKey(hash!(
-            (circuit.num_wires - 1).to_be_bytes(),
+            (gc.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
             &output[0]
         ))
@@ -148,9 +147,9 @@ mod tests {
     use super::*;
 
     fn garble_encode_eval_decode(c: &Circuit, x: &Vec<u16>) -> Vec<u16> {
-        let (f, e, d) = garble(c);
+        let (gc, e, d) = garble(c);
         let x = encode(&e, x);
-        let z = evaluate(c, &f, &x);
+        let z = evaluate(&gc, &x);
         decode(&d, z).unwrap()
     }
 
@@ -176,7 +175,7 @@ mod tests {
             1, 1, 1, 1,
         ];
         assert!(x.len() == 16);
-        let (f, e, d) = garble(&circuit);
+        let (gc, e, d) = garble(&circuit);
         let x_enc = encode(&e, &x);
         let x : Vec<bool> = x.iter().map(|x| (*x) != 0).collect();
 
@@ -199,7 +198,7 @@ mod tests {
         // expected input
         assert!(x_enc == x_gb);
         
-        let res = evaluate(&circuit, &f, &x_gb);
+        let res = evaluate(&gc, &x_gb);
         let res = d.decode(&res).expect("Error at decode");
         assert!(res[0] == 1);
     }
@@ -231,7 +230,7 @@ mod tests {
         let (out_b, one_a) = {
             // Round 1
             let circuit = build_circuit(4, 2);
-            let (f, e, d) = garble(&circuit);
+            let (gc, e, d) = garble(&circuit);
             let e = BinaryEncodingKey::from(e).zipped();
             let e_sender = e[..4].to_vec();//.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
             let e_receiver = e[4..].to_vec(); // encoding for receiver's password'
@@ -263,7 +262,7 @@ mod tests {
         
             input.extend(x_receiver); // Provided by OT
             input.extend(x_sender);
-            let out = evaluate(&circuit, &f, &input)[0].clone();
+            let out = evaluate(&gc, &input)[0].clone();
             (
                 hash!(
                     (circuit.num_wires - 1).to_be_bytes(),
@@ -278,7 +277,7 @@ mod tests {
         let (out_a, one_b) = {
             // Round 2
             let circuit = build_circuit(4, 2);
-            let (f, e, d) = garble(&circuit);
+            let (gc, e, d) = garble(&circuit);
             let e = BinaryEncodingKey::from(e).zipped();
             let e_sender = e[..4].to_vec();//.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
             let e_receiver = e[4..].to_vec(); // encoding for receiver's password'
@@ -310,7 +309,7 @@ mod tests {
         
             input.extend(x_receiver); // Provided by OT
             input.extend(x_sender);
-            let out = evaluate(&circuit, &f, &input)[0].clone();
+            let out = evaluate(&gc, &input)[0].clone();
             (
                 hash!(
                     (circuit.num_wires - 1).to_be_bytes(),
