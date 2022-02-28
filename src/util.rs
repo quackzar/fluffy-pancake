@@ -1,6 +1,11 @@
 use num_traits::PrimInt;
 use rand::Rng;
 
+// Global Constants
+pub const SECURITY_PARAM: usize = 256; // bits used total
+pub const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
+
+
 #[inline]
 pub fn rng(max: u16) -> u16 {
     rand::thread_rng().gen_range(0..max)
@@ -11,8 +16,16 @@ pub fn log2<N: PrimInt>(x: N) -> u32 {
     (std::mem::size_of::<N>() * 8) as u32 - (x - N::one()).leading_zeros()
 }
 
-const SECURITY_PARAM: usize = 256; // bits used total
-const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
+
+pub fn u8_vec_to_bool_vec(str: &[u8]) -> Vec<bool> {
+    let mut bits = Vec::with_capacity(8*str.len());
+    for s in str {
+        for i in 0..8 {
+            bits.push((s >> i) & 1 == 1);
+        }
+    }
+    bits
+}
 
 pub type Bytes = [u8; LENGTH];
 

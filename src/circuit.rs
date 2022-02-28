@@ -29,6 +29,7 @@ pub(crate) enum GateKind {
     Add,
     Mul(u16),
     Proj(ProjKind),
+    // TODO: Add And, Or, Xor, Not, Eq.
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

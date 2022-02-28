@@ -61,26 +61,14 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     }
 }
 
-// TODO: Handle OT for encoding.
 
-
-fn u8_vec_to_bool_vec(str: &[u8]) -> Vec<bool> {
-    let mut bits = Vec::with_capacity(8*str.len());
-    for s in str {
-        for i in 0..8 {
-            bits.push((s >> i) & 1 == 1);
-        }
-    }
-    bits
-}
-
-
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct HalfKey ([u8; 32]);
-
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Key([u8; 32]);
 
 impl HalfKey {
-    pub fn sender(password : &[u8], threshold: u16) -> HalfKey {
+    pub fn garbler(password : &[u8], threshold: u16) -> HalfKey {
         let n = password.len();
         let circuit = build_circuit(n, threshold);
         let (f, e, d) = garble(&circuit);
@@ -106,7 +94,7 @@ impl HalfKey {
         HalfKey(d.hashes[0][1])
     }
 
-    pub fn receiver(password : &[u8], threshold: u16) -> Self {
+    pub fn evaluator(password : &[u8], threshold: u16) -> Self {
         let password = u8_vec_to_bool_vec(password);
         let receiver = ObliviousReceiver::<Init>::new(&password);
         // receive ot public key.
@@ -145,6 +133,22 @@ impl HalfKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // #[test]
+    fn test_fpake_api() {
+        let password = b"password";
+        let threshold = 0;
+        let k1s = HalfKey::garbler(password, threshold);
+        let k2r = HalfKey::evaluator(password, threshold);
+
+        let k2s = HalfKey::garbler(password, threshold);
+        let k1r = HalfKey::evaluator(password, threshold);
+
+        let k1 = k1s.combine(k1r);
+        let k2 = k2s.combine(k2r);
+
+        assert_eq!(k1, k2);
+    }
 
     fn garble_encode_eval_decode(c: &Circuit, x: &Vec<u16>) -> Vec<u16> {
         let (gc, e, d) = garble(c);

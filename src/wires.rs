@@ -7,10 +7,6 @@ use std::iter;
 use rand::Rng;
 
 
-// NOTE: Security parameter depends on hash function.
-const SECURITY_PARAM: usize = 256; // bits used total
-const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
-
 // Maybe use domain as const generic?
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Wire {
