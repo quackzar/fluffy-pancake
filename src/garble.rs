@@ -66,6 +66,7 @@ impl From<BinaryEncodingKey> for EncodingKey {
 
 impl BinaryEncodingKey {
     pub fn encode(&self, bits: &[bool]) -> Vec<Wire> {
+        assert_eq!(bits.len(), self.0.len());
         let mut wires = Vec::new();
         for (i, bit) in bits.iter().enumerate() {
             let wire = if *bit {
@@ -144,12 +145,6 @@ impl DecodingKey {
 // TODO: Proper struct for serialize/deserialize.
 type ProjMap = HashMap<usize, Vec<Wire>>;
 
-fn projection_identity(value: u16) -> u16 {
-    value
-}
-fn projection_less(value: u16, threshold: u16) -> u16 {
-    (value < threshold) as u16
-}
 
 pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
@@ -260,19 +255,19 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
         offset: outputs_start_at,
     };
 
-    let gc = GarbledCircuit { circuit, f };
+    let gc = GarbledCircuit { circuit: circuit.clone(), f };
 
     (gc, encode_key, decode_key)
 }
 
-pub struct GarbledCircuit<'a> {
-    pub circuit: &'a Circuit,
+pub struct GarbledCircuit {
+    pub circuit: Circuit,
     f: ProjMap,
 }
 
 pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
     let f = &circuit.f;
-    let circuit = circuit.circuit;
+    let circuit = &circuit.circuit;
     debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
 
     let mut wires: Vec<MaybeUninit<Wire>> = Vec::with_capacity(circuit.num_wires);

@@ -21,6 +21,7 @@ curve25519-dalek = "4.0.0-pre.1"
 bytemuck = "1.7.3"
 num-traits = "0.2.14"
 serde = {version = "1.0.136",  features = ["derive"]}
+crossbeam-channel = "0.5"
 
 
 [dev-dependencies]

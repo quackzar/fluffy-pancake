@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 // Tools for building circuits.
 
 /// A `Circuit` is a collection of gates, with a set of inputs and outputs.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Circuit {
     // TODO: Const Generics?
     pub num_wires: usize,

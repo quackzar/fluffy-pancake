@@ -62,15 +62,30 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct HalfKey([u8; 32]);
+pub struct HalfKey([u8; LENGTH]);
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct Key([u8; 32]);
+pub struct Key([u8; LENGTH]);
+
+use crossbeam_channel::{Receiver, Sender};
+
+pub enum Event {
+    OTInit(Public),
+    OTRequest(Public),
+    OTResponse(Payload),
+    GCCircuit(GarbledCircuit),
+    GCInput(Vec<Wire>),
+}
+
 
 impl HalfKey {
-    pub fn garbler(password: &[u8], threshold: u16) -> HalfKey {
+    pub fn garbler(password: &[u8], threshold: u16, s: &Sender<Event>, r: &Receiver<Event>) -> HalfKey {
+        let password = u8_vec_to_bool_vec(password);
         let n = password.len();
+
+        // Building circuit
         let circuit = build_circuit(n, threshold);
-        let (f, e, d) = garble(&circuit);
+        let (gc, e, d) = garble(&circuit);
+
         let e = BinaryEncodingKey::from(e).zipped();
         let e_own = e[..n].to_vec(); //.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
         let e_theirs = e[n..].to_vec(); // encoding for receiver's password'
@@ -82,26 +97,43 @@ impl HalfKey {
         let msg = Message::new(&e_theirs);
         let sender = ObliviousSender::new(&msg);
         // send OT public key and receive their public.
-        let payload = sender.accept(todo!());
+        s.send(Event::OTInit(sender.public())).unwrap();
+
+        let public = match r.recv().unwrap() {
+            Event::OTRequest(p) => p,
+            _ => panic!("expected OTResponse"),
+        };
+        let payload = sender.accept(&public);
         // send payload.
+        s.send(Event::OTResponse(payload)).unwrap();
 
         // send garbled circuit.
+        s.send(Event::GCCircuit(gc)).unwrap();
 
         let e_own = BinaryEncodingKey::unzipped(&e_own);
-        let password = u8_vec_to_bool_vec(password);
         let enc_password = e_own.encode(&password);
         // send garbled password.
+        s.send(Event::GCInput(enc_password)).unwrap();
 
         HalfKey(d.hashes[0][1])
     }
 
-    pub fn evaluator(password: &[u8], threshold: u16) -> Self {
+    pub fn evaluator(password: &[u8], s: &Sender<Event>, r: &Receiver<Event>) -> Self {
         let password = u8_vec_to_bool_vec(password);
         let receiver = ObliviousReceiver::<Init>::new(&password);
         // receive ot public key.
-        let receiver = receiver.accept(todo!());
-        let payload = todo!(); // receive payload.
-        let enc_password = receiver.receive(payload);
+        let public = match r.recv().unwrap() {
+            Event::OTInit(p) => p,
+            _ => panic!("expected OTInit"),
+        };
+        let receiver = receiver.accept(&public);
+        s.send(Event::OTRequest(receiver.public())).unwrap();
+        // receive ot payload.
+        let payload = match r.recv().unwrap() {
+            Event::OTResponse(p) => p,
+            _ => panic!("expected OTResponse"),
+        };
+        let enc_password = receiver.receive(&payload);
         let enc_password: Vec<Wire> = enc_password
             .iter()
             .map(|b| to_array(b))
@@ -110,15 +142,21 @@ impl HalfKey {
 
         let our_password = enc_password;
         // receive garbled circuit.
-        let gc = todo!();
+        let gc = match r.recv().unwrap() {
+            Event::GCCircuit(gc) => gc,
+            _ => panic!("expected GCCircuit"),
+        };
         // receive garbled password.
-        let their_password: Vec<Wire> = todo!();
+        let their_password: Vec<Wire> = match r.recv().unwrap() {
+            Event::GCInput(p) => p,
+            _ => panic!("expected GCInput"),
+        };
 
         // eval circuit
-        let input = Vec::<Wire>::new();
-        input.extend(our_password);
+        let mut input = Vec::<Wire>::new();
         input.extend(their_password);
-        let output = evaluate(gc, &input);
+        input.extend(our_password);
+        let output = evaluate(&gc, &input);
         HalfKey(hash!(
             (gc.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
@@ -135,19 +173,35 @@ impl HalfKey {
 mod tests {
     use super::*;
 
-    // #[test]
+    #[test]
     fn test_fpake_api() {
+        use crossbeam_channel::unbounded;
+        use std::thread;
+
         let password = b"password";
         let threshold = 0;
-        let k1s = HalfKey::garbler(password, threshold);
-        let k2r = HalfKey::evaluator(password, threshold);
 
-        let k2s = HalfKey::garbler(password, threshold);
-        let k1r = HalfKey::evaluator(password, threshold);
+        let (s1, r1) = unbounded();
+        let (s2, r2) = unbounded();
+        let h1 = thread::spawn(move || { // Party 1
+            let k1 = HalfKey::garbler(password, threshold, &s2, &r1);
+            let k2 = HalfKey::evaluator(password, &s2, &r1);
+            println!("k1: {:?}", k1);
+            println!("k2: {:?}", k2);
+            k1.combine(k2)
+        });
 
-        let k1 = k1s.combine(k1r);
-        let k2 = k2s.combine(k2r);
+        let h2 = thread::spawn(move || { // Party 2
+            let k2 = HalfKey::evaluator(password, &s1, &r2);
+            let k1 = HalfKey::garbler(password, threshold, &s1, &r2);
+            println!("k2: {:?}", k2);
+            println!("k1: {:?}", k1);
+            k1.combine(k2)
+        });
 
+
+        let k1 = h1.join().unwrap();
+        let k2 = h2.join().unwrap();
         assert_eq!(k1, k2);
     }
 
