@@ -6,7 +6,6 @@ use std::iter;
 
 use rand::Rng;
 
-
 // Maybe use domain as const generic?
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Wire {
@@ -34,7 +33,7 @@ impl Domain {
         }
     }
 
-    fn new(m : u16) -> Domain {
+    fn new(m: u16) -> Domain {
         const U8_MAX: u16 = u8::max_value() as u16;
         const U16_MAX: u16 = u16::max_value();
         if m == 0 {
@@ -57,15 +56,9 @@ impl ops::Add<&Wire> for &Wire {
     type Output = Wire;
     fn add(self, rhs: &Wire) -> Wire {
         match self.domain {
-            Domain::Binary => {
-                self.map_with(rhs, |a, b| a ^ b)
-            },
-            Domain::U8(m) => {
-                self.map_with(rhs, |a, b| (a + b) % m)
-            }
-            Domain::U16(m) => {
-                self.map_with_as_u16(rhs, |a, b| (a + b) % m)
-            }
+            Domain::Binary => self.map_with(rhs, |a, b| a ^ b),
+            Domain::U8(m) => self.map_with(rhs, |a, b| (a + b) % m),
+            Domain::U16(m) => self.map_with_as_u16(rhs, |a, b| (a + b) % m),
             _ => panic!("Add not defined for this domain {}", self.domain()),
         }
     }
@@ -75,15 +68,9 @@ impl ops::Sub<&Wire> for &Wire {
     type Output = Wire;
     fn sub(self, rhs: &Wire) -> Self::Output {
         match self.domain {
-            Domain::Binary => {
-                self.map_with(rhs, |a, b| a ^ b)
-            },
-            Domain::U8(m) => {
-                self.map_with(rhs, |a, b| (a + (m - b)) % m)
-            },
-            Domain::U16(m) => {
-                self.map_with_as_u16(rhs, |a, b| (a + (m - b)) % m)
-            }
+            Domain::Binary => self.map_with(rhs, |a, b| a ^ b),
+            Domain::U8(m) => self.map_with(rhs, |a, b| (a + (m - b)) % m),
+            Domain::U16(m) => self.map_with_as_u16(rhs, |a, b| (a + (m - b)) % m),
             _ => panic!("Sub not defined for this domain {}", self.domain()),
         }
     }
@@ -93,15 +80,9 @@ impl ops::Neg for &Wire {
     type Output = Wire;
     fn neg(self) -> Wire {
         match self.domain {
-            Domain::Binary => {
-                self.map(|x : u8| 0xFF ^ x )
-            },
-            Domain::U8(m) => {
-                self.map(|x : u8| m - x)
-            }
-            Domain::U16(m) => {
-                self.map_as_u16(|x : u16| m - x)
-            }
+            Domain::Binary => self.map(|x: u8| 0xFF ^ x),
+            Domain::U8(m) => self.map(|x: u8| m - x),
+            Domain::U16(m) => self.map_as_u16(|x: u16| m - x),
             _ => panic!("Neg not defined for this domain {}", self.domain()),
         }
     }
@@ -113,12 +94,8 @@ impl ops::Mul<u16> for &Wire {
     fn mul(self, rhs: u16) -> Wire {
         debug_assert!(rhs < self.domain());
         match self.domain {
-            Domain::Binary => {
-                self.map(|b| if rhs == 0 {0} else {b})
-            },
-            Domain::U8(m) => {
-                self.map(|x| (((x as u16) * (rhs as u16)) % (m as u16)) as u8)
-            },
+            Domain::Binary => self.map(|b| if rhs == 0 { 0 } else { b }),
+            Domain::U8(m) => self.map(|x| (((x as u16) * (rhs as u16)) % (m as u16)) as u8),
             Domain::U16(m) => {
                 self.map_as_u16(|x| (((x as u32) * (rhs as u32)) % (m as u32)) as u16)
             }
@@ -175,7 +152,6 @@ impl Wire {
         Wire { domain, values }
     }
 
-    
     fn map_with<F>(&self, other: &Wire, op: F) -> Wire
     where
         F: Fn(u8, u8) -> u8,
@@ -223,9 +199,9 @@ impl Wire {
                 for i in 0..values.len() {
                     values[i] = rand::thread_rng().gen_range(0..m);
                 }
-            },
+            }
             Domain::U16(m) => {
-                let mut v : [u16; LENGTH / 2] = bytemuck::cast(values);
+                let mut v: [u16; LENGTH / 2] = bytemuck::cast(values);
                 for i in 0..v.len() {
                     v[i] = rand::thread_rng().gen_range(0..m);
                 }
@@ -238,14 +214,15 @@ impl Wire {
     pub fn delta(domain: u16) -> Wire {
         let mut wire = Wire::new(domain);
         match wire.domain {
-            Domain::Binary => { // endianness?
+            Domain::Binary => {
+                // endianness?
                 wire.values[LENGTH - 1] |= 1;
-            },
+            }
             Domain::U8(_) | Domain::U8MAX => {
                 wire.values[LENGTH - 1] = 1;
-            },
+            }
             Domain::U16(_) | Domain::U16MAX => {
-                let mut v : [u16; LENGTH / 2] = bytemuck::cast(wire.values);
+                let mut v: [u16; LENGTH / 2] = bytemuck::cast(wire.values);
                 v[LENGTH / 2 - 1] = 1;
                 wire.values = bytemuck::cast(v);
             }
@@ -259,11 +236,10 @@ impl Wire {
             Domain::Binary => (self.values[LENGTH - 1] & 1) as u16, // endianness?
             Domain::U8(_) | Domain::U8MAX => self.values[LENGTH - 1] as u16,
             Domain::U16(_) | Domain::U16MAX => {
-                let v : [u16; LENGTH / 2] = bytemuck::cast(self.values);
+                let v: [u16; LENGTH / 2] = bytemuck::cast(self.values);
                 v[LENGTH / 2 - 1]
-            },
+            }
         }
-
     }
 
     #[inline]
@@ -271,7 +247,7 @@ impl Wire {
         self.domain.num()
     }
 
-    pub fn from_bytes(values: [u8; LENGTH], domain : Domain) -> Wire {
+    pub fn from_bytes(values: [u8; LENGTH], domain: Domain) -> Wire {
         let wire = Wire { domain, values };
         match domain {
             Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,

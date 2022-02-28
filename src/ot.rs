@@ -4,51 +4,48 @@
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use curve25519_dalek::constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
-use curve25519_dalek::edwards::{EdwardsPoint,CompressedEdwardsY};
+use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use curve25519_dalek::scalar::Scalar;
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
+use crate::hash;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use crate::hash;
 
 // Common
 pub type CiphertextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Payload(Vec<CiphertextPair>);
 
-
 pub type PlaintextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message(Vec<PlaintextPair>);
 
 impl Message {
-    pub fn new(msg : &[PlaintextPair]) -> Message {
+    pub fn new(msg: &[PlaintextPair]) -> Message {
         Message(msg.to_vec())
     }
 
-    pub fn from(msg : &[[&[u8]; 2]]) -> Message {
+    pub fn from(msg: &[[&[u8]; 2]]) -> Message {
         let mut vec = Vec::with_capacity(msg.len());
         for m in msg {
             let m0 = m[0].to_vec();
             let m1 = m[1].to_vec();
-            let pair : PlaintextPair = [m0, m1];
+            let pair: PlaintextPair = [m0, m1];
             vec.push(pair);
         }
         Message(vec)
     }
-
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Public(Vec<CompressedEdwardsY>);
 
 impl From<&[[u8; 32]]> for Public {
-    fn from(bytes : &[[u8; 32]]) -> Public {
+    fn from(bytes: &[[u8; 32]]) -> Public {
         let mut vec = Vec::with_capacity(bytes.len());
         for b in bytes {
             let p = CompressedEdwardsY::from_slice(b);
@@ -173,11 +170,7 @@ impl ObliviousReceiver<Init> {
                 &ED25519_BASEPOINT_TABLE * &self.secrets[i]
             };
             let mut hasher = Sha256::new();
-            hasher.update(
-                (their_public * self.secrets[i])
-                    .to_montgomery()
-                    .as_bytes(),
-            );
+            hasher.update((their_public * self.secrets[i]).to_montgomery().as_bytes());
             let key = hasher.finalize().to_vec();
             keys.push(key);
             publics.push(public.compress());
@@ -242,8 +235,10 @@ const WIRE_BYTES: usize = 32;
 // Bob: Initiate 1-to-n OT (initiated by the sender, Bob):
 // - Prepares keys and uses these to generate the required y values sent to Alice
 // - Creates challenges for Alice
-fn one_to_n_challenge_create(domain: u16, messages: &Vec<[u8; WIRE_BYTES]>) -> (Vec<ObliviousSender>, Vec<Public>, Vec<[u8; WIRE_BYTES]>)
-{
+fn one_to_n_challenge_create(
+    domain: u16,
+    messages: &Vec<[u8; WIRE_BYTES]>,
+) -> (Vec<ObliviousSender>, Vec<Public>, Vec<[u8; WIRE_BYTES]>) {
     // 1. B: Prepare random keys
     let l = messages.len();
     debug_assert!(l == (1 << domain));
@@ -290,7 +285,11 @@ fn one_to_n_challenge_create(domain: u16, messages: &Vec<[u8; WIRE_BYTES]>) -> (
 // Alice: Respond to challenge from Bob
 // - Setup receivers
 // - Create responses for Bob
-fn one_to_n_challenge_respond(domain: u16, choice: u16, challenges: &Vec<Public>) -> (Vec<ObliviousReceiver<RetrievingPayload>>, Vec<Public>) {
+fn one_to_n_challenge_respond(
+    domain: u16,
+    choice: u16,
+    challenges: &Vec<Public>,
+) -> (Vec<ObliviousReceiver<RetrievingPayload>>, Vec<Public>) {
     let l = 1 << domain;
 
     println!();
@@ -316,7 +315,11 @@ fn one_to_n_challenge_respond(domain: u16, choice: u16, challenges: &Vec<Public>
 }
 
 // Bob: Create payloads for Alice
-fn one_to_n_create_payloads(domain: u16, senders: &Vec<ObliviousSender>, responses: &Vec<Public>) -> Vec<Payload> {
+fn one_to_n_create_payloads(
+    domain: u16,
+    senders: &Vec<ObliviousSender>,
+    responses: &Vec<Public>,
+) -> Vec<Payload> {
     let l = 1 << domain;
 
     let mut payloads: Vec<Payload> = Vec::with_capacity(l);
@@ -331,7 +334,13 @@ fn one_to_n_create_payloads(domain: u16, senders: &Vec<ObliviousSender>, respons
 }
 
 // Alice: Chose a value
-fn one_to_n_choose(domain: u16, choice: u16, receivers: &Vec<ObliviousReceiver<RetrievingPayload>>, payloads: &Vec<Payload>, y: &Vec<[u8; WIRE_BYTES]>) -> [u8; 32] {
+fn one_to_n_choose(
+    domain: u16,
+    choice: u16,
+    receivers: &Vec<ObliviousReceiver<RetrievingPayload>>,
+    payloads: &Vec<Payload>,
+    y: &Vec<[u8; WIRE_BYTES]>,
+) -> [u8; 32] {
     let l = 1 << domain;
 
     println!();
@@ -364,8 +373,8 @@ fn one_to_n_choose(domain: u16, choice: u16, receivers: &Vec<ObliviousReceiver<R
 
 #[cfg(test)]
 mod tests {
-    use crate::util::log2;
     use super::*;
+    use crate::util::log2;
 
     #[test]
     fn test_1_to_n() {
@@ -435,12 +444,12 @@ mod tests {
 
     #[test]
     fn test_n_ots() {
-        let m : [[Vec<u8>; 2]; 5] = [
-           [vec![1], vec![6]],
-           [vec![2], vec![7]],
-           [vec![3], vec![8]],
-           [vec![4], vec![9]],
-           [vec![5], vec![10]],
+        let m: [[Vec<u8>; 2]; 5] = [
+            [vec![1], vec![6]],
+            [vec![2], vec![7]],
+            [vec![3], vec![8]],
+            [vec![4], vec![9]],
+            [vec![5], vec![10]],
         ];
 
         let msg = Message::new(&m);
@@ -459,9 +468,15 @@ mod tests {
         for m in &msg {
             println!("{:?}", m);
         }
-        for (i,&b) in c.iter().enumerate() {
-            assert!(msg[i] == m[i][b as usize],
-                "b={} has {:?} =! {:?} at i={}", b, msg[i], m[i][b as usize], i);
+        for (i, &b) in c.iter().enumerate() {
+            assert!(
+                msg[i] == m[i][b as usize],
+                "b={} has {:?} =! {:?} at i={}",
+                b,
+                msg[i],
+                m[i][b as usize],
+                i
+            );
         }
     }
 

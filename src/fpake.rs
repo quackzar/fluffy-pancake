@@ -2,8 +2,8 @@ use itertools::Itertools;
 
 use crate::circuit::*;
 use crate::garble::*;
-use crate::util::*;
 use crate::ot::*;
+use crate::util::*;
 use crate::wires::*;
 
 // TODO: fPAKE protocol
@@ -61,22 +61,23 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     }
 }
 
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct HalfKey ([u8; 32]);
+pub struct HalfKey([u8; 32]);
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Key([u8; 32]);
 
 impl HalfKey {
-    pub fn garbler(password : &[u8], threshold: u16) -> HalfKey {
+    pub fn garbler(password: &[u8], threshold: u16) -> HalfKey {
         let n = password.len();
         let circuit = build_circuit(n, threshold);
         let (f, e, d) = garble(&circuit);
         let e = BinaryEncodingKey::from(e).zipped();
-        let e_own = e[..n].to_vec();//.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
+        let e_own = e[..n].to_vec(); //.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
         let e_theirs = e[n..].to_vec(); // encoding for receiver's password'
-        let e_theirs : Vec<_> = e_theirs.iter().map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()]).collect();
-
+        let e_theirs: Vec<_> = e_theirs
+            .iter()
+            .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+            .collect();
 
         let msg = Message::new(&e_theirs);
         let sender = ObliviousSender::new(&msg);
@@ -94,23 +95,24 @@ impl HalfKey {
         HalfKey(d.hashes[0][1])
     }
 
-    pub fn evaluator(password : &[u8], threshold: u16) -> Self {
+    pub fn evaluator(password: &[u8], threshold: u16) -> Self {
         let password = u8_vec_to_bool_vec(password);
         let receiver = ObliviousReceiver::<Init>::new(&password);
         // receive ot public key.
         let receiver = receiver.accept(todo!());
         let payload = todo!(); // receive payload.
         let enc_password = receiver.receive(payload);
-        let enc_password : Vec<Wire> = enc_password.iter()
+        let enc_password: Vec<Wire> = enc_password
+            .iter()
             .map(|b| to_array(b))
-            .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
+            .map(|b: [u8; 32]| Wire::from_bytes(b, Domain::Binary))
             .collect();
 
         let our_password = enc_password;
         // receive garbled circuit.
         let gc = todo!();
         // receive garbled password.
-        let their_password : Vec<Wire> = todo!();
+        let their_password: Vec<Wire> = todo!();
 
         // eval circuit
         let input = Vec::<Wire>::new();
@@ -128,7 +130,6 @@ impl HalfKey {
         Key(xor(self.0, other.0))
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -172,20 +173,19 @@ mod tests {
     #[test]
     fn ot_encode_test() {
         let circuit = build_circuit(8, 2);
-        let x = vec![
-            1, 1, 1, 1,
-            1, 1, 1, 1,
-            1, 1, 1, 1,
-            1, 1, 1, 1,
-        ];
+        let x = vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
         assert!(x.len() == 16);
         let (gc, e, d) = garble(&circuit);
         let x_enc = encode(&e, &x);
-        let x : Vec<bool> = x.iter().map(|x| (*x) != 0).collect();
+        let x: Vec<bool> = x.iter().map(|x| (*x) != 0).collect();
 
         // encoding OT.
         let e = BinaryEncodingKey::from(e);
-        let msg : Vec<PlaintextPair> = e.0.iter().zip(e.1).map(|(w0, w1)| [w0.as_ref().to_vec(), (&w1).as_ref().to_vec()]).collect();
+        let msg: Vec<PlaintextPair> =
+            e.0.iter()
+                .zip(e.1)
+                .map(|(w0, w1)| [w0.as_ref().to_vec(), (&w1).as_ref().to_vec()])
+                .collect();
         println!("msg len: {}", msg.len());
         let msg = Message::new(&msg);
         // ot protocol
@@ -194,14 +194,15 @@ mod tests {
         let receiver = receiver.accept(&sender.public());
         let payload = sender.accept(&receiver.public());
         let x_gb = receiver.receive(&payload);
-        let x_gb : Vec<Wire> = x_gb.iter()
+        let x_gb: Vec<Wire> = x_gb
+            .iter()
             .map(|b| to_array(b))
-            .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
+            .map(|b: [u8; 32]| Wire::from_bytes(b, Domain::Binary))
             .collect();
 
         // expected input
         assert!(x_enc == x_gb);
-        
+
         let res = evaluate(&gc, &x_gb);
         let res = d.decode(&res).expect("Error at decode");
         assert!(res[0] == 1);
@@ -236,34 +237,38 @@ mod tests {
             let circuit = build_circuit(4, 2);
             let (gc, e, d) = garble(&circuit);
             let e = BinaryEncodingKey::from(e).zipped();
-            let e_sender = e[..4].to_vec();//.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
+            let e_sender = e[..4].to_vec(); //.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
             let e_receiver = e[4..].to_vec(); // encoding for receiver's password'
 
             // --- OT start ---
-            let e_receiver : Vec<_> = e_receiver.iter().map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()]).collect();
+            let e_receiver: Vec<_> = e_receiver
+                .iter()
+                .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+                .collect();
 
             // sender sender, receiver receiver.
             let msg = Message::new(&e_receiver);
             let sender = ObliviousSender::new(&msg);
-            let x : Vec<bool> = pwsd_b.iter().map(|&x| x == 1).collect();
+            let x: Vec<bool> = pwsd_b.iter().map(|&x| x == 1).collect();
             let receiver = ObliviousReceiver::<Init>::new(&x);
             let receiver = receiver.accept(&sender.public());
             let payload = sender.accept(&receiver.public());
             let x_receiver = receiver.receive(&payload);
-            let x_receiver : Vec<Wire> = x_receiver.iter()
+            let x_receiver: Vec<Wire> = x_receiver
+                .iter()
                 .map(|b| to_array(b))
-                .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
+                .map(|b: [u8; 32]| Wire::from_bytes(b, Domain::Binary))
                 .collect();
             // --- OT stop ---
 
             // sender encoding
             let e_sender = BinaryEncodingKey::unzipped(&e_sender);
-            let sender_input : Vec<bool> = pwsd_a.iter().map(|&x| x==1).collect();
+            let sender_input: Vec<bool> = pwsd_a.iter().map(|&x| x == 1).collect();
             let x_sender = e_sender.encode(&sender_input);
 
             // combine input
             let mut input = Vec::<Wire>::new();
-        
+
             input.extend(x_receiver); // Provided by OT
             input.extend(x_sender);
             let out = evaluate(&gc, &input)[0].clone();
@@ -283,34 +288,38 @@ mod tests {
             let circuit = build_circuit(4, 2);
             let (gc, e, d) = garble(&circuit);
             let e = BinaryEncodingKey::from(e).zipped();
-            let e_sender = e[..4].to_vec();//.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
+            let e_sender = e[..4].to_vec(); //.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
             let e_receiver = e[4..].to_vec(); // encoding for receiver's password'
 
             // --- OT start ---
-            let e_receiver : Vec<_> = e_receiver.iter().map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()]).collect();
+            let e_receiver: Vec<_> = e_receiver
+                .iter()
+                .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+                .collect();
 
             // sender sender, receiver receiver.
             let msg = Message::new(&e_receiver);
             let sender = ObliviousSender::new(&msg);
-            let x : Vec<bool> = pwsd_a.iter().map(|&x| x == 1).collect();
+            let x: Vec<bool> = pwsd_a.iter().map(|&x| x == 1).collect();
             let receiver = ObliviousReceiver::<Init>::new(&x);
             let receiver = receiver.accept(&sender.public());
             let payload = sender.accept(&receiver.public());
             let x_receiver = receiver.receive(&payload);
-            let x_receiver : Vec<Wire> = x_receiver.iter()
+            let x_receiver: Vec<Wire> = x_receiver
+                .iter()
                 .map(|b| to_array(b))
-                .map(|b : [u8; 32]| Wire::from_bytes(b, Domain::Binary))
+                .map(|b: [u8; 32]| Wire::from_bytes(b, Domain::Binary))
                 .collect();
             // --- OT stop ---
 
             // sender encoding
             let e_sender = BinaryEncodingKey::unzipped(&e_sender);
-            let sender_input : Vec<bool> = pwsd_b.iter().map(|&x| x==1).collect();
+            let sender_input: Vec<bool> = pwsd_b.iter().map(|&x| x == 1).collect();
             let x_sender = e_sender.encode(&sender_input);
 
             // combine input
             let mut input = Vec::<Wire>::new();
-        
+
             input.extend(x_receiver); // Provided by OT
             input.extend(x_sender);
             let out = evaluate(&gc, &input)[0].clone();
@@ -322,7 +331,6 @@ mod tests {
                 ),
                 d.hashes[0][1],
             )
-
         };
         let key_a = xor(out_a, one_a);
         let key_b = xor(out_b, one_b);

@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-
 pub mod circuit;
 pub mod fpake;
 pub mod garble;

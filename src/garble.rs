@@ -21,10 +21,8 @@ pub struct EncodingKey {
     delta: HashMap<u16, Wire>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BinaryEncodingKey (pub Vec<Wire>, pub Vec<Wire>);
-
+pub struct BinaryEncodingKey(pub Vec<Wire>, pub Vec<Wire>);
 
 impl EncodingKey {
     pub fn encode(&self, x: Vec<u16>) -> Vec<Wire> {
@@ -50,7 +48,7 @@ impl From<EncodingKey> for BinaryEncodingKey {
         assert!(key.wires.iter().all(|w| w.domain() == 2));
         let delta = key.delta[&2].clone();
         let zeros = key.wires;
-        let ones : Vec<Wire> = zeros.iter().map(|w| w + &delta).collect();
+        let ones: Vec<Wire> = zeros.iter().map(|w| w + &delta).collect();
         let ones = TryInto::try_into(ones).unwrap(); // should never fail
         BinaryEncodingKey(zeros, ones)
     }
@@ -62,12 +60,9 @@ impl From<BinaryEncodingKey> for EncodingKey {
         let d = &key.0[0] + &key.1[0];
         delta.insert(2, d);
         let wires = key.0;
-        EncodingKey {
-            wires, delta,
-        }
+        EncodingKey { wires, delta }
     }
 }
-
 
 impl BinaryEncodingKey {
     pub fn encode(&self, bits: &[bool]) -> Vec<Wire> {
@@ -91,13 +86,14 @@ impl BinaryEncodingKey {
         wires
     }
 
-    
-    pub fn unzipped(zipped : &[[Wire; 2]]) -> Self {
-        let (zero, one) = zipped.iter().map(|[w0, w1]| (w0.clone(), w1.clone())).unzip();
+    pub fn unzipped(zipped: &[[Wire; 2]]) -> Self {
+        let (zero, one) = zipped
+            .iter()
+            .map(|[w0, w1]| (w0.clone(), w1.clone()))
+            .unzip();
         Self(zero, one)
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct DecodingKey {
@@ -140,7 +136,6 @@ impl DecodingKey {
 
         Ok(y)
     }
-
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -265,18 +260,15 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
         offset: outputs_start_at,
     };
 
-    let gc = GarbledCircuit {
-        circuit, f
-    };
+    let gc = GarbledCircuit { circuit, f };
 
     (gc, encode_key, decode_key)
 }
 
 pub struct GarbledCircuit<'a> {
-    pub circuit : &'a Circuit,
-    f : ProjMap,
+    pub circuit: &'a Circuit,
+    f: ProjMap,
 }
-
 
 pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
     let f = &circuit.f;
@@ -601,10 +593,13 @@ mod tests {
         let zeros = vec![0, 0, 0, 0, 0, 0];
         let ones = vec![1, 1, 1, 1, 1, 1];
         let (_, enc, _) = garble(&circuit);
-        let bin_enc = BinaryEncodingKey::from(enc.clone()); 
+        let bin_enc = BinaryEncodingKey::from(enc.clone());
         let new_enc = EncodingKey::from(bin_enc.clone());
         for i in 0..6 {
-            assert!(enc.wires[i] == new_enc.wires[i], "new and old doesn't match'");
+            assert!(
+                enc.wires[i] == new_enc.wires[i],
+                "new and old doesn't match'"
+            );
         }
         let ones = encode(&enc, &ones);
         let zeros = encode(&enc, &zeros);

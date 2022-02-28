@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use magic_pake::garble::{encode, evaluate, garble};
 use magic_pake::fpake::build_circuit;
+use magic_pake::garble::{encode, evaluate, garble};
 
 fn bench_garble(c: &mut Criterion) {
     const BITS: usize = 16;
@@ -14,29 +14,26 @@ fn bench_eval(c: &mut Criterion) {
     let circuit = build_circuit(BITS, 8);
     let (gc, e, _) = garble(&circuit);
     let x = encode(&e, &vec![1; 2 * BITS]);
-    c.bench_function("Eval garbled", |b| {
-        b.iter(|| evaluate(&gc, &x))
-    });
+    c.bench_function("Eval garbled", |b| b.iter(|| evaluate(&gc, &x)));
 }
-
 
 use magic_pake::ot::*;
 
 fn run_one_ot() {
-        let m0 = b"Hello, world!".to_vec();
-        let m1 = b"Hello, sweden!".to_vec();
+    let m0 = b"Hello, world!".to_vec();
+    let m1 = b"Hello, sweden!".to_vec();
 
-        // round 0
-        let receiver = ObliviousReceiver::new(&[false]);
-        let sender = ObliviousSender::new(&Message::new(&[[m0, m1]]));
+    // round 0
+    let receiver = ObliviousReceiver::new(&[false]);
+    let sender = ObliviousSender::new(&Message::new(&[[m0, m1]]));
 
-        // round 1
-        let receiver = receiver.accept(&sender.public());
+    // round 1
+    let receiver = receiver.accept(&sender.public());
 
-        // round 2
-        let payload = sender.accept(&receiver.public());
+    // round 2
+    let payload = sender.accept(&receiver.public());
 
-        let msg = receiver.receive(&payload);
+    let msg = receiver.receive(&payload);
 }
 
 fn bench_ot(c: &mut Criterion) {

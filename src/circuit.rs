@@ -59,14 +59,14 @@ impl ProjKind {
 }
 
 struct CircuitBuilder {
-    gates : Vec<Gate>,
+    gates: Vec<Gate>,
     next_wire: usize,
     num_inputs: usize,
     unread_wires: HashSet<usize>,
 }
 
 impl CircuitBuilder {
-    pub fn new(num_inputs : usize) -> Self {
+    pub fn new(num_inputs: usize) -> Self {
         CircuitBuilder {
             gates: Vec::new(),
             next_wire: 0,
@@ -78,17 +78,16 @@ impl CircuitBuilder {
     /// Offset circuit wires by `amount`.
     ///
     /// * `amount`: The amount to offset the circuit by.
-    pub fn offset(&mut self, amount : usize) {
+    pub fn offset(&mut self, amount: usize) {
         self.gates.iter_mut().for_each(|g| {
             g.output += amount;
             g.inputs.iter_mut().for_each(|i| {
                 *i += amount;
             });
         });
-        self.unread_wires = self.unread_wires.iter().map(|x| x+amount).collect();
+        self.unread_wires = self.unread_wires.iter().map(|x| x + amount).collect();
         self.next_wire += amount;
     }
-
 
     /// Add a new gate to the circuit.
     ///
@@ -96,15 +95,16 @@ impl CircuitBuilder {
     pub fn add_gate(&mut self, gate: Gate) {
         self.next_wire = gate.output;
         self.unread_wires.insert(gate.output);
-        gate.inputs.iter().for_each(|i| {self.unread_wires.remove(i);} );
+        gate.inputs.iter().for_each(|i| {
+            self.unread_wires.remove(i);
+        });
         self.gates.push(gate);
     }
-
 
     /// Append a circuit to the current circuit.
     /// The circuit will NOT be offset by the current circuit.
     ///
-    /// * `circuit`: 
+    /// * `circuit`:
     pub fn append(&mut self, circuit: &Circuit) {
         for gate in &circuit.gates {
             self.add_gate(gate.clone());
@@ -141,7 +141,6 @@ impl CircuitBuilder {
     }
 }
 
-
 impl Circuit {
     pub fn eval(&self, inputs: &[u16]) -> Vec<u16> {
         assert_eq!(inputs.len(), self.num_inputs);
@@ -150,11 +149,8 @@ impl Circuit {
             wires[i] = *input;
         }
         for gate in &self.gates {
-            let inputs = gate
-                .inputs
-                .iter()
-                .map(|&i| wires[i]);
-            let output : u16 = match gate.kind {
+            let inputs = gate.inputs.iter().map(|&i| wires[i]);
+            let output: u16 = match gate.kind {
                 GateKind::Add => inputs.sum(),
                 GateKind::Mul(m) => inputs.map(|x| x * m).next().unwrap(),
                 GateKind::Proj(ref p) => inputs.map(|x| p.project(x)).next().unwrap(),
@@ -171,11 +167,7 @@ impl Circuit {
         }
         let offset = builder.next_wire;
         for gate in &other.gates {
-            let inputs = gate
-                .inputs
-                .iter()
-                .map(|&i| i + offset)
-                .collect();
+            let inputs = gate.inputs.iter().map(|&i| i + offset).collect();
             builder.add_gate(Gate {
                 inputs,
                 output: gate.output + offset,
@@ -186,7 +178,6 @@ impl Circuit {
         builder.build()
     }
 }
-
 
 #[derive(Debug)]
 pub enum CircuitError {
