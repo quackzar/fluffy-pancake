@@ -119,8 +119,6 @@ impl HalfKey {
         // send garbled password.
         s.send(Event::GCInput(enc_password)).unwrap();
 
-        println!("0: {:?}", d.hashes[0][0]);
-        println!("1: {:?}", d.hashes[0][1]);
         HalfKey(d.hashes[0][1])
     }
 
@@ -163,16 +161,6 @@ impl HalfKey {
         input.extend(their_password);
         input.extend(our_password);
         let output = evaluate(&gc, &input);
-        println!("0: {:?}", HalfKey(hash!(
-            (gc.circuit.num_wires - 1).to_be_bytes(),
-            0u16.to_be_bytes(),
-            &output[0]
-        )));
-        println!("1: {:?}", HalfKey(hash!(
-            (gc.circuit.num_wires - 1).to_be_bytes(),
-            1u16.to_be_bytes(),
-            &output[0]
-        )));
         HalfKey(hash!(
             (gc.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
