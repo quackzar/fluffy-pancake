@@ -73,8 +73,7 @@ impl ObliviousSender {
             .map(|secret| &ED25519_BASEPOINT_TABLE * secret)
             .map(|public| public.compress())
             .collect::<Vec<_>>();
-        let secrets = secrets.try_into().unwrap();
-        let publics = Public(publics.try_into().unwrap());
+        let publics = Public(publics);
         Self {
             secrets,
             publics,
@@ -123,7 +122,7 @@ impl ObliviousSender {
 
             payload.push([e0, e1]);
         }
-        Payload(payload.try_into().unwrap())
+        Payload(payload)
     }
 }
 

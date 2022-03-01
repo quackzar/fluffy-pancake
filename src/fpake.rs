@@ -1,5 +1,3 @@
-use itertools::Itertools;
-
 use crate::circuit::*;
 use crate::garble::*;
 use crate::ot::*;

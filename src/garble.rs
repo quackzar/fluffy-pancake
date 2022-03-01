@@ -116,13 +116,13 @@ impl fmt::Display for DecodeError {
 impl DecodingKey {
     pub fn decode(&self, z: &[Wire]) -> Result<Vec<u16>, DecodeError> {
         let mut y = Vec::with_capacity(z.len());
-        for i in 0..z.len() {
+        for (i, z) in z.iter().enumerate() {
             let output = self.offset + i;
             let hashes = &self.hashes[i];
 
             let mut success = false;
-            for k in 0..z[i].domain() {
-                let hash = hash(output, k, &z[i]);
+            for k in 0..z.domain() {
+                let hash = hash(output, k, z);
                 if hash == hashes[k as usize] {
                     y.push(k);
                     success = true;
