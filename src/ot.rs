@@ -245,7 +245,7 @@ fn one_to_n_challenge_create(
 
     let mut rng = ChaCha12Rng::from_entropy();
     let mut keys: Vec<[[u8; WIRE_BYTES]; 2]> = Vec::with_capacity(l);
-    for i in 0..l {
+    for _i in 0..l {
         let left = Scalar::random(&mut rng).to_bytes();
         let right = Scalar::random(&mut rng).to_bytes();
 
@@ -279,7 +279,7 @@ fn one_to_n_challenge_create(
         senders.push(sender);
     }
 
-    return (senders, challenges, y);
+    (senders, challenges, y)
 }
 
 // Alice: Respond to challenge from Bob
@@ -311,7 +311,7 @@ fn one_to_n_challenge_respond(
         receivers.push(receiver);
     }
 
-    return (receivers, responses);
+    (receivers, responses)
 }
 
 // Bob: Create payloads for Alice
@@ -330,7 +330,7 @@ fn one_to_n_create_payloads(
     }
 
     // 3. B: Send the strings Y to A
-    return payloads;
+    payloads
 }
 
 // Alice: Chose a value
@@ -368,7 +368,7 @@ fn one_to_n_choose(
         xor_bytes(&mut x, &hash);
     }
 
-    return x;
+    x
 }
 
 #[cfg(test)]
@@ -409,7 +409,7 @@ mod tests {
 
         // round 0
         let receiver = ObliviousReceiver::new(&[false]);
-        let sender = ObliviousSender::new(&Message(vec![[m0.clone(), m1.clone()]]));
+        let sender = ObliviousSender::new(&Message(vec![[m0.clone(), m1]]));
 
         // round 1
         let receiver = receiver.accept(&sender.public());
@@ -429,7 +429,7 @@ mod tests {
 
         // round 0
         let receiver = ObliviousReceiver::new(&[true]);
-        let sender = ObliviousSender::new(&Message(vec![[m0.clone(), m1.clone()]]));
+        let sender = ObliviousSender::new(&Message(vec![[m0, m1.clone()]]));
 
         // round 1
         let receiver = receiver.accept(&sender.public());
