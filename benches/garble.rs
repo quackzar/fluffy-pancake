@@ -17,28 +17,5 @@ fn bench_eval(c: &mut Criterion) {
     c.bench_function("Eval garbled", |b| b.iter(|| evaluate(&gc, &x)));
 }
 
-use magic_pake::ot::*;
-
-fn run_one_ot() {
-    let m0 = b"Hello, world!".to_vec();
-    let m1 = b"Hello, sweden!".to_vec();
-
-    // round 0
-    let receiver = ObliviousReceiver::new(&[false]);
-    let sender = ObliviousSender::new(&Message::new(&[[m0, m1]]));
-
-    // round 1
-    let receiver = receiver.accept(&sender.public());
-
-    // round 2
-    let payload = sender.accept(&receiver.public());
-
-    let msg = receiver.receive(&payload);
-}
-
-fn bench_ot(c: &mut Criterion) {
-    c.bench_function("OT 1 bit", |b| b.iter(run_one_ot));
-}
-
-criterion_group!(benches, bench_garble, bench_eval, bench_ot);
+criterion_group!(benches, bench_garble, bench_eval);
 criterion_main!(benches);

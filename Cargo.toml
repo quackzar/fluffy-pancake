@@ -28,5 +28,13 @@ crossbeam-channel = "0.5"
 criterion = "0.3"
 
 [[bench]]
-name = "bench"
+name = "ot"
+harness = false
+
+[[bench]]
+name = "garble"
+harness = false
+
+[[bench]]
+name = "fpake"
 harness = false
