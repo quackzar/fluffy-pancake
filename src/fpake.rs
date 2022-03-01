@@ -46,7 +46,7 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
 
     // comparison
     let gate = Gate {
-        kind: GateKind::Proj(ProjKind::Less(threshold)),
+        kind: GateKind::Proj(ProjKind::Less(threshold + 1)),
         inputs: vec![4 * bitsize],
         output: 4 * bitsize + 1,
         domain: comparison_domain,
@@ -76,9 +76,13 @@ pub enum Event {
     GCInput(Vec<Wire>),
 }
 
-
 impl HalfKey {
-    pub fn garbler(password: &[u8], threshold: u16, s: &Sender<Event>, r: &Receiver<Event>) -> HalfKey {
+    pub fn garbler(
+        password: &[u8],
+        threshold: u16,
+        s: &Sender<Event>,
+        r: &Receiver<Event>,
+    ) -> HalfKey {
         let password = u8_vec_to_bool_vec(password);
         let n = password.len();
 
@@ -99,8 +103,8 @@ impl HalfKey {
         // send OT public key and receive their public.
         s.send(Event::OTInit(sender.public())).unwrap();
 
-        let public = match r.recv().unwrap() {
-            Event::OTRequest(p) => p,
+        let public = match r.recv() {
+            Ok(Event::OTRequest(p)) => p,
             _ => panic!("expected OTResponse"),
         };
         let payload = sender.accept(&public);
@@ -115,6 +119,8 @@ impl HalfKey {
         // send garbled password.
         s.send(Event::GCInput(enc_password)).unwrap();
 
+        println!("0: {:?}", d.hashes[0][0]);
+        println!("1: {:?}", d.hashes[0][1]);
         HalfKey(d.hashes[0][1])
     }
 
@@ -122,15 +128,15 @@ impl HalfKey {
         let password = u8_vec_to_bool_vec(password);
         let receiver = ObliviousReceiver::<Init>::new(&password);
         // receive ot public key.
-        let public = match r.recv().unwrap() {
-            Event::OTInit(p) => p,
+        let public = match r.recv() {
+            Ok(Event::OTInit(p)) => p,
             _ => panic!("expected OTInit"),
         };
         let receiver = receiver.accept(&public);
         s.send(Event::OTRequest(receiver.public())).unwrap();
         // receive ot payload.
-        let payload = match r.recv().unwrap() {
-            Event::OTResponse(p) => p,
+        let payload = match r.recv() {
+            Ok(Event::OTResponse(p)) => p,
             _ => panic!("expected OTResponse"),
         };
         let enc_password = receiver.receive(&payload);
@@ -142,13 +148,13 @@ impl HalfKey {
 
         let our_password = enc_password;
         // receive garbled circuit.
-        let gc = match r.recv().unwrap() {
-            Event::GCCircuit(gc) => gc,
+        let gc = match r.recv() {
+            Ok(Event::GCCircuit(gc)) => gc,
             _ => panic!("expected GCCircuit"),
         };
         // receive garbled password.
-        let their_password: Vec<Wire> = match r.recv().unwrap() {
-            Event::GCInput(p) => p,
+        let their_password: Vec<Wire> = match r.recv() {
+            Ok(Event::GCInput(p)) => p,
             _ => panic!("expected GCInput"),
         };
 
@@ -157,6 +163,16 @@ impl HalfKey {
         input.extend(their_password);
         input.extend(our_password);
         let output = evaluate(&gc, &input);
+        println!("0: {:?}", HalfKey(hash!(
+            (gc.circuit.num_wires - 1).to_be_bytes(),
+            0u16.to_be_bytes(),
+            &output[0]
+        )));
+        println!("1: {:?}", HalfKey(hash!(
+            (gc.circuit.num_wires - 1).to_be_bytes(),
+            1u16.to_be_bytes(),
+            &output[0]
+        )));
         HalfKey(hash!(
             (gc.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
@@ -183,22 +199,19 @@ mod tests {
 
         let (s1, r1) = unbounded();
         let (s2, r2) = unbounded();
-        let h1 = thread::spawn(move || { // Party 1
+        let h1 = thread::spawn(move || {
+            // Party 1
             let k1 = HalfKey::garbler(password, threshold, &s2, &r1);
             let k2 = HalfKey::evaluator(password, &s2, &r1);
-            println!("k1: {:?}", k1);
-            println!("k2: {:?}", k2);
             k1.combine(k2)
         });
 
-        let h2 = thread::spawn(move || { // Party 2
+        let h2 = thread::spawn(move || {
+            // Party 2
             let k2 = HalfKey::evaluator(password, &s1, &r2);
             let k1 = HalfKey::garbler(password, threshold, &s1, &r2);
-            println!("k2: {:?}", k2);
-            println!("k1: {:?}", k1);
             k1.combine(k2)
         });
-
 
         let k1 = h1.join().unwrap();
         let k2 = h2.join().unwrap();

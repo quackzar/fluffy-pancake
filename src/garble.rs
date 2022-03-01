@@ -145,7 +145,6 @@ impl DecodingKey {
 // TODO: Proper struct for serialize/deserialize.
 type ProjMap = HashMap<usize, Vec<Wire>>;
 
-
 pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
     // 1. Compute lambda & delta for the domains in the circuit
     let mut delta = HashMap::new();
@@ -255,7 +254,10 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
         offset: outputs_start_at,
     };
 
-    let gc = GarbledCircuit { circuit: circuit.clone(), f };
+    let gc = GarbledCircuit {
+        circuit: circuit.clone(),
+        f,
+    };
 
     (gc, encode_key, decode_key)
 }
