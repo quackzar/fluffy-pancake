@@ -115,7 +115,7 @@ impl ObliviousSender {
             // Encrypt the messages.
             // TODO: Error handling
             let cipher = Aes256Gcm::new(Key::from_slice(&k0));
-            let nonce = Nonce::from_slice(b"unique nonce");
+            let nonce = Nonce::from_slice(b"unique nonce"); // TODO: Something with nonce.
             let e0 = cipher.encrypt(nonce, m0.as_slice()).unwrap().to_vec();
             let cipher = Aes256Gcm::new(Key::from_slice(&k1));
             let nonce = Nonce::from_slice(b"unique nonce");
@@ -148,7 +148,6 @@ impl ObliviousReceiver<Init> {
         let n = choices.len();
         let mut rng = ChaCha12Rng::from_entropy();
         let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
-        let secrets = secrets.try_into().unwrap();
         let choices = choices.to_vec();
         Self {
             state: Init,
@@ -204,7 +203,7 @@ impl ObliviousReceiver<RetrievingPayload> {
                 .unwrap();
             messages.push(m);
         }
-        messages.try_into().unwrap()
+        messages
     }
 }
 
