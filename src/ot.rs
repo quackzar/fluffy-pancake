@@ -12,6 +12,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
 use crate::hash;
+use crate::util::LENGTH;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -229,21 +230,20 @@ fn fk(key: &[u8; 32], choice: u16) -> [u8; 32] {
 // 3. Choose
 // 4. Finish
 
-const WIRE_BYTES: usize = 32;
 
 // Bob: Initiate 1-to-n OT (initiated by the sender, Bob):
 // - Prepares keys and uses these to generate the required y values sent to Alice
 // - Creates challenges for Alice
 fn one_to_n_challenge_create(
     domain: u16,
-    messages: &Vec<[u8; WIRE_BYTES]>,
-) -> (Vec<ObliviousSender>, Vec<Public>, Vec<[u8; WIRE_BYTES]>) {
+    messages: &[[u8; LENGTH]],
+) -> (Vec<ObliviousSender>, Vec<Public>, Vec<[u8; LENGTH]>) {
     // 1. B: Prepare random keys
     let l = messages.len();
     debug_assert!(l == (1 << domain));
 
     let mut rng = ChaCha12Rng::from_entropy();
-    let mut keys: Vec<[[u8; WIRE_BYTES]; 2]> = Vec::with_capacity(l);
+    let mut keys: Vec<[[u8; LENGTH]; 2]> = Vec::with_capacity(l);
     for _i in 0..l {
         let left = Scalar::random(&mut rng).to_bytes();
         let right = Scalar::random(&mut rng).to_bytes();
@@ -287,7 +287,7 @@ fn one_to_n_challenge_create(
 fn one_to_n_challenge_respond(
     domain: u16,
     choice: u16,
-    challenges: &Vec<Public>,
+    challenges: &[Public],
 ) -> (Vec<ObliviousReceiver<RetrievingPayload>>, Vec<Public>) {
     let l = 1 << domain;
 
@@ -316,8 +316,8 @@ fn one_to_n_challenge_respond(
 // Bob: Create payloads for Alice
 fn one_to_n_create_payloads(
     domain: u16,
-    senders: &Vec<ObliviousSender>,
-    responses: &Vec<Public>,
+    senders: &[ObliviousSender],
+    responses: &[Public],
 ) -> Vec<Payload> {
     let l = 1 << domain;
 
@@ -336,9 +336,9 @@ fn one_to_n_create_payloads(
 fn one_to_n_choose(
     domain: u16,
     choice: u16,
-    receivers: &Vec<ObliviousReceiver<RetrievingPayload>>,
-    payloads: &Vec<Payload>,
-    y: &Vec<[u8; WIRE_BYTES]>,
+    receivers: &[ObliviousReceiver<RetrievingPayload>],
+    payloads: &[Payload],
+    y: &[[u8; LENGTH]],
 ) -> [u8; 32] {
     let l = 1 << domain;
 
@@ -350,10 +350,10 @@ fn one_to_n_choose(
         let messages = receivers[i].receive(&payloads[i]);
         let message = &messages[0];
         debug_assert!(messages.len() == 1);
-        debug_assert!(message.len() == WIRE_BYTES);
+        debug_assert!(message.len() == LENGTH);
 
-        let mut key = [0u8; WIRE_BYTES];
-        for j in 0..WIRE_BYTES {
+        let mut key = [0u8; LENGTH];
+        for j in 0..LENGTH {
             key[j] = message[j];
         }
 
@@ -373,7 +373,7 @@ fn one_to_n_choose(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::log2;
+    use crate::util::{log2, LENGTH};
 
     #[test]
     fn test_1_to_n() {
@@ -381,7 +381,7 @@ mod tests {
         let domain = log2(n) as u16;
         let mut messages = Vec::with_capacity(n as usize);
         for i in 0u8..n {
-            messages.push([i; WIRE_BYTES]);
+            messages.push([i; LENGTH]);
         }
         let choice = 4;
 
@@ -396,7 +396,7 @@ mod tests {
         let output = one_to_n_choose(domain, choice, &receivers, &payloads, &y);
 
         // Check that we actually got the thing we wanted
-        for i in 0..WIRE_BYTES {
+        for i in 0..LENGTH {
             assert_eq!(messages[choice as usize][i], output[i]);
         }
     }

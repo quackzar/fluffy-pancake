@@ -1,4 +1,4 @@
-use std::{collections::HashSet, error::Error, fmt, fs::File, io::BufReader};
+use std::{collections::HashSet, error::Error, fmt};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -177,7 +177,6 @@ impl Circuit {
         }
         builder.build()
     }
-
 }
 
 #[derive(Debug)]

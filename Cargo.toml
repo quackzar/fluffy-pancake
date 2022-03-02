@@ -10,18 +10,21 @@ categories = ["cryptography"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 
-
 [dependencies]
 aes-gcm = "0.9.4"
 sha2 = "0.10.1"
 itertools = "0.10.3"
 rand = "0.8.4"
 rand_chacha = "0.3.1"
-curve25519-dalek = {version = "4.0.0-pre.1", features = ["std", "simd_backend"]}
+curve25519-dalek = {version = "4.0.0-pre.1", features = ["std"]}
 bytemuck = "1.7.3"
 num-traits = "0.2.14"
 serde = {version = "1.0.136",  features = ["derive"]}
 crossbeam-channel = "0.5"
+
+
+[features]
+simd = ["curve25519-dalek/simd_backend"]
 
 
 [dev-dependencies]
