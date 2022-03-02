@@ -1,4 +1,4 @@
-use std::{collections::HashSet, error::Error, fmt};
+use std::{collections::HashSet, error::Error, fmt, fs::File, io::BufReader};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -177,6 +177,7 @@ impl Circuit {
         }
         builder.build()
     }
+
 }
 
 #[derive(Debug)]
@@ -225,3 +226,5 @@ fn verify_circuit(circuit: &Circuit) -> Result<(), CircuitError> {
     }
     Ok(())
 }
+
+
