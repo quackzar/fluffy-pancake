@@ -61,5 +61,18 @@ fn bench_ot_256bit(c: &mut Criterion) {
     c.bench_function("OT 256 bits", |b| b.iter(|| run_ot(&enc, &choices)));
 }
 
-criterion_group!(benches, bench_ot_1bit, bench_ot_128bit, bench_ot_256bit);
+
+fn bench_ot_2048bit(c: &mut Criterion) {
+    let circuit = build_circuit(2048/2, 0);
+    let (_, enc, _) = garble::garble(&circuit);
+    let enc = BinaryEncodingKey::from(enc);
+    let enc: Vec<_> = enc.zipped()
+        .iter()
+        .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+        .collect();
+    let choices = vec![false; 2048];
+    c.bench_function("OT 2048 bits", |b| b.iter(|| run_ot(&enc, &choices)));
+}
+
+criterion_group!(benches, bench_ot_1bit, bench_ot_128bit, bench_ot_256bit, bench_ot_2048bit);
 criterion_main!(benches);
