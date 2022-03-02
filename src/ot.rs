@@ -16,6 +16,8 @@ use crate::util::LENGTH;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+// use rayon::prelude::*;
+
 // Common
 pub type CiphertextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,27 +89,22 @@ impl ObliviousSender {
     }
 
     pub fn accept(&self, their_public: &Public) -> Payload {
-        let n = self.messages.0.len();
         let secrets = &self.secrets;
         let publics = &self.publics;
         let messages = &self.messages;
-        let mut payload: Vec<[Vec<u8>; 2]> = Vec::with_capacity(n);
-        for i in 0..n {
-            // TODO: Use maybe uninit.
-            // TODO: Proper error handling.
+        let payload = messages.0.iter().enumerate().map(|(i, [m0, m1])| -> CiphertextPair {
             let their_public = &their_public.0[i].decompress().unwrap();
             let public = &publics.0[i].decompress().unwrap();
             let secret = &secrets[i];
-            let [m0, m1] = &messages.0[i];
 
             // Compute the two shared keys.
             let mut hasher = Sha256::new();
-            hasher.update((their_public * secret).to_montgomery().as_bytes());
+            hasher.update((their_public * secret).compress().as_bytes());
             let k0 = hasher.finalize();
             let mut hasher = Sha256::new();
             hasher.update(
                 ((their_public - public) * secret)
-                    .to_montgomery()
+                    .compress()
                     .as_bytes(),
             );
             let k1 = hasher.finalize();
@@ -120,9 +117,8 @@ impl ObliviousSender {
             let cipher = Aes256Gcm::new(Key::from_slice(&k1));
             let nonce = Nonce::from_slice(b"unique nonce");
             let e1 = cipher.encrypt(nonce, m1.as_slice()).unwrap().to_vec();
-
-            payload.push([e0, e1]);
-        }
+            [e0, e1]
+        }).collect();
         Payload(payload)
     }
 }
@@ -157,26 +153,23 @@ impl ObliviousReceiver<Init> {
     }
 
     pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
-        let n = their_publics.0.len();
-        let mut keys: Vec<Vec<u8>> = Vec::with_capacity(n);
-        let mut publics = Vec::with_capacity(n);
-        for i in 0..n {
-            // TODO: Use maybe uninit
-            let their_public = their_publics.0[i].decompress().unwrap();
+        let (publics, keys) : (Vec<CompressedEdwardsY>, _)= their_publics.0.iter().enumerate().map(|(i, p)| 
+            -> (CompressedEdwardsY, Vec<u8>)
+            {
+            let their_public = &p.decompress().unwrap();
             let public = if self.choices[i] {
                 their_public + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
             } else {
                 &ED25519_BASEPOINT_TABLE * &self.secrets[i]
             };
             let mut hasher = Sha256::new();
-            hasher.update((their_public * self.secrets[i]).to_montgomery().as_bytes());
+            hasher.update((their_public * self.secrets[i]).compress().as_bytes());
             let key = hasher.finalize().to_vec();
-            keys.push(key);
-            publics.push(public.compress());
-        }
-        let keys = keys;
-        let publics = Public(publics);
 
+            (public.compress(), key)
+
+        }).unzip();
+        let publics = Public(publics);
         ObliviousReceiver {
             state: RetrievingPayload { keys, publics },
             secrets: self.secrets.clone(),
@@ -200,7 +193,7 @@ impl ObliviousReceiver<RetrievingPayload> {
             let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
             let m = cipher
                 .decrypt(nonce, (if self.choices[i] { e1 } else { e0 }).as_ref())
-                .unwrap();
+                .expect("Failed to decrypt");
             messages.push(m);
         }
         messages
