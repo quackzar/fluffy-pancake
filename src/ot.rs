@@ -16,7 +16,7 @@ use crate::util::LENGTH;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-// use rayon::prelude::*;
+use rayon::prelude::*;
 
 // Common
 pub type CiphertextPair = [Vec<u8>; 2];
@@ -72,7 +72,7 @@ impl ObliviousSender {
         let mut rng = ChaCha12Rng::from_entropy();
         let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
         let publics = secrets
-            .iter()
+            .par_iter()
             .map(|secret| &ED25519_BASEPOINT_TABLE * secret)
             .map(|public| public.compress())
             .collect::<Vec<_>>();
@@ -92,7 +92,7 @@ impl ObliviousSender {
         let secrets = &self.secrets;
         let publics = &self.publics;
         let messages = &self.messages;
-        let payload = messages.0.iter().enumerate().map(|(i, [m0, m1])| -> CiphertextPair {
+        let payload = messages.0.par_iter().enumerate().map(|(i, [m0, m1])| -> CiphertextPair {
             let their_public = &their_public.0[i].decompress().unwrap();
             let public = &publics.0[i].decompress().unwrap();
             let secret = &secrets[i];
@@ -153,7 +153,7 @@ impl ObliviousReceiver<Init> {
     }
 
     pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
-        let (publics, keys) : (Vec<CompressedEdwardsY>, _)= their_publics.0.iter().enumerate().map(|(i, p)| 
+        let (publics, keys) : (Vec<CompressedEdwardsY>, _)= their_publics.0.par_iter().enumerate().map(|(i, p)| 
             -> (CompressedEdwardsY, Vec<u8>)
             {
             let their_public = &p.decompress().unwrap();
@@ -184,7 +184,7 @@ impl ObliviousReceiver<RetrievingPayload> {
     }
 
     pub fn receive(&self, payload: &Payload) -> Vec<Vec<u8>> {
-        payload.0.iter().enumerate().map(|(i, [e0, e1])| -> Vec<u8> {
+        payload.0.par_iter().enumerate().map(|(i, [e0, e1])| -> Vec<u8> {
             let key = Key::from_slice(&self.state.keys[i]);
             let cipher = Aes256Gcm::new(key);
             let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
