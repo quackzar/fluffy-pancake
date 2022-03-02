@@ -184,19 +184,14 @@ impl ObliviousReceiver<RetrievingPayload> {
     }
 
     pub fn receive(&self, payload: &Payload) -> Vec<Vec<u8>> {
-        let n = payload.0.len();
-        let mut messages: Vec<Vec<u8>> = Vec::with_capacity(n);
-        for i in 0..n {
-            let [e0, e1] = &payload.0[i];
+        payload.0.iter().enumerate().map(|(i, [e0, e1])| -> Vec<u8> {
             let key = Key::from_slice(&self.state.keys[i]);
             let cipher = Aes256Gcm::new(key);
             let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
-            let m = cipher
+            cipher
                 .decrypt(nonce, (if self.choices[i] { e1 } else { e0 }).as_ref())
-                .expect("Failed to decrypt");
-            messages.push(m);
-        }
-        messages
+                .expect("Failed to decrypt")
+        }).collect()
     }
 }
 
