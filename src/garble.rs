@@ -228,8 +228,10 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
                 let w_a = &wires[gate.inputs[0]];
                 let w_b = &wires[gate.inputs[1]];
                 let p_a = w_a.color() != 0;
+                println!("p_a: {:?}", p_a);
                 let p_b = w_b.color() != 0;
-                // j0 += 1; j1 += 1;
+                println!("p_b: {:?}", p_b);
+                j0 += 1; j1 += 1;
 
                 // first half gate
                 let t_g = 
@@ -256,7 +258,7 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
                 let t_e = &t_e + w_a;
                 
                 let w_e = Wire::from_bytes(hash!(w_b, j1.to_be_bytes()), Domain::Binary);
-                let w_e = if p_a {&w_e + &(&t_e + w_a)} else {w_e};
+                let w_e = if p_b {&w_e + &(&t_e + w_a)} else {w_e};
                 
                 f_halfgate.insert(gate.output, (t_g, t_e));
                 &w_g + &w_e
@@ -339,8 +341,10 @@ pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
                 let w_a = unsafe { wires[a].assume_init_ref() };
                 let w_b = unsafe { wires[b].assume_init_ref() };
                 let s_a = w_a.color() != 0;
+                println!("s_a: {:?}", s_a);
                 let s_b = w_b.color() != 0;
-                // j0 += 1; j1 += 1;
+                println!("s_b: {:?}", s_b);
+                j0 += 1; j1 += 1;
                 let (t_g, t_e) = &f_halfgate[&gate.output];
 
                 let w_g = Wire::from_bytes(
@@ -348,7 +352,6 @@ pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
                         Domain::Binary
                     );
                 let w_g = if s_a { &w_g + t_g } else {w_g};
-                println!("w_g: {:?}", w_g);
 
                 let w_e = Wire::from_bytes(
                         hash!(w_b, j1.to_be_bytes()),
@@ -356,7 +359,6 @@ pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
                     );
 
                 let w_e = if s_b { &w_e + &(t_e + w_a) } else {w_e};
-                println!("w_e: {:?}", w_e);
 
                 &w_g + &w_e
             }
@@ -394,6 +396,7 @@ pub fn decode(d: &DecodingKey, z: &[Wire]) -> Result<Vec<u16>, DecodeError> {
         let mut success = false;
         for k in 0..z[i].domain() {
             let hash = hash(output, k, &z[i]);
+            println!("hash: {:?}", hash);
             if hash == hashes[k as usize] {
                 y[i as usize] = k;
                 success = true;
@@ -517,6 +520,10 @@ mod tests {
         verify_circuit(&circuit).unwrap();
         let out = garble_encode_eval_decode(&circuit, &[1, 1]);
         assert_eq!(out[0], 1);
+        let out = garble_encode_eval_decode(&circuit, &[0, 1]);
+        assert_eq!(out[0], 0);
+        let out = garble_encode_eval_decode(&circuit, &[0, 0]);
+        assert_eq!(out[0], 0);
     }
 
     fn make_me_the_threshold() -> Circuit {
