@@ -260,7 +260,8 @@ impl Wire {
     }
 }
 
-impl AsRef<[u8]> for &Wire {
+
+impl AsRef<[u8]> for Wire {
     fn as_ref(&self) -> &[u8] {
         &self.values
     }

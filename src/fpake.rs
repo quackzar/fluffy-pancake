@@ -662,11 +662,11 @@ mod tests {
         assert_eq!(k1, k2);
     }
 
-    fn garble_encode_eval_decode(c: &Circuit, x: &Vec<u16>) -> Vec<u16> {
+    fn garble_encode_eval_decode(c: &Circuit, x: &[u16]) -> Vec<u16> {
         let (gc, e, d) = garble(c);
         let x = encode(&e, x);
         let z = evaluate(&gc, &x);
-        decode(&d, z).unwrap()
+        decode(&d, &z).unwrap()
     }
 
     #[test]

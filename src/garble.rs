@@ -6,7 +6,7 @@ use std::mem::{transmute, MaybeUninit};
 
 use crate::circuit::*;
 use crate::util::*;
-use crate::wires::hash;
+use crate::wires::{hash, Domain};
 use crate::wires::hash_wire;
 use crate::wires::Wire;
 
@@ -24,7 +24,7 @@ pub struct EncodingKey {
 pub struct BinaryEncodingKey(pub Vec<Wire>, pub Vec<Wire>);
 
 impl EncodingKey {
-    pub fn encode(&self, x: Vec<u16>) -> Vec<Wire> {
+    pub fn encode(&self, x: &[u16]) -> Vec<Wire> {
         let wires = &self.wires;
         let delta = &self.delta;
         debug_assert_eq!(
@@ -34,7 +34,7 @@ impl EncodingKey {
         );
 
         let mut z = Vec::with_capacity(x.len());
-        for (wire, x) in wires.iter().zip(x) {
+        for (wire, &x) in wires.iter().zip(x) {
             z.push(wire + &(&delta[&wire.domain()] * x));
         }
 
@@ -171,8 +171,7 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
 
     // 2. Create wires for each of the inputs
     let mut wires = Vec::with_capacity(circuit.num_wires);
-    for input in 0..circuit.num_inputs {
-        let domain = circuit.input_domains[input];
+    for &domain in circuit.input_domains.iter() {
         wires.push(Wire::new(domain));
     }
 
@@ -185,7 +184,10 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
     // 4. For each gate
     let outputs_start_at = circuit.num_wires - circuit.num_outputs;
     let mut f = HashMap::new();
+    let mut f_halfgate = HashMap::new();
     let mut d = Vec::with_capacity(circuit.num_outputs);
+    let mut j0 : usize = 0;
+    let mut j1 : usize = 0;
     for gate in &circuit.gates {
         let wire = match &gate.kind {
             GateKind::Add => gate.inputs.iter().map(|&input| wires[input].clone()).sum(),
@@ -220,20 +222,51 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
 
                 f.insert(gate.output, g);
                 wire
+            },
+            GateKind::And => {
+                let delta = &delta[&2];
+                let w_a = &wires[gate.inputs[0]];
+                let w_b = &wires[gate.inputs[1]];
+                let p_a = w_a.color() != 0;
+                let p_b = w_b.color() != 0;
+                // j0 += 1; j1 += 1;
+
+                // first half gate
+                let t_g = 
+                    &Wire::from_bytes(
+                        hash!(w_a, j0.to_be_bytes()),
+                        Domain::Binary
+                    ) + &Wire::from_bytes(
+                        hash!(w_a + delta, j0.to_be_bytes()),
+                        Domain::Binary
+                    );
+                let t_g = if p_b {&t_g + delta} else {t_g};
+
+                let w_g = Wire::from_bytes(hash!(w_a, j0.to_be_bytes()), Domain::Binary);
+                let w_g = if p_a {&w_g + &t_g} else {w_g};
+
+                // second half gate
+                let t_e = &Wire::from_bytes(
+                        hash!(w_b, j1.to_be_bytes()),
+                        Domain::Binary
+                    ) + &Wire::from_bytes(
+                        hash!(w_b + delta, j1.to_be_bytes()),
+                        Domain::Binary
+                    );
+                let t_e = &t_e + w_a;
+                
+                let w_e = Wire::from_bytes(hash!(w_b, j1.to_be_bytes()), Domain::Binary);
+                let w_e = if p_a {&w_e + &(&t_e + w_a)} else {w_e};
+                
+                f_halfgate.insert(gate.output, (t_g, t_e));
+                &w_g + &w_e
             }
         };
         wires.push(wire);
 
         // 5. Decoding information for outputs
         if gate.output >= outputs_start_at {
-            let output_domain = match &gate.kind {
-                GateKind::Add | GateKind::Mul(_) => gate.domain,
-                GateKind::Proj(proj) => match *proj {
-                    ProjKind::Map(range) => range,
-                    ProjKind::Less(_) => 2,
-                },
-            };
-
+            let output_domain = gate.output_domain();
             let mut values = vec![[0u8; 32]; output_domain as usize];
             for x in 0..output_domain {
                 let hash = hash(
@@ -256,6 +289,7 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
     let gc = GarbledCircuit {
         circuit: circuit.clone(),
         f,
+        f_halfgate
     };
 
     (gc, encode_key, decode_key)
@@ -264,10 +298,12 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
 pub struct GarbledCircuit {
     pub circuit: Circuit,
     f: ProjMap,
+    f_halfgate: HashMap<usize, (Wire, Wire)>
 }
 
 pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
     let f = &circuit.f;
+    let f_halfgate = &circuit.f_halfgate;
     let circuit = &circuit.circuit;
     debug_assert_eq!(x.len(), circuit.num_inputs, "input length mismatch");
 
@@ -279,6 +315,9 @@ pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
         wires[i].write(x[i].clone());
     }
 
+
+    let mut j1 : usize = 0;
+    let mut j0 : usize = 0;
     for gate in &circuit.gates {
         let wire: Wire = match gate.kind {
             GateKind::Add => gate
@@ -294,6 +333,33 @@ pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
                 let hw = hash_wire(gate.output, wire, cipher);
                 cipher - &hw
             }
+            GateKind::And => {
+                let a = gate.inputs[0];
+                let b = gate.inputs[1];
+                let w_a = unsafe { wires[a].assume_init_ref() };
+                let w_b = unsafe { wires[b].assume_init_ref() };
+                let s_a = w_a.color() != 0;
+                let s_b = w_b.color() != 0;
+                // j0 += 1; j1 += 1;
+                let (t_g, t_e) = &f_halfgate[&gate.output];
+
+                let w_g = Wire::from_bytes(
+                        hash!(w_a, j0.to_be_bytes()),
+                        Domain::Binary
+                    );
+                let w_g = if s_a { &w_g + t_g } else {w_g};
+                println!("w_g: {:?}", w_g);
+
+                let w_e = Wire::from_bytes(
+                        hash!(w_b, j1.to_be_bytes()),
+                        Domain::Binary
+                    );
+
+                let w_e = if s_b { &w_e + &(t_e + w_a) } else {w_e};
+                println!("w_e: {:?}", w_e);
+
+                &w_g + &w_e
+            }
         };
         wires[gate.output].write(wire);
     }
@@ -302,7 +368,7 @@ pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
     wires[(circuit.num_wires - circuit.num_outputs)..circuit.num_wires].to_vec()
 }
 
-pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<Wire> {
+pub fn encode(e: &EncodingKey, x: &[u16]) -> Vec<Wire> {
     let wires = &e.wires;
     let delta = &e.delta;
     debug_assert_eq!(
@@ -319,7 +385,7 @@ pub fn encode(e: &EncodingKey, x: &Vec<u16>) -> Vec<Wire> {
     z
 }
 
-pub fn decode(d: &DecodingKey, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
+pub fn decode(d: &DecodingKey, z: &[Wire]) -> Result<Vec<u16>, DecodeError> {
     let mut y = vec![0; d.hashes.len()];
     for i in 0..z.len() {
         let output = d.offset + i;
@@ -336,8 +402,6 @@ pub fn decode(d: &DecodingKey, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
         }
 
         if !success {
-            println!("{:?}", d);
-            println!("{:?}", z);
             return Err(DecodeError {});
         }
     }
@@ -352,11 +416,11 @@ pub fn decode(d: &DecodingKey, z: Vec<Wire>) -> Result<Vec<u16>, DecodeError> {
 mod tests {
     use super::*;
 
-    fn garble_encode_eval_decode(c: &Circuit, x: &Vec<u16>) -> Vec<u16> {
+    fn garble_encode_eval_decode(c: &Circuit, x: &[u16]) -> Vec<u16> {
         let (gc, e, d) = garble(c);
         let x = encode(&e, x);
         let z = evaluate(&gc, &x);
-        decode(&d, z).unwrap()
+        decode(&d, &z).unwrap()
     }
 
     #[test]
@@ -412,7 +476,7 @@ mod tests {
             num_inputs: 1,
             num_outputs: 1,
             num_wires: 2,
-            input_domains: vec![domain, domain],
+            input_domains: vec![domain],
         };
         let inputs = vec![57];
         let outputs = garble_encode_eval_decode(&circuit, &inputs);
@@ -438,6 +502,21 @@ mod tests {
         let input = vec![7];
         let output = garble_encode_eval_decode(&circuit, &input);
         assert_eq!(output[0], input[0]);
+    }
+
+    #[test]
+    fn and_circuit() {
+        let circuit = CircuitBuilder::new(2)
+            .add_gate(Gate{
+                output: 2,
+                domain: 2,
+                inputs: vec![0,1],
+                kind: GateKind::And,
+            }).build();
+        println!("{:?}", circuit.input_domains);
+        verify_circuit(&circuit).unwrap();
+        let out = garble_encode_eval_decode(&circuit, &[1, 1]);
+        assert_eq!(out[0], 1);
     }
 
     fn make_me_the_threshold() -> Circuit {
