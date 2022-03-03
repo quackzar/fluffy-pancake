@@ -1,9 +1,9 @@
 use crate::util::*;
 use core::ops;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::iter;
-use rand::Rng;
 
 // Maybe use domain as const generic?
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -260,7 +260,7 @@ impl Wire {
     }
 }
 
-impl AsRef<[u8]> for &Wire {
+impl AsRef<[u8]> for Wire {
     fn as_ref(&self) -> &[u8] {
         &self.values
     }

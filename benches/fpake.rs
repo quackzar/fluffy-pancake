@@ -1,9 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use magic_pake::fpake::*;
 use crossbeam_channel::unbounded;
+use magic_pake::fpake::*;
 use std::thread;
 
-fn fpake(password : &'static [u8]) {
+fn fpake(password: &'static [u8]) {
     let threshold = 0;
 
     let (s1, r1) = unbounded();
@@ -26,12 +26,10 @@ fn fpake(password : &'static [u8]) {
     let _k2 = h2.join().unwrap();
 }
 
-
 fn bench_fpake(c: &mut Criterion) {
     c.bench_function("fPAKE 64bit", |b| b.iter(|| fpake(b"password")));
     c.bench_function("fPAKE 128bit", |b| b.iter(|| fpake(b"passwordpassword")));
 }
-
 
 criterion_group!(benches, bench_fpake);
 criterion_main!(benches);

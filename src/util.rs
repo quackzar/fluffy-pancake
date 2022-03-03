@@ -38,6 +38,13 @@ pub fn to_array(bytes: &[u8]) -> WireBytes {
     array
 }
 
+// impl core::ops::BitXor for WireBytes {
+//     type Output = WireBytes;
+//     fn bitxor(self, rhs: Self) -> Self::Output {
+//         xor(self, rhs)
+//     }
+// }
+
 /// Variadic Hashing
 /// Hashing based on Sha256 producing a 32 byte hash
 /// Arguments are hashed in order.
