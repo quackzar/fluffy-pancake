@@ -47,8 +47,8 @@ impl Message {
 #[derive(Debug, Clone)]
 pub struct Public(Vec<CompressedEdwardsY>);
 
-impl From<&[[u8; 32]]> for Public {
-    fn from(bytes: &[[u8; 32]]) -> Public {
+impl From<&[[u8; LENGTH]]> for Public {
+    fn from(bytes: &[[u8; LENGTH]]) -> Public {
         let mut vec = Vec::with_capacity(bytes.len());
         for b in bytes {
             let p = CompressedEdwardsY::from_slice(b);
@@ -197,18 +197,18 @@ impl ObliviousReceiver<RetrievingPayload> {
 
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
-fn xor_bytes(left: &mut [u8; 32], right: &[u8; 32]) {
-    for i in 0..32 {
+fn xor_bytes(left: &mut [u8; LENGTH], right: &[u8; LENGTH]) {
+    for i in 0..LENGTH {
         left[i] ^= right[i];
     }
 }
 
-fn fk(key: &[u8; 32], choice: u16) -> [u8; 32] {
+fn fk(key: &[u8; LENGTH], choice: u16) -> [u8; LENGTH] {
     let mut hasher = Sha256::new();
     hasher.update(choice.to_be_bytes());
     hasher.update(key);
     let result = hasher.finalize();
-    return <[u8; 32]>::try_from(result.as_ref()).unwrap();
+    return <[u8; LENGTH]>::try_from(result.as_ref()).unwrap();
 }
 
 // How to 1-to-n:
@@ -221,7 +221,7 @@ fn fk(key: &[u8; 32], choice: u16) -> [u8; 32] {
 // Bob: Initiate 1-to-n OT (initiated by the sender, Bob):
 // - Prepares keys and uses these to generate the required y values sent to Alice
 // - Creates challenges for Alice
-fn one_to_n_challenge_create(
+pub fn one_to_n_challenge_create(
     domain: u16,
     messages: &[[u8; LENGTH]],
 ) -> (ObliviousSender, Public, Vec<[u8; LENGTH]>) {
@@ -269,7 +269,7 @@ fn one_to_n_challenge_create(
 // Alice: Respond to challenge from Bob
 // - Setup receivers
 // - Create responses for Bob
-fn one_to_n_challenge_respond(
+pub fn one_to_n_challenge_respond(
     domain: u16,
     choice: u16,
     challenge: &Public,
@@ -289,7 +289,7 @@ fn one_to_n_challenge_respond(
 }
 
 // Bob: Create payloads for Alice
-fn one_to_n_create_payloads(
+pub fn one_to_n_create_payloads(
     sender: &ObliviousSender,
     response: &Public,
 ) -> Payload {
@@ -297,17 +297,17 @@ fn one_to_n_create_payloads(
 }
 
 // Alice: Chose a value
-fn one_to_n_choose(
+pub fn one_to_n_choose(
     domain: u16,
     choice: u16,
     receiver: &ObliviousReceiver<RetrievingPayload>,
     payload: &Payload,
     y: &[[u8; LENGTH]],
-) -> [u8; 32] {
+) -> [u8; LENGTH] {
     let l = 1 << domain;
 
     // Convert payloads to keys
-    let mut keys: Vec<[u8; 32]> = Vec::with_capacity(l);
+    let mut keys: Vec<[u8; LENGTH]> = Vec::with_capacity(l);
     let messages = receiver.receive(payload);
     for i in 0..l {
         let message = &messages[i];
@@ -351,10 +351,10 @@ mod tests {
         let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
 
         // Bob: Creates payloads for Alice
-        let payloads = one_to_n_create_payloads(&sender, &response);
+        let payload = one_to_n_create_payloads(&sender, &response);
 
         // Alice: Choose a value
-        let output = one_to_n_choose(domain, choice, &receiver, &payloads, &y);
+        let output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
 
         // Check that we actually got the thing we wanted
         for i in 0..LENGTH {
