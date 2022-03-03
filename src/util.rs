@@ -73,6 +73,17 @@ pub fn xor(a: WireBytes, b: WireBytes) -> WireBytes {
     result
 }
 
+pub fn xor_bytes(left: &Vec<u8>, right: &Vec<u8>) -> Vec<u8> {
+    debug_assert_eq!(left.len(), right.len());
+
+    let mut result = Vec::with_capacity(left.len());
+    for i in 0..left.len() {
+        result.push(left[i] ^ right[i]);
+    }
+
+    return result;
+}
+
 #[cfg(test)]
 mod tests {
     use sha2::{Digest, Sha256};

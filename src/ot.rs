@@ -200,17 +200,6 @@ impl ObliviousReceiver<RetrievingPayload> {
 
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
-fn xor_bytes(left: &Vec<u8>, right: &Vec<u8>) -> Vec<u8> {
-    debug_assert_eq!(left.len(), right.len());
-
-    let mut result = Vec::with_capacity(left.len());
-    for i in 0..left.len() {
-        result.push(left[i] ^ right[i]);
-    }
-
-    return result;
-}
-
 fn fk(key: &[u8], choice: u16) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(choice.to_be_bytes());
