@@ -93,33 +93,34 @@ impl ObliviousSender {
         let publics = &self.publics;
         assert!(publics.0.len() == their_public.0.len());
         let messages = &self.messages;
-        let payload = messages.0.par_iter().enumerate().map(|(i, [m0, m1])| -> CiphertextPair {
-            let their_public = &their_public.0[i].decompress().unwrap();
-            let public = &publics.0[i].decompress().unwrap();
-            let secret = &secrets[i];
+        let payload = messages
+            .0
+            .par_iter()
+            .enumerate()
+            .map(|(i, [m0, m1])| -> CiphertextPair {
+                let their_public = &their_public.0[i].decompress().unwrap();
+                let public = &publics.0[i].decompress().unwrap();
+                let secret = &secrets[i];
 
-            // Compute the two shared keys.
-            let mut hasher = Sha256::new();
-            hasher.update((their_public * secret).compress().as_bytes());
-            let k0 = hasher.finalize();
-            let mut hasher = Sha256::new();
-            hasher.update(
-                ((their_public - public) * secret)
-                    .compress()
-                    .as_bytes(),
-            );
-            let k1 = hasher.finalize();
+                // Compute the two shared keys.
+                let mut hasher = Sha256::new();
+                hasher.update((their_public * secret).compress().as_bytes());
+                let k0 = hasher.finalize();
+                let mut hasher = Sha256::new();
+                hasher.update(((their_public - public) * secret).compress().as_bytes());
+                let k1 = hasher.finalize();
 
-            // Encrypt the messages.
-            // TODO: Error handling
-            let cipher = Aes256Gcm::new(Key::from_slice(&k0));
-            let nonce = Nonce::from_slice(b"unique nonce"); // TODO: Something with nonce.
-            let e0 = cipher.encrypt(nonce, m0.as_slice()).unwrap().to_vec();
-            let cipher = Aes256Gcm::new(Key::from_slice(&k1));
-            let nonce = Nonce::from_slice(b"unique nonce");
-            let e1 = cipher.encrypt(nonce, m1.as_slice()).unwrap().to_vec();
-            [e0, e1]
-        }).collect();
+                // Encrypt the messages.
+                // TODO: Error handling
+                let cipher = Aes256Gcm::new(Key::from_slice(&k0));
+                let nonce = Nonce::from_slice(b"unique nonce"); // TODO: Something with nonce.
+                let e0 = cipher.encrypt(nonce, m0.as_slice()).unwrap().to_vec();
+                let cipher = Aes256Gcm::new(Key::from_slice(&k1));
+                let nonce = Nonce::from_slice(b"unique nonce");
+                let e1 = cipher.encrypt(nonce, m1.as_slice()).unwrap().to_vec();
+                [e0, e1]
+            })
+            .collect();
         Payload(payload)
     }
 }
@@ -155,22 +156,24 @@ impl ObliviousReceiver<Init> {
 
     pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
         assert!(self.choices.len() == their_publics.0.len());
-        let (publics, keys) : (Vec<CompressedEdwardsY>, _)= their_publics.0.par_iter().enumerate().map(|(i, p)| 
-            -> (CompressedEdwardsY, Vec<u8>)
-            {
-            let their_public = &p.decompress().unwrap();
-            let public = if self.choices[i] {
-                their_public + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
-            } else {
-                &ED25519_BASEPOINT_TABLE * &self.secrets[i]
-            };
-            let mut hasher = Sha256::new();
-            hasher.update((their_public * self.secrets[i]).compress().as_bytes());
-            let key = hasher.finalize().to_vec();
+        let (publics, keys): (Vec<CompressedEdwardsY>, _) = their_publics
+            .0
+            .par_iter()
+            .enumerate()
+            .map(|(i, p)| -> (CompressedEdwardsY, Vec<u8>) {
+                let their_public = &p.decompress().unwrap();
+                let public = if self.choices[i] {
+                    their_public + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
+                } else {
+                    &ED25519_BASEPOINT_TABLE * &self.secrets[i]
+                };
+                let mut hasher = Sha256::new();
+                hasher.update((their_public * self.secrets[i]).compress().as_bytes());
+                let key = hasher.finalize().to_vec();
 
-            (public.compress(), key)
-
-        }).unzip();
+                (public.compress(), key)
+            })
+            .unzip();
         let publics = Public(publics);
         ObliviousReceiver {
             state: RetrievingPayload { keys, publics },
@@ -187,14 +190,19 @@ impl ObliviousReceiver<RetrievingPayload> {
 
     pub fn receive(&self, payload: &Payload) -> Vec<Vec<u8>> {
         assert!(self.choices.len() == payload.0.len());
-        payload.0.par_iter().enumerate().map(|(i, [e0, e1])| -> Vec<u8> {
-            let key = Key::from_slice(&self.state.keys[i]);
-            let cipher = Aes256Gcm::new(key);
-            let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
-            cipher
-                .decrypt(nonce, (if self.choices[i] { e1 } else { e0 }).as_ref())
-                .expect("Failed to decrypt")
-        }).collect()
+        payload
+            .0
+            .par_iter()
+            .enumerate()
+            .map(|(i, [e0, e1])| -> Vec<u8> {
+                let key = Key::from_slice(&self.state.keys[i]);
+                let cipher = Aes256Gcm::new(key);
+                let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
+                cipher
+                    .decrypt(nonce, (if self.choices[i] { e1 } else { e0 }).as_ref())
+                    .expect("Failed to decrypt")
+            })
+            .collect()
     }
 }
 
@@ -219,7 +227,6 @@ fn fk(key: &[u8], choice: u16) -> Vec<u8> {
 // 2. Challenge respond
 // 3. Choose
 // 4. Finish
-
 
 // Bob: Initiate 1-to-n OT (initiated by the sender, Bob):
 // - Prepares keys and uses these to generate the required y values sent to Alice
@@ -296,10 +303,7 @@ pub fn one_to_n_challenge_respond(
 }
 
 // Bob: Create payloads for Alice
-pub fn one_to_n_create_payloads(
-    sender: &ObliviousSender,
-    response: &Public,
-) -> Payload {
+pub fn one_to_n_create_payloads(sender: &ObliviousSender, response: &Public) -> Payload {
     sender.accept(response)
 }
 

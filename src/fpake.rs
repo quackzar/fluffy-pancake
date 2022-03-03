@@ -64,8 +64,8 @@ pub struct HalfKey(WireBytes);
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Key(WireBytes);
 
-use crossbeam_channel::{Receiver, Sender};
 use crate::util;
+use crossbeam_channel::{Receiver, Sender};
 
 pub enum Event {
     OTInit(Public),
@@ -224,7 +224,10 @@ impl OneOfManyKey {
         // 2. Use regular OT to get the encoded password for the evaluator
         let mut key = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
-            key.push([encoding[i][0].to_bytes().to_vec(), encoding[i][1].to_bytes().to_vec()])
+            key.push([
+                encoding[i][0].to_bytes().to_vec(),
+                encoding[i][1].to_bytes().to_vec(),
+            ])
         }
         let key_message = Message::new(key.as_slice());
         let key_sender = ObliviousSender::new(&key_message);
@@ -233,7 +236,7 @@ impl OneOfManyKey {
         // 3. Receive response back from OT
         let key_response = match garbler.recv() {
             Ok(OneOfManyEvent::OTKeyResponse(public)) => public,
-            _ => panic!("Invalid message received from evaluator!")
+            _ => panic!("Invalid message received from evaluator!"),
         };
         let key_payload = key_sender.accept(&key_response);
         evaluator.send(OneOfManyEvent::OTKeyPayload(key_payload));
@@ -266,7 +269,7 @@ impl OneOfManyKey {
         evaluator.send(OneOfManyEvent::OTChallenge(challenge, y));
         let challenge_response = match garbler.recv() {
             Ok(OneOfManyEvent::OTResponse(public)) => public,
-            _ => panic!("Invalid message received from evaluator!")
+            _ => panic!("Invalid message received from evaluator!"),
         };
         let payload = one_to_n_create_payloads(&sender, &challenge_response);
         evaluator.send(OneOfManyEvent::OTPayload(payload));
@@ -283,7 +286,7 @@ impl OneOfManyKey {
         domain: u16,
         index: u16,
         evaluator: &Sender<OneOfManyEvent>,
-        garbler: &Receiver<OneOfManyEvent>
+        garbler: &Receiver<OneOfManyEvent>,
     ) -> OneOfManyKey {
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
@@ -291,7 +294,7 @@ impl OneOfManyKey {
         // 1. Receive the garbled circuit from the other party
         let gc = match garbler.recv() {
             Ok(OneOfManyEvent::GCCircuit(circuit)) => circuit,
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
 
         // 2. Respond to the OT challenge for the encoding of our copy of the key
@@ -305,7 +308,7 @@ impl OneOfManyKey {
         let key_receiver = ObliviousReceiver::new(choices.as_slice());
         let key_challenge = match garbler.recv() {
             Ok(OneOfManyEvent::OTKeyChallenge(public)) => public,
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
         let key_receiver = key_receiver.accept(&key_challenge);
         evaluator.send(OneOfManyEvent::OTKeyResponse(key_receiver.public()));
@@ -313,23 +316,25 @@ impl OneOfManyKey {
         // 3. Chose our encoding from the payload
         let key_payload = match garbler.recv() {
             Ok(OneOfManyEvent::OTKeyPayload(payload)) => payload,
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
         let key_encoding = &key_receiver.receive(&key_payload);
-        let input_encoding = key_encoding.iter().map(|k| Wire::from_bytes(util::to_array(k), Domain::Binary));
+        let input_encoding = key_encoding
+            .iter()
+            .map(|k| Wire::from_bytes(util::to_array(k), Domain::Binary));
 
         // 4. Receive and respond to the 1-to-n challenge from the garbler
         let (challenge, y) = match garbler.recv() {
             Ok(OneOfManyEvent::OTChallenge(public, y)) => (public, y),
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
-        let (receiver, response) = one_to_n_challenge_respond(domain, index,  &challenge);
+        let (receiver, response) = one_to_n_challenge_respond(domain, index, &challenge);
         evaluator.send(OneOfManyEvent::OTResponse(response));
 
         // 5: Receive payload for 1-to-n and choose
         let payload = match garbler.recv() {
             Ok(OneOfManyEvent::OTPayload(payload)) => payload,
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
         let encoding_bytes = one_to_n_choose(domain, index, &receiver, &payload, &y);
         let database_encoding = wires_from_bytes(encoding_bytes.as_slice(), Domain::Binary);
@@ -350,8 +355,6 @@ impl OneOfManyKey {
         ));
     }
 
-
-
     pub fn garbler_client(
         password: &[u8],
         index: u16,
@@ -370,10 +373,12 @@ impl OneOfManyKey {
 
         let mut evaluator_encoding = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
-            let bit_encoding = [encoding[password_bits + i][0].to_bytes().to_vec(), encoding[password_bits + i][1].to_bytes().to_vec()];
+            let bit_encoding = [
+                encoding[password_bits + i][0].to_bytes().to_vec(),
+                encoding[password_bits + i][1].to_bytes().to_vec(),
+            ];
             evaluator_encoding.push(bit_encoding);
         }
-
 
         let mut encoded_password = Vec::with_capacity(password_bits);
         for i in 0..password_bytes {
@@ -409,7 +414,7 @@ impl OneOfManyKey {
         }
         random_keys.push(cancelling_key);
 
-        let magic =vec![vec![0u8; LENGTH]; password_bits];
+        let magic = vec![vec![0u8; LENGTH]; password_bits];
 
         let mut random_key = random_keys.iter();
         let mut keys = Vec::with_capacity(number_of_passwords as usize);
@@ -418,7 +423,10 @@ impl OneOfManyKey {
 
             if i == index {
                 for j in 0..password_bits {
-                    keys_for_password.push([evaluator_encoding[j][0].clone(), evaluator_encoding[j][1].clone()]);
+                    keys_for_password.push([
+                        evaluator_encoding[j][0].clone(),
+                        evaluator_encoding[j][1].clone(),
+                    ]);
                 }
             } else {
                 let random = random_key.next().unwrap();
@@ -445,7 +453,7 @@ impl OneOfManyKey {
         // 4. Get responses and send payloads
         let responses = match garbler.recv() {
             Ok(OneOfManyEvent::OTResponses(public)) => public,
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
         debug_assert_eq!(number_of_passwords as usize, responses.len());
 
@@ -467,7 +475,7 @@ impl OneOfManyKey {
     pub fn evaluator_server(
         passwords: &[Vec<u8>],
         evaluator: &Sender<OneOfManyEvent>,
-        garbler: &Receiver<OneOfManyEvent>
+        garbler: &Receiver<OneOfManyEvent>,
     ) -> OneOfManyKey {
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
@@ -475,7 +483,7 @@ impl OneOfManyKey {
         // 1. Get the garbled circuit and input from the client
         let (gc, input_encoding) = match garbler.recv() {
             Ok(OneOfManyEvent::GCCircuitWithInput(circuit, input)) => (circuit, input),
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
 
         // 2. Respond to OT challenges
@@ -483,7 +491,7 @@ impl OneOfManyKey {
         let mut responses = Vec::with_capacity(passwords.len());
         let challenges = match garbler.recv() {
             Ok(OneOfManyEvent::OTChallenges(public)) => public,
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
         debug_assert_eq!(passwords.len(), challenges.len());
 
@@ -506,7 +514,7 @@ impl OneOfManyKey {
         // 3. Receive payloads and choose
         let payloads = match garbler.recv() {
             Ok(OneOfManyEvent::OTPayloads(payloads)) => payloads,
-            _ => panic!("Invalid message received from garbler!")
+            _ => panic!("Invalid message received from garbler!"),
         };
         debug_assert_eq!(passwords.len(), payloads.len());
 
@@ -565,12 +573,7 @@ mod tests {
         use std::thread;
 
         // Setup for client / server
-        let passwords = [
-            vec![0u8; 8],
-            vec![1u8; 8],
-            vec![2u8; 8],
-            vec![3u8; 8]
-        ];
+        let passwords = [vec![0u8; 8], vec![1u8; 8], vec![2u8; 8], vec![3u8; 8]];
         let index = 2u16;
         let domain = log2(passwords.len()) as u16;
         let password = passwords[index as usize].clone();
@@ -602,12 +605,7 @@ mod tests {
         use std::thread;
 
         // Setup for client / server
-        let passwords = [
-            vec![0u8; 8],
-            vec![1u8; 8],
-            vec![2u8; 8],
-            vec![3u8; 8]
-        ];
+        let passwords = [vec![0u8; 8], vec![1u8; 8], vec![2u8; 8], vec![3u8; 8]];
         let number_of_passwords = passwords.len() as u16;
         let index = 1u16;
         let password = passwords[index as usize].clone();
@@ -618,7 +616,14 @@ mod tests {
         let (s2, r2) = unbounded();
         let h1 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1);
+            let k1 = OneOfManyKey::garbler_client(
+                &password,
+                index,
+                number_of_passwords,
+                threshold,
+                &s2,
+                &r1,
+            );
             k1
         });
 

@@ -47,7 +47,6 @@ impl Gate {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ProjKind {
     Map(u16),
@@ -118,7 +117,6 @@ impl CircuitBuilder {
         self.gates.push(gate);
         self
     }
-
 
     // TODO: Topological sorting.
 
@@ -218,5 +216,3 @@ pub fn verify_circuit(circuit: &Circuit) -> Result<(), CircuitError> {
     }
     Ok(())
 }
-
-
