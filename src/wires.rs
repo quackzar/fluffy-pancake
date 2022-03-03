@@ -3,14 +3,13 @@ use core::ops;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::iter;
-
 use rand::Rng;
 
 // Maybe use domain as const generic?
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Wire {
     domain: Domain,
-    values: [u8; LENGTH],
+    values: WireBytes,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -247,7 +246,7 @@ impl Wire {
         self.domain.num()
     }
 
-    pub fn from_bytes(values: [u8; LENGTH], domain: Domain) -> Wire {
+    pub fn from_bytes(values: WireBytes, domain: Domain) -> Wire {
         let wire = Wire { domain, values };
         match domain {
             Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,
@@ -256,7 +255,7 @@ impl Wire {
         }
     }
 
-    pub fn to_bytes(&self) -> [u8; LENGTH] {
+    pub fn to_bytes(&self) -> WireBytes {
         self.values
     }
 }
@@ -272,7 +271,7 @@ pub fn hash_wire(index: usize, wire: &Wire, target: &Wire) -> Wire {
     hasher.update(index.to_be_bytes());
     hasher.update(wire);
     let digest = hasher.finalize(); // TODO: use variable size hashing
-    let bytes = <[u8; LENGTH]>::try_from(digest.as_ref()).expect("digest too long");
+    let bytes = <WireBytes>::try_from(digest.as_ref()).expect("digest too long");
 
     // Makes values for the wire of target size from the output of the hash function, recall that
     // the hash function outputs 256 bits, which means that the number of values * the number of
@@ -280,8 +279,6 @@ pub fn hash_wire(index: usize, wire: &Wire, target: &Wire) -> Wire {
     Wire::from_bytes(bytes, target.domain)
 }
 
-pub type Bytes = [u8; LENGTH];
-
-pub fn hash(index: usize, x: u16, wire: &Wire) -> Bytes {
+pub fn hash(index: usize, x: u16, wire: &Wire) -> WireBytes {
     hash!(index.to_be_bytes(), x.to_be_bytes(), wire)
 }

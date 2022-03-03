@@ -12,7 +12,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
 use crate::hash;
-use crate::util::LENGTH;
+use crate::util::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -47,8 +47,8 @@ impl Message {
 #[derive(Debug, Clone)]
 pub struct Public(Vec<CompressedEdwardsY>);
 
-impl From<&[[u8; LENGTH]]> for Public {
-    fn from(bytes: &[[u8; LENGTH]]) -> Public {
+impl From<&[WireBytes]> for Public {
+    fn from(bytes: &[WireBytes]) -> Public {
         let mut vec = Vec::with_capacity(bytes.len());
         for b in bytes {
             let p = CompressedEdwardsY::from_slice(b);
@@ -197,18 +197,18 @@ impl ObliviousReceiver<RetrievingPayload> {
 
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
-fn xor_bytes(left: &mut [u8; LENGTH], right: &[u8; LENGTH]) {
+fn xor_bytes(left: &mut WireBytes, right: &WireBytes) {
     for i in 0..LENGTH {
         left[i] ^= right[i];
     }
 }
 
-fn fk(key: &[u8; LENGTH], choice: u16) -> [u8; LENGTH] {
+fn fk(key: &WireBytes, choice: u16) -> WireBytes {
     let mut hasher = Sha256::new();
     hasher.update(choice.to_be_bytes());
     hasher.update(key);
     let result = hasher.finalize();
-    return <[u8; LENGTH]>::try_from(result.as_ref()).unwrap();
+    return <WireBytes>::try_from(result.as_ref()).unwrap();
 }
 
 // How to 1-to-n:
@@ -223,14 +223,14 @@ fn fk(key: &[u8; LENGTH], choice: u16) -> [u8; LENGTH] {
 // - Creates challenges for Alice
 pub fn one_to_n_challenge_create(
     domain: u16,
-    messages: &[[u8; LENGTH]],
-) -> (ObliviousSender, Public, Vec<[u8; LENGTH]>) {
+    messages: &[WireBytes],
+) -> (ObliviousSender, Public, Vec<WireBytes>) {
     // 1. B: Prepare random keys
     let l = messages.len();
     debug_assert!(l == (1 << domain));
 
     let mut rng = ChaCha12Rng::from_entropy();
-    let mut keys: Vec<[[u8; LENGTH]; 2]> = Vec::with_capacity(l);
+    let mut keys: Vec<[WireBytes; 2]> = Vec::with_capacity(l);
     for _i in 0..l {
         let left = Scalar::random(&mut rng).to_bytes();
         let right = Scalar::random(&mut rng).to_bytes();
@@ -302,12 +302,12 @@ pub fn one_to_n_choose(
     choice: u16,
     receiver: &ObliviousReceiver<RetrievingPayload>,
     payload: &Payload,
-    y: &[[u8; LENGTH]],
-) -> [u8; LENGTH] {
+    y: &[WireBytes],
+) -> WireBytes {
     let l = 1 << domain;
 
     // Convert payloads to keys
-    let mut keys: Vec<[u8; LENGTH]> = Vec::with_capacity(l);
+    let mut keys: Vec<WireBytes> = Vec::with_capacity(l);
     let messages = receiver.receive(payload);
     for i in 0..l {
         let message = &messages[i];

@@ -4,6 +4,7 @@ use rand::Rng;
 // Global Constants
 pub const SECURITY_PARAM: usize = 256; // bits used total
 pub const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
+pub type WireBytes = [u8; LENGTH];
 
 #[inline]
 pub fn rng(max: u16) -> u16 {
@@ -25,9 +26,7 @@ pub fn u8_vec_to_bool_vec(str: &[u8]) -> Vec<bool> {
     bits
 }
 
-pub type Bytes = [u8; LENGTH];
-
-pub fn to_array(bytes: &[u8]) -> [u8; LENGTH] {
+pub fn to_array(bytes: &[u8]) -> WireBytes {
     debug_assert!(bytes.len() == LENGTH, "Should be {} bytes", LENGTH);
     let mut array = [0u8; LENGTH];
     array.copy_from_slice(bytes);
@@ -61,7 +60,7 @@ macro_rules! hash {
 }
 pub(crate) use hash;
 
-pub fn xor(a: Bytes, b: Bytes) -> Bytes {
+pub fn xor(a: WireBytes, b: WireBytes) -> WireBytes {
     let mut result = [0u8; LENGTH];
     for i in 0..LENGTH {
         result[i] = a[i] ^ b[i];
@@ -82,7 +81,7 @@ mod tests {
         hasher.update("hello");
         hasher.update("world");
         let h2 = hasher.finalize();
-        let h2 = <[u8; LENGTH]>::try_from(h2.as_ref()).expect("digest too long");
+        let h2 = <WireBytes>::try_from(h2.as_ref()).expect("digest too long");
         assert_eq!(h1, h2);
     }
 

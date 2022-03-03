@@ -5,10 +5,9 @@ use std::fmt;
 use std::mem::{transmute, MaybeUninit};
 
 use crate::circuit::*;
-
+use crate::util::*;
 use crate::wires::hash;
 use crate::wires::hash_wire;
-use crate::wires::Bytes;
 use crate::wires::Wire;
 
 // -------------------------------------------------------------------------------------------------
@@ -98,7 +97,7 @@ impl BinaryEncodingKey {
 
 #[derive(Debug, Clone)]
 pub struct DecodingKey {
-    pub(crate) hashes: Vec<Vec<Bytes>>,
+    pub(crate) hashes: Vec<Vec<WireBytes>>,
     pub(crate) offset: usize,
 }
 

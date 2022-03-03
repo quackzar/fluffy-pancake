@@ -60,11 +60,12 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct HalfKey([u8; LENGTH]);
+pub struct HalfKey(WireBytes);
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct Key([u8; LENGTH]);
+pub struct Key(WireBytes);
 
 use crossbeam_channel::{Receiver, Sender};
+use crate::util;
 
 pub enum Event {
     OTInit(Public),
@@ -120,7 +121,7 @@ impl HalfKey {
         HalfKey(d.hashes[0][1])
     }
 
-    pub fn evaluator(password: &[u8], s: &Sender<Event>, r: &Receiver<Event>) -> Self {
+    pub fn evaluator(password: &[u8], s: &Sender<Event>, r: &Receiver<Event>) -> HalfKey {
         let password = u8_vec_to_bool_vec(password);
         let receiver = ObliviousReceiver::<Init>::new(&password);
         // receive ot public key.
