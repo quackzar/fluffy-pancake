@@ -228,9 +228,7 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
                 let w_a = &wires[gate.inputs[0]];
                 let w_b = &wires[gate.inputs[1]];
                 let p_a = w_a.color() != 0;
-                println!("p_a: {:?}", p_a);
                 let p_b = w_b.color() != 0;
-                println!("p_b: {:?}", p_b);
                 j0 += 1; j1 += 1;
 
                 // first half gate
@@ -341,9 +339,7 @@ pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
                 let w_a = unsafe { wires[a].assume_init_ref() };
                 let w_b = unsafe { wires[b].assume_init_ref() };
                 let s_a = w_a.color() != 0;
-                println!("s_a: {:?}", s_a);
                 let s_b = w_b.color() != 0;
-                println!("s_b: {:?}", s_b);
                 j0 += 1; j1 += 1;
                 let (t_g, t_e) = &f_halfgate[&gate.output];
 
