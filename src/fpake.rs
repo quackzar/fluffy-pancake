@@ -634,6 +634,48 @@ mod tests {
     }
 
     #[test]
+    fn test_fpake_one_of_many() {
+        use crossbeam_channel::unbounded;
+        use std::thread;
+
+        // Setup for client / server
+        let passwords = [
+            vec![0u8; 8],
+            vec![1u8; 8],
+            vec![2u8; 8],
+            vec![3u8; 8]
+        ];
+        let passwords_2 = passwords.clone();
+        let number_of_passwords = passwords.len() as u16;
+        let index = 1u16;
+        let domain = log2(passwords.len()) as u16;
+        let password = passwords[index as usize].clone();
+        let password_2 = password.clone();
+        let threshold = 0;
+
+        // Do the thing
+        let (s1, r1) = unbounded();
+        let (s2, r2) = unbounded();
+        let h1 = thread::spawn(move || {
+            // Party 1
+            let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
+            let k2 = OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1);
+            k1.combine(k2)
+        });
+
+        let h2 = thread::spawn(move || {
+            // Party 1
+            let k1 = OneOfManyKey::evaluator_client(&password_2, domain, index, &s1, &r2);
+            let k2 = OneOfManyKey::evaluator_server(&passwords_2, &s1, &r2);
+            k1.combine(k2)
+        });
+
+        let k1 = h1.join().unwrap();
+        let k2 = h2.join().unwrap();
+        assert_eq!(k1, k2);
+    }
+
+    #[test]
     fn test_fpake_api() {
         use crossbeam_channel::unbounded;
         use std::thread;
