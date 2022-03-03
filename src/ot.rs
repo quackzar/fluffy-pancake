@@ -201,7 +201,7 @@ impl ObliviousReceiver<RetrievingPayload> {
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
 fn xor_bytes(left: &Vec<u8>, right: &Vec<u8>) -> Vec<u8> {
-    debug_assert!(left.len() == right.len());
+    debug_assert_eq!(left.len(), right.len());
 
     let mut result = Vec::with_capacity(left.len());
     for i in 0..left.len() {
@@ -325,15 +325,15 @@ pub fn one_to_n_choose(
     let l = 1 << domain;
 
     // Convert payloads to keys
-    let mut keys: Vec<WireBytes> = Vec::with_capacity(l);
+    let mut keys: Vec<Vec<u8>> = Vec::with_capacity(l);
     let messages = receiver.receive(payload);
     for i in 0..l {
         let message = &messages[i];
-        debug_assert!(message.len() == LENGTH);
+        debug_assert_eq!(message.len() % LENGTH, 0);
 
-        let mut key = [0u8; LENGTH];
-        for j in 0..LENGTH {
-            key[j] = message[j];
+        let mut key = Vec::with_capacity(message.len());
+        for j in 0..message.len() {
+            key.push(message[j]);
         }
 
         keys.push(key);

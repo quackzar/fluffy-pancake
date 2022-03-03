@@ -172,9 +172,220 @@ impl HalfKey {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct OneOfManyKey(WireBytes);
+
+pub enum OneOfManyEvent {
+    GCCircuit(GarbledCircuit),
+
+    OTKeyChallenge(Public),
+    OTKeyResponse(Public),
+    OTKeyPayload(Payload),
+
+    OTChallenge(Public, Vec<Vec<u8>>),
+    OTResponse(Public),
+    OTPayload(Payload),
+}
+
+fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
+    let mut wires = Vec::with_capacity(bytes.len() / LENGTH);
+    for chunk in bytes.chunks_exact(LENGTH) {
+        wires.push(Wire::from_bytes(util::to_array(chunk), domain));
+    }
+
+    return wires;
+}
+
+// Bob / server is Garbler
+impl OneOfManyKey {
+    pub fn garbler(
+        passwords: &[Vec<u8>],
+        threshold: u16,
+        evaluator: &Sender<OneOfManyEvent>,
+        garbler: &Receiver<OneOfManyEvent>,
+    ) -> OneOfManyKey {
+        let password_bytes = passwords[0].len();
+        let password_bits = password_bytes * 8;
+
+        // 1. Garble the circuit
+        let circuit = build_circuit(password_bits, threshold);
+        let (gc, encoding, decoding) = garble(&circuit);
+        let encoding = BinaryEncodingKey::from(encoding).zipped();
+        evaluator.send(OneOfManyEvent::GCCircuit(gc));
+
+        // 2. Use regular OT to get the encoded password for the evaluator
+        let mut key = Vec::with_capacity(password_bits);
+        for i in 0..password_bits {
+            key.push([encoding[i][0].to_bytes().to_vec(), encoding[i][1].to_bytes().to_vec()])
+        }
+        let key_message = Message::new(key.as_slice());
+        let key_sender = ObliviousSender::new(&key_message);
+        evaluator.send(OneOfManyEvent::OTKeyChallenge(key_sender.public()));
+
+        // 3. Receive response back from OT
+        let key_response = match garbler.recv() {
+            Ok(OneOfManyEvent::OTKeyResponse(public)) => public,
+            _ => panic!("Invalid message received from evaluator!")
+        };
+        let key_payload = key_sender.accept(&key_response);
+        evaluator.send(OneOfManyEvent::OTKeyPayload(key_payload));
+
+        // 4. Encode all passwords
+        let domain = log2(passwords.len()) as u16;
+        let mut encodings: Vec<Vec<u8>> = Vec::with_capacity(passwords.len());
+        let e_theirs = encoding[password_bits..].to_vec(); // encoding for receiver's password'
+        let e_theirs: Vec<_> = e_theirs
+            .iter()
+            .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+            .collect();
+        for password in passwords {
+            let mut encoding = Vec::with_capacity(password_bits);
+            for i in 0..password_bytes {
+                for j in 0..8 {
+                    let bit_index = (i * 8 + j) as usize;
+                    let bit = (((password[i] >> j) & 1) == 1) as usize;
+
+                    let encoded = &e_theirs[bit_index][bit];
+                    encoding.extend(encoded);
+                }
+            }
+
+            encodings.push(encoding);
+        }
+
+        // 5. Send 1-to-n challenge and Y to evaluator and get response
+        let (sender, challenge, y) = one_to_n_challenge_create(domain, &encodings);
+        evaluator.send(OneOfManyEvent::OTChallenge(challenge, y));
+        let challenge_response = match garbler.recv() {
+            Ok(OneOfManyEvent::OTResponse(public)) => public,
+            _ => panic!("Invalid message received from evaluator!")
+        };
+        let payload = one_to_n_create_payloads(&sender, &challenge_response);
+        evaluator.send(OneOfManyEvent::OTPayload(payload));
+
+        //
+        // At this point the evaluator should have an encoding of both their own version and the servers version of the password.
+        //
+
+        return OneOfManyKey(decoding.hashes[0][1]);
+    }
+
+    pub fn evaluator(
+        password: &[u8],
+        domain: u16,
+        index: u16,
+        evaluator: &Sender<OneOfManyEvent>,
+        garbler: &Receiver<OneOfManyEvent>
+    ) -> Self {
+        let password_bytes = password.len();
+        let password_bits = password_bytes * 8;
+
+        // 1. Receive the garbled circuit from the other party
+        let gc = match garbler.recv() {
+            Ok(OneOfManyEvent::GCCircuit(circuit)) => circuit,
+            _ => panic!("Invalid message received from garbler!")
+        };
+
+        // 2. Respond to the OT challenge for the encoding of our copy of the key
+        let mut choices = Vec::with_capacity(password_bits);
+        for i in 0..password_bytes {
+            for j in 0..8 {
+                let bit = ((password[i] >> j) & 1) == 1;
+                choices.push(bit)
+            }
+        }
+        let key_receiver = ObliviousReceiver::new(choices.as_slice());
+        let key_challenge = match garbler.recv() {
+            Ok(OneOfManyEvent::OTKeyChallenge(public)) => public,
+            _ => panic!("Invalid message received from garbler!")
+        };
+        let key_receiver = key_receiver.accept(&key_challenge);
+        evaluator.send(OneOfManyEvent::OTKeyResponse(key_receiver.public()));
+
+        // 3. Chose our encoding from the payload
+        let key_payload = match garbler.recv() {
+            Ok(OneOfManyEvent::OTKeyPayload(payload)) => payload,
+            _ => panic!("Invalid message received from garbler!")
+        };
+        let key_encoding = &key_receiver.receive(&key_payload);
+        let key_encoding = key_encoding.iter().map(|k| Wire::from_bytes(util::to_array(k), Domain::Binary));
+
+        // 4. Receive and respond to the 1-to-n challenge from the garbler
+        let (challenge, y) = match garbler.recv() {
+            Ok(OneOfManyEvent::OTChallenge(public, y)) => (public, y),
+            _ => panic!("Invalid message received from garbler!")
+        };
+        let (receiver, response) = one_to_n_challenge_respond(domain, index,  &challenge);
+        evaluator.send(OneOfManyEvent::OTResponse(response));
+
+        // 5: Receive payload for 1-to-n and choose
+        let payload = match garbler.recv() {
+            Ok(OneOfManyEvent::OTPayload(payload)) => payload,
+            _ => panic!("Invalid message received from garbler!")
+        };
+        let encoding_bytes = one_to_n_choose(domain, index, &receiver, &payload, &y);
+        let encoding = wires_from_bytes(encoding_bytes.as_slice(), Domain::Binary);
+
+        //
+        // By now the evaluator should have both the encoding of their own version of their password and the encoding of the servers version of their password
+        //
+
+        // 6. Evaluate the circuit
+        let mut input = Vec::<Wire>::new();
+        input.extend(encoding);
+        input.extend(key_encoding);
+        let output = evaluate(&gc, &input);
+        return OneOfManyKey(hash!(
+            (gc.circuit.num_wires - 1).to_be_bytes(),
+            1u16.to_be_bytes(),
+            &output[0]
+        ))
+    }
+
+    pub fn combine(self, other: Self) -> Key {
+        Key(xor(self.0, other.0))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_fpake_one_of_many_server_garbler() {
+        use crossbeam_channel::unbounded;
+        use std::thread;
+
+        // Setup for client / server
+        let passwords = [
+            vec![0u8; 8],
+            vec![1u8; 8],
+            vec![2u8; 8],
+            vec![3u8; 8]
+        ];
+        let index = 2u16;
+        let domain = log2(passwords.len()) as u16;
+        let password = passwords[index as usize].clone();
+        let threshold = 0;
+
+        // Do the thing
+        let (s1, r1) = unbounded();
+        let (s2, r2) = unbounded();
+        let h1 = thread::spawn(move || {
+            // Party 1
+            let k1 = OneOfManyKey::garbler(&passwords, threshold, &s2, &r1);
+            k1
+        });
+
+        let h2 = thread::spawn(move || {
+            // Party 1
+            let k2 = OneOfManyKey::evaluator(&password, domain, index, &s1, &r2);
+            k2
+        });
+
+        let k1 = h1.join().unwrap();
+        let k2 = h2.join().unwrap();
+    }
 
     #[test]
     fn test_fpake_api() {
