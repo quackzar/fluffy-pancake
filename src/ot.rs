@@ -91,6 +91,7 @@ impl ObliviousSender {
     pub fn accept(&self, their_public: &Public) -> Payload {
         let secrets = &self.secrets;
         let publics = &self.publics;
+        assert!(publics.0.len() == their_public.0.len());
         let messages = &self.messages;
         let payload = messages.0.par_iter().enumerate().map(|(i, [m0, m1])| -> CiphertextPair {
             let their_public = &their_public.0[i].decompress().unwrap();
@@ -153,6 +154,7 @@ impl ObliviousReceiver<Init> {
     }
 
     pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
+        assert!(self.choices.len() == their_publics.0.len());
         let (publics, keys) : (Vec<CompressedEdwardsY>, _)= their_publics.0.par_iter().enumerate().map(|(i, p)| 
             -> (CompressedEdwardsY, Vec<u8>)
             {
@@ -184,6 +186,7 @@ impl ObliviousReceiver<RetrievingPayload> {
     }
 
     pub fn receive(&self, payload: &Payload) -> Vec<Vec<u8>> {
+        assert!(self.choices.len() == payload.0.len());
         payload.0.par_iter().enumerate().map(|(i, [e0, e1])| -> Vec<u8> {
             let key = Key::from_slice(&self.state.keys[i]);
             let cipher = Aes256Gcm::new(key);
