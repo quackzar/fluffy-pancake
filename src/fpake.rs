@@ -198,7 +198,7 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
 
 // Bob / server is Garbler
 impl OneOfManyKey {
-    pub fn garbler(
+    pub fn garbler_server(
         passwords: &[Vec<u8>],
         threshold: u16,
         evaluator: &Sender<OneOfManyEvent>,
@@ -270,7 +270,7 @@ impl OneOfManyKey {
         return OneOfManyKey(decoding.hashes[0][1]);
     }
 
-    pub fn evaluator(
+    pub fn evaluator_client(
         password: &[u8],
         domain: u16,
         index: u16,
@@ -373,18 +373,19 @@ mod tests {
         let (s2, r2) = unbounded();
         let h1 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::garbler(&passwords, threshold, &s2, &r1);
+            let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
             k1
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k2 = OneOfManyKey::evaluator(&password, domain, index, &s1, &r2);
+            let k2 = OneOfManyKey::evaluator_client(&password, domain, index, &s1, &r2);
             k2
         });
 
         let k1 = h1.join().unwrap();
         let k2 = h2.join().unwrap();
+        assert_eq!(k1, k2);
     }
 
     #[test]
