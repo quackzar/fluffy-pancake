@@ -1,5 +1,5 @@
 use num_traits::PrimInt;
-use rand::Rng;
+use rand::{Rng, RngCore};
 
 // Global Constants
 pub const SECURITY_PARAM: usize = 256; // bits used total
@@ -9,6 +9,11 @@ pub type WireBytes = [u8; LENGTH];
 #[inline]
 pub fn rng(max: u16) -> u16 {
     rand::thread_rng().gen_range(0..max)
+}
+
+#[inline]
+pub fn random_bytes(bytes: &mut Vec<u8>) {
+    rand::thread_rng().fill_bytes(bytes)
 }
 
 #[inline]

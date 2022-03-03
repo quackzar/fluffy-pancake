@@ -197,18 +197,29 @@ impl ObliviousReceiver<RetrievingPayload> {
 
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
-fn xor_bytes(left: &mut WireBytes, right: &WireBytes) {
-    for i in 0..LENGTH {
-        left[i] ^= right[i];
+fn xor_bytes(left: &Vec<u8>, right: &Vec<u8>) -> Vec<u8> {
+    debug_assert!(left.len() == right.len());
+
+    let mut result = Vec::with_capacity(left.len());
+    for i in 0..left.len() {
+        result.push(left[i] ^ right[i]);
     }
+
+    return result;
 }
 
-fn fk(key: &WireBytes, choice: u16) -> WireBytes {
+fn fk(key: &[u8], choice: u16) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(choice.to_be_bytes());
     hasher.update(key);
-    let result = hasher.finalize();
-    return <WireBytes>::try_from(result.as_ref()).unwrap();
+    let result = hasher.finalize().to_vec();
+
+    let mut output = Vec::with_capacity(key.len());
+    for i in 0..key.len() {
+        output.push(result[i % result.len()]);
+    }
+
+    return output;
 }
 
 // How to 1-to-n:
@@ -223,17 +234,21 @@ fn fk(key: &WireBytes, choice: u16) -> WireBytes {
 // - Creates challenges for Alice
 pub fn one_to_n_challenge_create(
     domain: u16,
-    messages: &[WireBytes],
-) -> (ObliviousSender, Public, Vec<WireBytes>) {
+    messages: &[Vec<u8>],
+) -> (ObliviousSender, Public, Vec<Vec<u8>>) {
+    let byte_length = messages[0].len();
+
     // 1. B: Prepare random keys
     let l = messages.len();
     debug_assert!(l == (1 << domain));
 
-    let mut rng = ChaCha12Rng::from_entropy();
-    let mut keys: Vec<[WireBytes; 2]> = Vec::with_capacity(l);
+    let mut keys: Vec<[Vec<u8>; 2]> = Vec::with_capacity(l);
     for _i in 0..l {
-        let left = Scalar::random(&mut rng).to_bytes();
-        let right = Scalar::random(&mut rng).to_bytes();
+        let mut left = vec![0u8; byte_length];
+        let mut right = vec![0u8; byte_length];
+
+        random_bytes(&mut left);
+        random_bytes(&mut right);
 
         keys.push([left, right]);
     }
@@ -241,14 +256,14 @@ pub fn one_to_n_challenge_create(
     let domain_max = 1 << domain; // 2^domain
     let mut y = Vec::with_capacity(domain_max);
     for i in 0..domain_max {
-        let mut value = messages[i];
+        let mut value = messages[i].to_vec();
         for j in 0..domain {
             let bit = (i & (1 << j)) >> j;
             let hash = fk(&keys[j as usize][bit as usize], i as u16);
-            xor_bytes(&mut value, &hash);
+            value = xor_bytes(&value, &hash);
         }
 
-        y.push(value);
+        y.push(value.to_vec());
     }
 
     // 2. Initiate 1-out-of-2 OTs by sending challenges
@@ -302,8 +317,8 @@ pub fn one_to_n_choose(
     choice: u16,
     receiver: &ObliviousReceiver<RetrievingPayload>,
     payload: &Payload,
-    y: &[WireBytes],
-) -> WireBytes {
+    y: &Vec<Vec<u8>>,
+) -> Vec<u8> {
     let l = 1 << domain;
 
     // Convert payloads to keys
@@ -322,13 +337,13 @@ pub fn one_to_n_choose(
     }
 
     // Reconstruct X from keys and choice
-    let mut x = y[choice as usize];
+    let mut x = y[choice as usize].to_vec();
     for i in 0..domain {
         let hash = fk(&keys[i as usize], choice);
-        xor_bytes(&mut x, &hash);
+        x = xor_bytes(&x, &hash);
     }
 
-    x
+    return x;
 }
 
 #[cfg(test)]
@@ -342,7 +357,7 @@ mod tests {
         let domain = log2(n) as u16;
         let mut messages = Vec::with_capacity(n as usize);
         for i in 0u8..n {
-            messages.push([i; LENGTH]);
+            messages.push(vec![i; LENGTH]);
         }
         let choice = 4;
 
