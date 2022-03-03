@@ -1,7 +1,6 @@
 // Library for fast OT.
 // use curve25519_dalek::edwards;
 #![allow(unused_imports)]
-
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use curve25519_dalek::constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
@@ -21,12 +20,10 @@ use rayon::prelude::*;
 
 // Common
 pub type CiphertextPair = [Vec<u8>; 2];
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Payload(Vec<CiphertextPair>);
 
 pub type PlaintextPair = [Vec<u8>; 2];
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message(Vec<PlaintextPair>);
 
@@ -156,21 +153,22 @@ impl ObliviousReceiver<Init> {
     }
 
     pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
-        let (publics, keys): (Vec<CompressedEdwardsY>, _) = their_publics.0.par_iter().enumerate().map(|(i, p)|
-                                                                                                        -> (CompressedEdwardsY, Vec<u8>)
+        let (publics, keys) : (Vec<CompressedEdwardsY>, _)= their_publics.0.par_iter().enumerate().map(|(i, p)| 
+            -> (CompressedEdwardsY, Vec<u8>)
             {
-                let their_public = &p.decompress().unwrap();
-                let public = if self.choices[i] {
-                    their_public + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
-                } else {
-                    &ED25519_BASEPOINT_TABLE * &self.secrets[i]
-                };
-                let mut hasher = Sha256::new();
-                hasher.update((their_public * self.secrets[i]).compress().as_bytes());
-                let key = hasher.finalize().to_vec();
+            let their_public = &p.decompress().unwrap();
+            let public = if self.choices[i] {
+                their_public + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
+            } else {
+                &ED25519_BASEPOINT_TABLE * &self.secrets[i]
+            };
+            let mut hasher = Sha256::new();
+            hasher.update((their_public * self.secrets[i]).compress().as_bytes());
+            let key = hasher.finalize().to_vec();
 
-                (public.compress(), key)
-            }).unzip();
+            (public.compress(), key)
+
+        }).unzip();
         let publics = Public(publics);
         ObliviousReceiver {
             state: RetrievingPayload { keys, publics },
@@ -219,69 +217,53 @@ fn fk(key: &WireBytes, choice: u16) -> WireBytes {
 // 3. Choose
 // 4. Finish
 
+
 // Bob: Initiate 1-to-n OT (initiated by the sender, Bob):
 // - Prepares keys and uses these to generate the required y values sent to Alice
 // - Creates challenges for Alice
-// Inh the fPAKE case a message will be the encoding of a wire, which is a list of WireBytes, one
-// for each of the encoded bits.
 pub fn one_to_n_challenge_create(
     domain: u16,
-    messages: &Vec<Vec<WireBytes>>,
-) -> (ObliviousSender, Public, Vec<Vec<WireBytes>>) {
+    messages: &[WireBytes],
+) -> (ObliviousSender, Public, Vec<WireBytes>) {
     // 1. B: Prepare random keys
     let l = messages.len();
     debug_assert!(l == (1 << domain));
 
-    // TODO: Performance and for cleaner code consider smashing one dimension on these arrays!
-
     let mut rng = ChaCha12Rng::from_entropy();
-    let mut keys: Vec<Vec<[WireBytes; 2]>> = Vec::with_capacity(l);
-    for i in 0..l {
-        let message = &messages[i];
-        let mut pairs = Vec::with_capacity(message.len());
-        for _ in 0..message.len() {
-            let left = Scalar::random(&mut rng).to_bytes();
-            let right = Scalar::random(&mut rng).to_bytes();
-            pairs.push([left, right]);
-        }
+    let mut keys: Vec<[WireBytes; 2]> = Vec::with_capacity(l);
+    for _i in 0..l {
+        let left = Scalar::random(&mut rng).to_bytes();
+        let right = Scalar::random(&mut rng).to_bytes();
 
-        keys.push(pairs);
+        keys.push([left, right]);
     }
 
     let domain_max = 1 << domain; // 2^domain
     let mut y = Vec::with_capacity(domain_max);
     for i in 0..domain_max {
-        let message = &messages[i];
-        let mut message_y = Vec::with_capacity(message.len());
-        for j in 0..message.len() {
-            let mut value = message[j];
-            for k in 0..domain {
-                let bit = (i & (1 << k)) >> k;
-                let hash = fk(&keys[k as usize][j][bit as usize], i as u16);
-                xor_bytes(&mut value, &hash);
-            }
-
-            message_y.push(value);
+        let mut value = messages[i];
+        for j in 0..domain {
+            let bit = (i & (1 << j)) >> j;
+            let hash = fk(&keys[j as usize][bit as usize], i as u16);
+            xor_bytes(&mut value, &hash);
         }
 
-        y.push(message_y);
+        y.push(value);
     }
 
     // 2. Initiate 1-out-of-2 OTs by sending challenges
-    let mut message = Vec::with_capacity(l);
+    let mut messages = Vec::with_capacity(l);
     for i in 0..l {
-        for j in 0..keys[i as usize].len() {
-            let m0 = keys[i as usize][j][0].to_vec();
-            let m1 = keys[i as usize][j][1].to_vec();
-            message.push([m0, m1]);
-        }
+        let m0 = keys[i as usize][0].to_vec();
+        let m1 = keys[i as usize][1].to_vec();
+        messages.push([m0, m1]);
     }
 
-    let message = Message::new(message.as_slice());
+    let message = Message::new(messages.as_slice());
     let sender = ObliviousSender::new(&message);
     let challenge = sender.public();
 
-    return (sender, challenge, y);
+    (sender, challenge, y)
 }
 
 // Alice: Respond to challenge from Bob
@@ -303,7 +285,7 @@ pub fn one_to_n_challenge_respond(
     let receiver = receiver.accept(challenge);
     let response = receiver.public();
 
-    return (receiver, response);
+    (receiver, response)
 }
 
 // Bob: Create payloads for Alice
@@ -311,7 +293,7 @@ pub fn one_to_n_create_payloads(
     sender: &ObliviousSender,
     response: &Public,
 ) -> Payload {
-    return sender.accept(response);
+    sender.accept(response)
 }
 
 // Alice: Chose a value
@@ -320,46 +302,33 @@ pub fn one_to_n_choose(
     choice: u16,
     receiver: &ObliviousReceiver<RetrievingPayload>,
     payload: &Payload,
-    y: &Vec<Vec<WireBytes>>,
-) -> Vec<WireBytes> {
+    y: &[WireBytes],
+) -> WireBytes {
     let l = 1 << domain;
 
     // Convert payloads to keys
-    let mut keys: Vec<Vec<WireBytes>> = Vec::with_capacity(l);
+    let mut keys: Vec<WireBytes> = Vec::with_capacity(l);
     let messages = receiver.receive(payload);
-
     for i in 0..l {
         let message = &messages[i];
-        let wires_in_message = message.len() / LENGTH;
+        debug_assert!(message.len() == LENGTH);
 
-        let mut key = Vec::with_capacity(wires_in_message);
-        for j in 0..wires_in_message {
-            let mut value = [0u8; LENGTH];
-            for k in 0..LENGTH {
-                value[k] = message[j * LENGTH + k];
-            }
-
-            key.push(value);
+        let mut key = [0u8; LENGTH];
+        for j in 0..LENGTH {
+            key[j] = message[j];
         }
 
         keys.push(key);
     }
 
     // Reconstruct X from keys and choice
-    let mut x = Vec::with_capacity(messages.len());
-    for i in 0..messages.len() {
-        let wire_keys = &keys[i];
-
-        let mut value = y[i][choice as usize];
-        for j in 0..domain {
-            let hash = fk(&wire_keys[j as usize], choice);
-            xor_bytes(&mut value, &hash);
-        }
-
-        x.push(value);
+    let mut x = y[choice as usize];
+    for i in 0..domain {
+        let hash = fk(&keys[i as usize], choice);
+        xor_bytes(&mut x, &hash);
     }
 
-    return x;
+    x
 }
 
 #[cfg(test)]
@@ -373,12 +342,7 @@ mod tests {
         let domain = log2(n) as u16;
         let mut messages = Vec::with_capacity(n as usize);
         for i in 0u8..n {
-            let mut message = Vec::with_capacity(2);
-            for j in 0..2 {
-                message.push([i + j * 100; LENGTH]);
-            }
-
-            messages.push(message);
+            messages.push([i; LENGTH]);
         }
         let choice = 4;
 
