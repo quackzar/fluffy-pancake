@@ -283,7 +283,7 @@ impl OneOfManyKey {
 
     pub fn evaluator_client(
         password: &[u8],
-        domain: u16,
+        number_of_password: u16,
         index: u16,
         evaluator: &Sender<OneOfManyEvent>,
         garbler: &Receiver<OneOfManyEvent>,
@@ -328,6 +328,7 @@ impl OneOfManyKey {
             Ok(OneOfManyEvent::OTChallenge(public, y)) => (public, y),
             _ => panic!("Invalid message received from garbler!"),
         };
+        let domain = log2(number_of_password) as u16;
         let (receiver, response) = one_to_n_challenge_respond(domain, index, &challenge);
         evaluator.send(OneOfManyEvent::OTResponse(response));
 
@@ -575,8 +576,8 @@ mod tests {
         // Setup for client / server
         let passwords = [vec![0u8; 8], vec![1u8; 8], vec![2u8; 8], vec![3u8; 8]];
         let index = 2u16;
-        let domain = log2(passwords.len()) as u16;
         let password = passwords[index as usize].clone();
+        let number_of_passwords = passwords.len() as u16;
         let threshold = 0;
 
         // Do the thing
@@ -590,7 +591,7 @@ mod tests {
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k2 = OneOfManyKey::evaluator_client(&password, domain, index, &s1, &r2);
+            let k2 = OneOfManyKey::evaluator_client(&password, number_of_passwords, index, &s1, &r2);
             k2
         });
 
@@ -653,7 +654,6 @@ mod tests {
         let passwords_2 = passwords.clone();
         let number_of_passwords = passwords.len() as u16;
         let index = 1u16;
-        let domain = log2(passwords.len()) as u16;
         let password = passwords[index as usize].clone();
         let password_2 = password.clone();
         let threshold = 0;
@@ -670,7 +670,7 @@ mod tests {
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::evaluator_client(&password_2, domain, index, &s1, &r2);
+            let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &s1, &r2);
             let k2 = OneOfManyKey::evaluator_server(&passwords_2, &s1, &r2);
             k1.combine(k2)
         });
