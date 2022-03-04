@@ -115,7 +115,7 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
         let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
     }));
 
-    let n = 1048u16;
+    let n = 1024u16;
     let domain = log2(n);
     let mut messages = Vec::with_capacity(n as usize);
     for i in 0..n {
