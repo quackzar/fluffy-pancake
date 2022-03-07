@@ -17,13 +17,14 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
     }
     let choice = 4;
 
-    c.bench_function("OT 1-out-of-8 bits", |b| b.iter(|| {
-        let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
-        let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
-        let payload = one_to_n_create_payloads(&sender, &response);
-        let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
-    }));
-
+    c.bench_function("OT 1-out-of-8 bits", |b| {
+        b.iter(|| {
+            let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
+            let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
+            let payload = one_to_n_create_payloads(&sender, &response);
+            let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
+        })
+    });
 
     let n = 256u16;
     let domain = log2(n);
@@ -33,12 +34,14 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
     }
     let choice = 4;
 
-    c.bench_function("OT 1-out-of-256", |b| b.iter(|| {
-        let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
-        let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
-        let payload = one_to_n_create_payloads(&sender, &response);
-        let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
-    }));
+    c.bench_function("OT 1-out-of-256", |b| {
+        b.iter(|| {
+            let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
+            let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
+            let payload = one_to_n_create_payloads(&sender, &response);
+            let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
+        })
+    });
 
     let n = 1024u16;
     let domain = log2(n);
@@ -48,14 +51,14 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
     }
     let choice = 4;
 
-    c.bench_function("OT 1-out-of-1048", |b| b.iter(|| {
-        let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
-        let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
-        let payload = one_to_n_create_payloads(&sender, &response);
-        let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
-    }));
-
-
+    c.bench_function("OT 1-out-of-1048", |b| {
+        b.iter(|| {
+            let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
+            let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
+            let payload = one_to_n_create_payloads(&sender, &response);
+            let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
+        })
+    });
 
     let n = 1 << 15;
     let domain = log2(n);
@@ -65,16 +68,15 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
     }
     let choice = 4;
 
-    c.bench_function("OT 1-out-of-32768", |b| b.iter(|| {
-        let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
-        let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
-        let payload = one_to_n_create_payloads(&sender, &response);
-        let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
-    }));
+    c.bench_function("OT 1-out-of-32768", |b| {
+        b.iter(|| {
+            let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
+            let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
+            let payload = one_to_n_create_payloads(&sender, &response);
+            let _output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
+        })
+    });
 }
 
-criterion_group!(
-    benches,
-    bench_1_of_n_ot,
-);
+criterion_group!(benches, bench_1_of_n_ot,);
 criterion_main!(benches);

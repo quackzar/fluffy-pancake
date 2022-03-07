@@ -55,7 +55,14 @@ fn fpake_one_of_many_64bit() {
     let h1 = thread::spawn(move || {
         // Party 1
         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
-        let k2 = OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1);
+        let k2 = OneOfManyKey::garbler_client(
+            &password,
+            index,
+            number_of_passwords,
+            threshold,
+            &s2,
+            &r1,
+        );
         k1.combine(k2);
     });
 
@@ -94,7 +101,14 @@ fn fpake_one_of_many_128bit() {
     let h1 = thread::spawn(move || {
         // Party 1
         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
-        let k2 = OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1);
+        let k2 = OneOfManyKey::garbler_client(
+            &password,
+            index,
+            number_of_passwords,
+            threshold,
+            &s2,
+            &r1,
+        );
         k1.combine(k2);
     });
 
@@ -133,7 +147,14 @@ fn fpake_one_of_many_2048bit() {
     let h1 = thread::spawn(move || {
         // Party 1
         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
-        let k2 = OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1);
+        let k2 = OneOfManyKey::garbler_client(
+            &password,
+            index,
+            number_of_passwords,
+            threshold,
+            &s2,
+            &r1,
+        );
         k1.combine(k2);
     });
 
@@ -292,7 +313,14 @@ fn fpake_one_of_many_2048bit_128passwords() {
     let h1 = thread::spawn(move || {
         // Party 1
         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
-        let k2 = OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1);
+        let k2 = OneOfManyKey::garbler_client(
+            &password,
+            index,
+            number_of_passwords,
+            threshold,
+            &s2,
+            &r1,
+        );
         k1.combine(k2);
     });
 
@@ -308,15 +336,19 @@ fn fpake_one_of_many_2048bit_128passwords() {
 }
 
 fn bench_fpake_one_of_many(c: &mut Criterion) {
-    c.bench_function("fPAKE One of Many 64bit (8 passwords)", |b| b.iter(|| fpake_one_of_many_64bit()));
-    c.bench_function("fPAKE One of Many 128bit (8 passwords)", |b| b.iter(|| fpake_one_of_many_128bit()));
-    c.bench_function("fPAKE One of Many 2048bit (8 passwords)", |b| b.iter(|| fpake_one_of_many_2048bit()));
-    c.bench_function("fPAKE One of Many 2048bit (128 passwords)", |b| b.iter(|| fpake_one_of_many_2048bit_128passwords()));
+    c.bench_function("fPAKE One of Many 64bit (8 passwords)", |b| {
+        b.iter(|| fpake_one_of_many_64bit())
+    });
+    c.bench_function("fPAKE One of Many 128bit (8 passwords)", |b| {
+        b.iter(|| fpake_one_of_many_128bit())
+    });
+    c.bench_function("fPAKE One of Many 2048bit (8 passwords)", |b| {
+        b.iter(|| fpake_one_of_many_2048bit())
+    });
+    c.bench_function("fPAKE One of Many 2048bit (128 passwords)", |b| {
+        b.iter(|| fpake_one_of_many_2048bit_128passwords())
+    });
 }
 
-criterion_group!(
-    benches,
-    bench_fpake,
-    bench_fpake_one_of_many
-);
+criterion_group!(benches, bench_fpake, bench_fpake_one_of_many);
 criterion_main!(benches);

@@ -17,7 +17,6 @@ use sha2::{Digest, Sha256};
 
 use crate::ot::chou_orlandi::*;
 
-
 use rayon::prelude::*;
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
@@ -185,5 +184,4 @@ mod tests {
             assert_eq!(messages[choice as usize][i], output[i]);
         }
     }
-
 }
