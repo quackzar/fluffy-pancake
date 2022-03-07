@@ -1,23 +1,8 @@
 // Library for fast OT.
 // use curve25519_dalek::edwards;
-use aes_gcm::aead::{Aead, NewAead};
-use aes_gcm::{Aes256Gcm, Key, Nonce};
-use curve25519_dalek::constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
-use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
-use curve25519_dalek::montgomery::MontgomeryPoint;
-use curve25519_dalek::scalar::Scalar;
-
-use rand::SeedableRng;
-use rand_chacha::ChaCha12Rng;
-
-use crate::hash;
-use crate::util::*;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use crate::{ot::chou_orlandi::*, util::{random_bytes, xor_bytes, LENGTH}};
 
-use crate::ot::chou_orlandi::*;
-
-use rayon::prelude::*;
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
 fn fk(key: &[u8], choice: u16) -> Vec<u8> {
