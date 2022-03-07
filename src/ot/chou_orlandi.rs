@@ -155,7 +155,7 @@ impl ObliviousReceiver<Init> {
     }
 
     pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
-        assert!(self.choices.len() == their_publics.0.len());
+        assert_eq!(self.choices.len(), their_publics.0.len());
         let (publics, keys): (Vec<CompressedEdwardsY>, _) = their_publics
             .0
             .par_iter()
@@ -189,7 +189,7 @@ impl ObliviousReceiver<RetrievingPayload> {
     }
 
     pub fn receive(&self, payload: &Payload) -> Vec<Vec<u8>> {
-        assert!(self.choices.len() == payload.0.len());
+        assert_eq!(self.choices.len(), payload.0.len());
         payload
             .0
             .par_iter()
