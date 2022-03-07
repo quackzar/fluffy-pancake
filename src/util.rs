@@ -80,7 +80,7 @@ pub fn xor(a: WireBytes, b: WireBytes) -> WireBytes {
     result
 }
 
-pub fn xor_bytes(left: &Vec<u8>, right: &Vec<u8>) -> Vec<u8> {
+pub fn xor_bytes(left: &[u8], right: &[u8]) -> Vec<u8> {
     debug_assert_eq!(left.len(), right.len());
 
     let mut result = Vec::with_capacity(left.len());
