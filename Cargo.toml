@@ -31,7 +31,11 @@ simd = ["curve25519-dalek/simd_backend"]
 criterion = "0.3"
 
 [[bench]]
-name = "ot"
+name = "chou_orlandi"
+harness = false
+
+[[bench]]
+name = "one_of_many"
 harness = false
 
 [[bench]]
