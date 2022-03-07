@@ -98,7 +98,7 @@ impl HalfKey {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
 
-        let msg = Message::new(&e_theirs);
+        let msg = Message::from(&e_theirs);
         let sender = ObliviousSender::new(&msg);
         // send OT public key and receive their public.
         s.send(Event::OTInit(sender.public())).unwrap();
@@ -230,7 +230,7 @@ impl OneOfManyKey {
                 encoding[i][1].to_bytes().to_vec(),
             ])
         }
-        let key_message = Message::new(key.as_slice());
+        let key_message = Message::from(key.as_slice());
         let key_sender = ObliviousSender::new(&key_message);
         evaluator.send(OneOfManyEvent::OTKeyChallenge(key_sender.public()));
 
@@ -444,7 +444,7 @@ impl OneOfManyKey {
         let mut senders = Vec::with_capacity(number_of_passwords as usize);
         let mut challenges = Vec::with_capacity(number_of_passwords as usize);
         for i in 0..(number_of_passwords as usize) {
-            let message = Message::new(&keys[i]);
+            let message = Message::from(&keys[i]);
             let sender = ObliviousSender::new(&message);
 
             challenges.push(sender.public());
@@ -743,14 +743,8 @@ mod tests {
 
         // encoding OT.
         let e = BinaryEncodingKey::from(e);
-        let msg: Vec<PlaintextPair> =
-            e.0.iter()
-                .zip(e.1)
-                .map(|(w0, w1)| [w0.as_ref().to_vec(), w1.as_ref().to_vec()])
-                .collect();
-        println!("msg len: {}", msg.len());
-        let msg = Message::new(&msg);
-        // chou-orlandi protocol
+        let msg = Message::new(&e.0, &e.1);
+        // chou-orlandi proold_newol
         let sender = ObliviousSender::new(&msg);
         let receiver = ObliviousReceiver::<Init>::new(&x);
         let receiver = receiver.accept(&sender.public());
@@ -772,10 +766,11 @@ mod tests {
 
     #[test]
     fn test_ot_wire() {
-        let wire1 = &Wire::new(2);
-        let wire2 = &Wire::new(2);
-        let msg = Message::new(&[[wire1.as_ref().to_vec(), wire2.as_ref().to_vec()]]);
-
+        let wire1 = Wire::new(2);
+        let wire2 = Wire::new(2);
+        let m0 = &vec![wire1];
+        let m1 = &vec![wire2.clone()];
+        let msg = Message::new(m0, m1);
         // chou-orlandi protocol
         let sender = ObliviousSender::new(&msg);
         let receiver = ObliviousReceiver::<Init>::new(&[true]);
@@ -783,9 +778,7 @@ mod tests {
         let payload = sender.accept(&receiver.public());
         let wire = &receiver.receive(&payload)[0];
         let wire = Wire::from_bytes(to_array(wire), Domain::Binary);
-        println!("{:?}", wire);
-        println!("{:?}", wire2);
-        assert!(&wire == wire2);
+        assert!(wire == wire2);
     }
 
     #[test]
@@ -809,7 +802,7 @@ mod tests {
                 .collect();
 
             // sender sender, receiver receiver.
-            let msg = Message::new(&e_receiver);
+            let msg = Message::from(&e_receiver);
             let sender = ObliviousSender::new(&msg);
             let x: Vec<bool> = pwsd_b.iter().map(|&x| x == 1).collect();
             let receiver = ObliviousReceiver::<Init>::new(&x);
@@ -860,7 +853,7 @@ mod tests {
                 .collect();
 
             // sender sender, receiver receiver.
-            let msg = Message::new(&e_receiver);
+            let msg = Message::from(&e_receiver);
             let sender = ObliviousSender::new(&msg);
             let x: Vec<bool> = pwsd_a.iter().map(|&x| x == 1).collect();
             let receiver = ObliviousReceiver::<Init>::new(&x);

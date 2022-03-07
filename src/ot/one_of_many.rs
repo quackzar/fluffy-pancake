@@ -70,7 +70,7 @@ pub fn one_to_n_challenge_create(
         messages.push([m0, m1]);
     }
 
-    let message = Message::new(messages.as_slice());
+    let message = Message::from(messages.as_slice());
     let sender = ObliviousSender::new(&message);
     let challenge = sender.public();
 

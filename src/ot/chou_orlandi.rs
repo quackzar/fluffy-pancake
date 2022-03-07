@@ -24,23 +24,25 @@ pub type CiphertextPair = [Vec<u8>; 2];
 pub struct Payload(Vec<CiphertextPair>);
 
 pub type PlaintextPair = [Vec<u8>; 2];
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Message(Vec<PlaintextPair>);
 
 impl Message {
-    pub fn new(msg: &[PlaintextPair]) -> Message {
-        Message(msg.to_vec())
+    pub fn from<T: AsRef<[u8]>>(msg: &[[T; 2]]) -> Self {
+        let mut m = Vec::with_capacity(msg.len());
+        for i in 0..msg.len() {
+            m.push([msg[i][0].as_ref().to_vec(), msg[i][1].as_ref().to_vec()]);
+        }
+        Message(m)
     }
 
-    pub fn from(msg: &[[&[u8]; 2]]) -> Message {
-        let mut vec = Vec::with_capacity(msg.len());
-        for m in msg {
-            let m0 = m[0].to_vec();
-            let m1 = m[1].to_vec();
-            let pair: PlaintextPair = [m0, m1];
-            vec.push(pair);
+    pub fn new<T : AsRef<[u8]>>(m0: &[T], m1: &[T]) -> Self {
+        assert!(m0.len() == m1.len());
+        let mut m = Vec::with_capacity(m0.len());
+        for i in 0..m0.len() {
+            m.push([m0[i].as_ref().to_vec(), m1[i].as_ref().to_vec()]);
         }
-        Message(vec)
+        Message(m)
     }
 }
 
@@ -114,10 +116,10 @@ impl ObliviousSender {
                 // TODO: Error handling
                 let cipher = Aes256Gcm::new(Key::from_slice(&k0));
                 let nonce = Nonce::from_slice(b"unique nonce"); // TODO: Something with nonce.
-                let e0 = cipher.encrypt(nonce, m0.as_slice()).unwrap().to_vec();
+                let e0 = cipher.encrypt(nonce, m0.as_ref()).unwrap().to_vec();
                 let cipher = Aes256Gcm::new(Key::from_slice(&k1));
                 let nonce = Nonce::from_slice(b"unique nonce");
-                let e1 = cipher.encrypt(nonce, m1.as_slice()).unwrap().to_vec();
+                let e1 = cipher.encrypt(nonce, m1.as_ref()).unwrap().to_vec();
                 [e0, e1]
             })
             .collect();
@@ -253,15 +255,15 @@ mod tests {
 
     #[test]
     fn test_n_ots() {
-        let m: [[Vec<u8>; 2]; 5] = [
-            [vec![1], vec![6]],
-            [vec![2], vec![7]],
-            [vec![3], vec![8]],
-            [vec![4], vec![9]],
-            [vec![5], vec![10]],
+        let m: [[[u8;1]; 2]; 5] = [
+            [[1], [6]],
+            [[2], [7]],
+            [[3], [8]],
+            [[4], [9]],
+            [[5], [10]],
         ];
 
-        let msg = Message::new(&m);
+        let msg = Message::from(&m);
 
         let c = [true, false, true, false, true];
         let receiver = ObliviousReceiver::new(&c);

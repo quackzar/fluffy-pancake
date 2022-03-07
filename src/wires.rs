@@ -229,6 +229,7 @@ impl Wire {
         wire
     }
 
+
     #[inline]
     pub fn color(&self) -> u16 {
         match self.domain {

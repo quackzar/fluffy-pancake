@@ -11,7 +11,7 @@ fn run_one_ot() {
 
     // round 0
     let receiver = ObliviousReceiver::new(&[false]);
-    let sender = ObliviousSender::new(&Message::new(&[[m0, m1]]));
+    let sender = ObliviousSender::new(&Message::old_new(&[[m0, m1]]));
 
     // round 1
     let receiver = receiver.accept(&sender.public());
@@ -25,7 +25,7 @@ fn run_one_ot() {
 fn run_ot(msg: &[PlaintextPair], choices: &[bool]) {
     // round 0
     let receiver = ObliviousReceiver::new(choices);
-    let sender = ObliviousSender::new(&Message::new(msg));
+    let sender = ObliviousSender::new(&Message::old_new(msg));
 
     // round 1
     let receiver = receiver.accept(&sender.public());
