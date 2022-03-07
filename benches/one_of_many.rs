@@ -1,7 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use magic_pake::{
-    fpake::build_circuit,
-    garble::{self, BinaryEncodingKey},
     ot::one_of_many::*,
 };
 

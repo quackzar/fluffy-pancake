@@ -337,16 +337,16 @@ fn fpake_one_of_many_2048bit_128passwords() {
 
 fn bench_fpake_one_of_many(c: &mut Criterion) {
     c.bench_function("fPAKE One of Many 64bit (8 passwords)", |b| {
-        b.iter(|| fpake_one_of_many_64bit())
+        b.iter(fpake_one_of_many_64bit)
     });
     c.bench_function("fPAKE One of Many 128bit (8 passwords)", |b| {
-        b.iter(|| fpake_one_of_many_128bit())
+        b.iter(fpake_one_of_many_128bit)
     });
     c.bench_function("fPAKE One of Many 2048bit (8 passwords)", |b| {
-        b.iter(|| fpake_one_of_many_2048bit())
+        b.iter(fpake_one_of_many_2048bit)
     });
     c.bench_function("fPAKE One of Many 2048bit (128 passwords)", |b| {
-        b.iter(|| fpake_one_of_many_2048bit_128passwords())
+        b.iter(fpake_one_of_many_2048bit_128passwords)
     });
 }
 

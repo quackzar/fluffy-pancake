@@ -16,7 +16,7 @@ fn fk(key: &[u8], choice: u16) -> Vec<u8> {
         output.push(result[i % result.len()]);
     }
 
-    return output;
+    output
 }
 
 // How to 1-to-n:
@@ -136,7 +136,7 @@ pub fn one_to_n_choose(
         x = xor_bytes(&x, &hash);
     }
 
-    return x;
+    x
 }
 
 #[cfg(test)]

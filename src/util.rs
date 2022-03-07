@@ -88,7 +88,7 @@ pub fn xor_bytes(left: &Vec<u8>, right: &Vec<u8>) -> Vec<u8> {
         result.push(left[i] ^ right[i]);
     }
 
-    return result;
+    result
 }
 
 #[cfg(test)]

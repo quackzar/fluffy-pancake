@@ -202,7 +202,7 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
         wires.push(Wire::from_bytes(util::to_array(chunk), domain));
     }
 
-    return wires;
+    wires
 }
 
 // Bob / server is Garbler
@@ -279,7 +279,7 @@ impl OneOfManyKey {
         // At this point the evaluator should have an encoding of both their own version and the servers version of the password.
         //
 
-        return OneOfManyKey(decoding.hashes[0][1]);
+        OneOfManyKey(decoding.hashes[0][1])
     }
 
     pub fn evaluator_client(
@@ -416,7 +416,7 @@ impl OneOfManyKey {
         }
         random_keys.push(cancelling_key);
 
-        let magic = vec![vec![0u8; LENGTH]; password_bits];
+        let _magic = vec![vec![0u8; LENGTH]; password_bits];
 
         let mut random_key = random_keys.iter();
         let mut keys = Vec::with_capacity(number_of_passwords as usize);
@@ -471,7 +471,7 @@ impl OneOfManyKey {
         // At this point the evaluator should have encodings of both inputs and should evaluate the garbled circuit to retrieve their version of they key.
         //
 
-        return OneOfManyKey(decoding.hashes[0][1]);
+        OneOfManyKey(decoding.hashes[0][1])
     }
 
     pub fn evaluator_server(
@@ -586,15 +586,14 @@ mod tests {
         let (s2, r2) = unbounded();
         let h1 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
-            k1
+            
+            OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1)
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k2 =
-                OneOfManyKey::evaluator_client(&password, number_of_passwords, index, &s1, &r2);
-            k2
+            
+            OneOfManyKey::evaluator_client(&password, number_of_passwords, index, &s1, &r2)
         });
 
         let k1 = h1.join().unwrap();
@@ -619,21 +618,21 @@ mod tests {
         let (s2, r2) = unbounded();
         let h1 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::garbler_client(
+            
+            OneOfManyKey::garbler_client(
                 &password,
                 index,
                 number_of_passwords,
                 threshold,
                 &s2,
                 &r1,
-            );
-            k1
+            )
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k2 = OneOfManyKey::evaluator_server(&passwords, &s1, &r2);
-            k2
+            
+            OneOfManyKey::evaluator_server(&passwords, &s1, &r2)
         });
 
         let k1 = h1.join().unwrap();
@@ -747,7 +746,7 @@ mod tests {
         let msg: Vec<PlaintextPair> =
             e.0.iter()
                 .zip(e.1)
-                .map(|(w0, w1)| [w0.as_ref().to_vec(), (&w1).as_ref().to_vec()])
+                .map(|(w0, w1)| [w0.as_ref().to_vec(), w1.as_ref().to_vec()])
                 .collect();
         println!("msg len: {}", msg.len());
         let msg = Message::new(&msg);
