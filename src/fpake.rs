@@ -1,6 +1,7 @@
 use crate::circuit::*;
 use crate::garble::*;
-use crate::ot::*;
+use crate::ot::chou_orlandi::*;
+use crate::ot::one_of_many::*;
 use crate::util::*;
 use crate::wires::*;
 
@@ -124,14 +125,14 @@ impl HalfKey {
     pub fn evaluator(password: &[u8], s: &Sender<Event>, r: &Receiver<Event>) -> HalfKey {
         let password = u8_vec_to_bool_vec(password);
         let receiver = ObliviousReceiver::<Init>::new(&password);
-        // receive ot public key.
+        // receive chou-orlandi public key.
         let public = match r.recv() {
             Ok(Event::OTInit(p)) => p,
             _ => panic!("expected OTInit"),
         };
         let receiver = receiver.accept(&public);
         s.send(Event::OTRequest(receiver.public())).unwrap();
-        // receive ot payload.
+        // receive chou-orlandi payload.
         let payload = match r.recv() {
             Ok(Event::OTResponse(p)) => p,
             _ => panic!("expected OTResponse"),
@@ -746,7 +747,7 @@ mod tests {
                 .collect();
         println!("msg len: {}", msg.len());
         let msg = Message::new(&msg);
-        // ot protocol
+        // chou-orlandi protocol
         let sender = ObliviousSender::new(&msg);
         let receiver = ObliviousReceiver::<Init>::new(&x);
         let receiver = receiver.accept(&sender.public());
@@ -772,7 +773,7 @@ mod tests {
         let wire2 = &Wire::new(2);
         let msg = Message::new(&[[wire1.as_ref().to_vec(), wire2.as_ref().to_vec()]]);
 
-        // ot protocol
+        // chou-orlandi protocol
         let sender = ObliviousSender::new(&msg);
         let receiver = ObliviousReceiver::<Init>::new(&[true]);
         let receiver = receiver.accept(&sender.public());
