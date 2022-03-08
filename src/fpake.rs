@@ -1,6 +1,9 @@
 use crate::circuit::*;
 use crate::garble::*;
-use crate::ot::chou_orlandi::*;
+use crate::ot::chou_orlandi::EncryptedPayload;
+use crate::ot::chou_orlandi::Public;
+use crate::ot::util::Message as MessagePair;
+use crate::ot::chou_orlandi::{Init, Sender as OTSender, Receiver as OTReceiver};
 use crate::ot::one_of_many::*;
 use crate::util::*;
 use crate::wires::*;
@@ -71,7 +74,7 @@ use crossbeam_channel::{Receiver, Sender};
 pub enum Event {
     OTInit(Public),
     OTRequest(Public),
-    OTResponse(Payload),
+    OTResponse(EncryptedPayload),
     GCCircuit(GarbledCircuit),
     GCInput(Vec<Wire>),
 }
@@ -98,8 +101,8 @@ impl HalfKey {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
 
-        let msg = Message::from(&e_theirs);
-        let sender = ObliviousSender::new(&msg);
+        let msg = MessagePair::new2(&e_theirs);
+        let sender = OTSender::new(&msg);
         // send OT public key and receive their public.
         s.send(Event::OTInit(sender.public())).unwrap();
 
@@ -124,7 +127,7 @@ impl HalfKey {
 
     pub fn evaluator(password: &[u8], s: &Sender<Event>, r: &Receiver<Event>) -> HalfKey {
         let password = u8_vec_to_bool_vec(password);
-        let receiver = ObliviousReceiver::<Init>::new(&password);
+        let receiver = OTReceiver::<Init>::new(&password);
         // receive chou-orlandi public key.
         let public = match r.recv() {
             Ok(Event::OTInit(p)) => p,
@@ -182,18 +185,18 @@ pub enum OneOfManyEvent {
 
     OTKeyChallenge(Public),
     OTKeyResponse(Public),
-    OTKeyPayload(Payload),
+    OTKeyPayload(EncryptedPayload),
 
     OTChallenge(Public, Vec<Vec<u8>>),
     OTResponse(Public),
-    OTPayload(Payload),
+    OTPayload(EncryptedPayload),
 
     // Server evaluates, client garbles
     GCCircuitWithInput(GarbledCircuit, Vec<Wire>),
 
     OTChallenges(Vec<Public>),
     OTResponses(Vec<Public>),
-    OTPayloads(Vec<Payload>),
+    OTPayloads(Vec<EncryptedPayload>),
 }
 
 fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
@@ -230,8 +233,8 @@ impl OneOfManyKey {
                 encoding[i][1].to_bytes().to_vec(),
             ])
         }
-        let key_message = Message::from(key.as_slice());
-        let key_sender = ObliviousSender::new(&key_message);
+        let key_message = MessagePair::new2(key.as_slice());
+        let key_sender = OTSender::new(&key_message);
         evaluator.send(OneOfManyEvent::OTKeyChallenge(key_sender.public()));
 
         // 3. Receive response back from OT
@@ -306,7 +309,7 @@ impl OneOfManyKey {
                 choices.push(bit)
             }
         }
-        let key_receiver = ObliviousReceiver::new(choices.as_slice());
+        let key_receiver = OTReceiver::new(choices.as_slice());
         let key_challenge = match garbler.recv() {
             Ok(OneOfManyEvent::OTKeyChallenge(public)) => public,
             _ => panic!("Invalid message received from garbler!"),
@@ -444,8 +447,8 @@ impl OneOfManyKey {
         let mut senders = Vec::with_capacity(number_of_passwords as usize);
         let mut challenges = Vec::with_capacity(number_of_passwords as usize);
         for i in 0..(number_of_passwords as usize) {
-            let message = Message::from(&keys[i]);
-            let sender = ObliviousSender::new(&message);
+            let message = MessagePair::new2(&keys[i]);
+            let sender = OTSender::new(&message);
 
             challenges.push(sender.public());
             senders.push(sender);
@@ -506,7 +509,7 @@ impl OneOfManyKey {
                 }
             }
 
-            let receiver = ObliviousReceiver::new(&choices);
+            let receiver = OTReceiver::new(&choices);
             let receiver = receiver.accept(&challenges[i]);
             responses.push(receiver.public());
             receivers.push(receiver);
@@ -743,10 +746,10 @@ mod tests {
 
         // encoding OT.
         let e = BinaryEncodingKey::from(e);
-        let msg = Message::new(&e.0, &e.1);
+        let msg = MessagePair::new(&e.0, &e.1);
         // chou-orlandi proold_newol
-        let sender = ObliviousSender::new(&msg);
-        let receiver = ObliviousReceiver::<Init>::new(&x);
+        let sender = OTSender::new(&msg);
+        let receiver = OTReceiver::<Init>::new(&x);
         let receiver = receiver.accept(&sender.public());
         let payload = sender.accept(&receiver.public());
         let x_gb = receiver.receive(&payload);
@@ -770,10 +773,10 @@ mod tests {
         let wire2 = Wire::new(2);
         let m0 = &vec![wire1];
         let m1 = &vec![wire2.clone()];
-        let msg = Message::new(m0, m1);
+        let msg = MessagePair::new(m0, m1);
         // chou-orlandi protocol
-        let sender = ObliviousSender::new(&msg);
-        let receiver = ObliviousReceiver::<Init>::new(&[true]);
+        let sender = OTSender::new(&msg);
+        let receiver = OTReceiver::<Init>::new(&[true]);
         let receiver = receiver.accept(&sender.public());
         let payload = sender.accept(&receiver.public());
         let wire = &receiver.receive(&payload)[0];
@@ -802,10 +805,10 @@ mod tests {
                 .collect();
 
             // sender sender, receiver receiver.
-            let msg = Message::from(&e_receiver);
-            let sender = ObliviousSender::new(&msg);
+            let msg = MessagePair::new2(&e_receiver);
+            let sender = OTSender::new(&msg);
             let x: Vec<bool> = pwsd_b.iter().map(|&x| x == 1).collect();
-            let receiver = ObliviousReceiver::<Init>::new(&x);
+            let receiver = OTReceiver::<Init>::new(&x);
             let receiver = receiver.accept(&sender.public());
             let payload = sender.accept(&receiver.public());
             let x_receiver = receiver.receive(&payload);
@@ -853,10 +856,10 @@ mod tests {
                 .collect();
 
             // sender sender, receiver receiver.
-            let msg = Message::from(&e_receiver);
-            let sender = ObliviousSender::new(&msg);
+            let msg = MessagePair::new2(&e_receiver);
+            let sender = OTSender::new(&msg);
             let x: Vec<bool> = pwsd_a.iter().map(|&x| x == 1).collect();
-            let receiver = ObliviousReceiver::<Init>::new(&x);
+            let receiver = OTReceiver::<Init>::new(&x);
             let receiver = receiver.accept(&sender.public());
             let payload = sender.accept(&receiver.public());
             let x_receiver = receiver.receive(&payload);

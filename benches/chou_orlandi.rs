@@ -10,8 +10,8 @@ fn run_one_ot() {
     let m1 = b"Hello, sweden!".to_vec();
 
     // round 0
-    let receiver = ObliviousReceiver::new(&[false]);
-    let sender = ObliviousSender::new(&Message::old_new(&[[m0, m1]]));
+    let receiver = Receiver::new(&[false]);
+    let sender = Sender::new(&MessagePair::old_new(&[[m0, m1]]));
 
     // round 1
     let receiver = receiver.accept(&sender.public());
@@ -24,8 +24,8 @@ fn run_one_ot() {
 
 fn run_ot(msg: &[PlaintextPair], choices: &[bool]) {
     // round 0
-    let receiver = ObliviousReceiver::new(choices);
-    let sender = ObliviousSender::new(&Message::old_new(msg));
+    let receiver = Receiver::new(choices);
+    let sender = Sender::new(&MessagePair::old_new(msg));
 
     // round 1
     let receiver = receiver.accept(&sender.public());

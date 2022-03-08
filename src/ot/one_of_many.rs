@@ -2,7 +2,7 @@
 // use curve25519_dalek::edwards;
 use sha2::{Digest, Sha256};
 use crate::{ot::chou_orlandi::*, util::{random_bytes, xor_bytes, LENGTH}};
-
+use crate::ot::util::*;
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
 fn fk(key: &[u8], choice: u16) -> Vec<u8> {
@@ -31,7 +31,7 @@ fn fk(key: &[u8], choice: u16) -> Vec<u8> {
 pub fn one_to_n_challenge_create(
     domain: u16,
     messages: &[Vec<u8>],
-) -> (ObliviousSender, Public, Vec<Vec<u8>>) {
+) -> (Sender, Public, Vec<Vec<u8>>) {
     let byte_length = messages[0].len();
 
     // 1. B: Prepare random keys
@@ -70,8 +70,8 @@ pub fn one_to_n_challenge_create(
         messages.push([m0, m1]);
     }
 
-    let message = Message::from(messages.as_slice());
-    let sender = ObliviousSender::new(&message);
+    let message = Message::new2(messages.as_slice());
+    let sender = Sender::new(&message);
     let challenge = sender.public();
 
     (sender, challenge, y)
@@ -84,7 +84,7 @@ pub fn one_to_n_challenge_respond(
     domain: u16,
     choice: u16,
     challenge: &Public,
-) -> (ObliviousReceiver<RetrievingPayload>, Public) {
+) -> (Receiver<RetrievingPayload>, Public) {
     let l = 1 << domain;
 
     let mut choices: Vec<bool> = Vec::with_capacity(l);
@@ -92,7 +92,7 @@ pub fn one_to_n_challenge_respond(
         let bit = (choice & (1 << i)) >> i;
         choices.push(bit == 1);
     }
-    let receiver = ObliviousReceiver::new(choices.as_slice());
+    let receiver = Receiver::new(choices.as_slice());
     let receiver = receiver.accept(challenge);
     let response = receiver.public();
 
@@ -100,7 +100,7 @@ pub fn one_to_n_challenge_respond(
 }
 
 // Bob: Create payloads for Alice
-pub fn one_to_n_create_payloads(sender: &ObliviousSender, response: &Public) -> Payload {
+pub fn one_to_n_create_payloads(sender: &Sender, response: &Public) -> EncryptedPayload {
     sender.accept(response)
 }
 
@@ -108,8 +108,8 @@ pub fn one_to_n_create_payloads(sender: &ObliviousSender, response: &Public) -> 
 pub fn one_to_n_choose(
     domain: u16,
     choice: u16,
-    receiver: &ObliviousReceiver<RetrievingPayload>,
-    payload: &Payload,
+    receiver: &Receiver<RetrievingPayload>,
+    payload: &EncryptedPayload,
     y: &Vec<Vec<u8>>,
 ) -> Vec<u8> {
     let l = 1 << domain;
