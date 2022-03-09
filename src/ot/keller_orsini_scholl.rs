@@ -30,7 +30,8 @@ struct Matrix {
 
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        let l = msg.len();
+        assert!(msg.len() % 8 == 0, "Message length must be a multiple of 8");
+        let l = msg.len() / 8;
         const K : usize = COMP_SEC / 8;
 
         // COTe
@@ -85,7 +86,7 @@ impl ObliviousSender for Sender {
 
         // -- DeROT --
         let (d0, d1) : (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1).map(|([m0, m1],v0, v1)| {
-            (xor_bytes(&m0, &v0), xor_bytes(&m1, &v1))
+            (xor_bytes(m0, &v0), xor_bytes(m1, &v1))
         }).unzip();
 
         let (s,_) = channel;
@@ -191,7 +192,7 @@ mod tests {
             let sender = Sender { 
                 bootstrap: Box::new(OTReceiver),
             };
-            let msg = Message::new(&[b"Hello"], &[b"World"]);
+            let msg = Message::new(&[b"Hello"; 8], &[b"World"; 8]);
             sender.exchange(&msg, &ch1).unwrap();
         });
 
