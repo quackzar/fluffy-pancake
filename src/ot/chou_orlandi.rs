@@ -26,8 +26,8 @@ use crate::ot::util::*;
 
 
 // Channel Impl.
-struct OTSender;
-struct OTReceiver;
+pub struct OTSender;
+pub struct OTReceiver;
 
 impl ObliviousSender for OTSender {
     fn exchange(&self, msg: &Message, (s,r): &Channel<Vec<u8>>) -> Result<(), Error> {
