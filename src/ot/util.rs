@@ -29,6 +29,10 @@ impl Message {
         }
         Message(m)
     }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 pub trait ObliviousSender {

@@ -1,7 +1,11 @@
 // https://eprint.iacr.org/2015/546.pdf
 
+use aes_gcm::aead::generic_array::functional::FunctionalSequence;
+use rayon::iter::IndexedParallelIterator;
+
 use crate::util::*;
 
+use itertools::izip;
 use crate::ot::util::*;
 
 /// The computational security paramter (k)
@@ -26,9 +30,10 @@ struct Matrix {
 }
 
 
+
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        let l = 128;
+        let l = msg.len();
         const K : usize = COMP_SEC / 8;
 
         // COTe
@@ -60,25 +65,47 @@ impl ObliviousSender for Sender {
         let (_,r) = channel;
         let u : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
-        let delta = u8_vec_to_bool_vec(&delta);
-        use itertools::izip;
-        let q : Vec<_> = delta.iter().enumerate().map(
+        let q : Vec<_> = u8_vec_to_bool_vec(&delta).iter().enumerate().map(
             |(i,&d)| if d {
-                izip!(&u[i], &t[i]).map(|(u,t)| *u^*t).collect::<Vec<u8>>()
+                xor_bytes(&u[i],&t[i])
             } else {
                 t[i].clone()
             }
         ).collect();
 
         // Sender outputs `q_j`
-        todo!();
+
+        // -- Check correlation --
+        // TODO: this
+
+        // -- Randomize --
+        let v0 : Vec<Vec<u8>> = q.iter().enumerate().map(|(j,q)|
+            hash!(j.to_be_bytes(), q).to_vec()
+        ).collect();
+        let v1 : Vec<Vec<u8>> = q.iter().enumerate().map(|(j,q)|
+            hash!(j.to_be_bytes(), xor_bytes(q, &delta)).to_vec()
+        ).collect();
+
+        // -- DeROT --
+        let (d0, d1) : (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1).map(|([m0, m1],v0, v1)| {
+            (xor_bytes(&m0, &v0), xor_bytes(&m1, &v1))
+        }).unzip();
+
+        let (s,_) = channel;
+        for d0 in d0 {
+            s.send(d0)?;
+        }
+        for d1 in d1 {
+            s.send(d1)?;
+        }
+        Ok(())
     }
 }
 
 impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>)
         -> Result<Payload, Error> {
-        let l = 128;
+        let l = choices.len();
         const K : usize = COMP_SEC / 8;
 
         // COTe
@@ -115,8 +142,7 @@ impl ObliviousReceiver for Receiver {
             (0..l).map(|_| prg.gen::<u8>()).collect()
         }).collect();
 
-        use itertools::izip;
-        let u : Vec<Vec<u8>> = izip!(t0, t1, x).map(|(t0,t1,x)|
+        let u : Vec<Vec<u8>> = izip!(&t0, &t1, x).map(|(t0,t1,x)|
             izip!(t0,t1,x).map(|(t0,t1,x)| t0 ^ t1 ^ x).collect()
         ).collect();
         
@@ -126,12 +152,27 @@ impl ObliviousReceiver for Receiver {
 
         
         // Receiver outputs `t_j`
+        
         // -- Check correlation --
+        // TODO: this
         // let chi : Vec<_> = (0..128).map(|_| rng.gen::<[u8; COMP_SEC/8]>()).collect();
 
         // let xsum = izip!(x, chi).map(|(x,chi)| x * chi).sum();
 
-        todo!();
+
+        // -- Randomize --
+        let v : Vec<Vec<u8>> = t0.iter().enumerate().map(|(j,t)|
+            hash!(j.to_be_bytes(), t).to_vec()
+        ).collect();
+
+        // -- DeROT --
+        let (_,r) = channel;
+        let d0 = (0..l).map(|_| r.recv().unwrap());
+        let d1 = (0..l).map(|_| r.recv().unwrap());
+        let y = izip!(v, choices, d0, d1).map(|(v,c,d0,d1)| {
+            xor_bytes(&v, if *c {&d1} else {&d0})
+        }).collect();
+        Ok(y)
     }
 }
 
