@@ -32,7 +32,7 @@ impl Message {
 }
 
 pub trait ObliviousSender {
-    fn exchange(&self, msg: Message, channel: &Channel<Vec<u8>>) -> Result<(), Error>;
+    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error>;
 }
 
 pub type Payload = Vec<Vec<u8>>;

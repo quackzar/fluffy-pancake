@@ -30,8 +30,8 @@ struct OTSender;
 struct OTReceiver;
 
 impl ObliviousSender for OTSender {
-    fn exchange(&self, msg: Message, (s,r): &Channel<Vec<u8>>) -> Result<(), Error> {
-        let sender = Sender::new(&msg);
+    fn exchange(&self, msg: &Message, (s,r): &Channel<Vec<u8>>) -> Result<(), Error> {
+        let sender = Sender::new(msg);
 
         // round 1
         let pbs = sender.public();
@@ -260,7 +260,7 @@ mod tests {
         let h1 = thread::spawn(move || {
             let sender = OTSender;
             let msg = Message::new(&[b"Hello"], &[b"World"]);
-            sender.exchange(msg, &ch1).unwrap();
+            sender.exchange(&msg, &ch1).unwrap();
         });
 
         let h2 = thread::spawn(move || {

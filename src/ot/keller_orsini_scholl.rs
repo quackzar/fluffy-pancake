@@ -1,7 +1,6 @@
 // https://eprint.iacr.org/2015/546.pdf
 
 use crate::util::*;
-use serde::{Serialize, Deserialize};
 
 use crate::ot::util::*;
 
@@ -19,8 +18,9 @@ struct Receiver {
     bootstrap: dyn ObliviousSender,
 }
 
+
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
 
         // COTe
         use rand::SeedableRng;
@@ -33,10 +33,10 @@ impl ObliviousSender for Sender {
 
 
         // INITIALIZATION
-        let delta = [0u8; COMP_SEC/8];
+        let delta : [u8; COMP_SEC/8] = rng.gen();
     
         // do OT.
-        let payload = self.bootstrap.exchange(&u8_vec_to_bool_vec(&delta), &channel)?;
+        let payload = self.bootstrap.exchange(&u8_vec_to_bool_vec(&delta), channel)?;
         let mut seed = [[0u8; (COMP_SEC)/8]; COMP_SEC];
         for (i,p) in payload.iter().enumerate() {
             seed[i].copy_from_slice(p);
@@ -82,7 +82,7 @@ impl ObliviousReceiver for Receiver {
         let seed1 : [[u8; (COMP_SEC)/8]; COMP_SEC] = unsafe { std::mem::transmute(seeds.1) };
 
         let msg = Message::new(&seed0, &seed1);
-        self.bootstrap.exchange(msg, channel)?;
+        self.bootstrap.exchange(&msg, channel)?;
 
         // EXTENSION
 
@@ -106,8 +106,11 @@ impl ObliviousReceiver for Receiver {
         s.send(u)?;
 
         
-        // Sender outputs `q_j`
         // Receiver outputs `t_j`
+        // -- Check correlation --
+        let chi : Vec<_> = (0..128).map(|_| rng.gen::<[u8; COMP_SEC/8]>()).collect();
+
+        let xsum = izip!(x, chi).map(|(x,chi)| x * chi).sum();
 
         todo!();
     }
