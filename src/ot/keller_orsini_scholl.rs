@@ -19,8 +19,17 @@ struct Receiver {
 }
 
 
+struct Matrix {
+    rows: usize,
+    cols: usize,
+    data: Vec<Vec<u8>>,
+}
+
+
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        let l = 128;
+        const K : usize = COMP_SEC / 8;
 
         // COTe
         use rand::SeedableRng;
@@ -33,27 +42,34 @@ impl ObliviousSender for Sender {
 
 
         // INITIALIZATION
-        let delta : [u8; COMP_SEC/8] = rng.gen();
-    
+        let delta : [u8; K] = rng.gen();
+
         // do OT.
         let payload = self.bootstrap.exchange(&u8_vec_to_bool_vec(&delta), channel)?;
-        let mut seed = [[0u8; (COMP_SEC)/8]; COMP_SEC];
+        let mut seed = [[0u8; K]; COMP_SEC];
         for (i,p) in payload.iter().enumerate() {
             seed[i].copy_from_slice(p);
         }
 
         // EXTENSION
-        let t : Vec<_> = seed.iter().map(|&s| {
+        let t : Vec<Vec<u8>> = seed.iter().map(|&s| {
             let mut prg = ChaCha20Rng::from_seed(s);
-            prg.gen::<u128>()
+            (0..l).map(|_| prg.gen::<u8>()).collect()
         }).collect();
 
         let (_,r) = channel;
-        let u : Vec<u128> = bincode::deserialize(&r.recv()?)?;
+        let u : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
         let delta = u8_vec_to_bool_vec(&delta);
-        let q : Vec<_> = delta.iter().enumerate().map(|(i,&d)| (d as u128) * u[i] + t[i]).collect();
-        
+        use itertools::izip;
+        let q : Vec<_> = delta.iter().enumerate().map(
+            |(i,&d)| if d {
+                izip!(&u[i], &t[i]).map(|(u,t)| *u^*t).collect::<Vec<u8>>()
+            } else {
+                t[i].clone()
+            }
+        ).collect();
+
         // Sender outputs `q_j`
         todo!();
     }
@@ -62,6 +78,8 @@ impl ObliviousSender for Sender {
 impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>)
         -> Result<Payload, Error> {
+        let l = 128;
+        const K : usize = COMP_SEC / 8;
 
         // COTe
 
@@ -74,7 +92,7 @@ impl ObliviousReceiver for Receiver {
 
 
         // INITIALIZATION
-        let seeds0 : [u8; COMP_SEC * (COMP_SEC)/8] = rng.gen();
+        let seeds0 : [u8; COMP_SEC * K] = rng.gen();
         let seeds1 : [u8; COMP_SEC * (COMP_SEC)/8] = rng.gen();
         let seeds = (seeds0, seeds1);
         // do OT.
@@ -86,20 +104,21 @@ impl ObliviousReceiver for Receiver {
 
         // EXTENSION
 
-        let x = vec![0u128; COMP_SEC]; // TODO: The u128 type should probably be a u8 array or vector.
-        let t0 : Vec<_> = seed0.iter().map(|&s| {
+        let x = vec![vec![0u8; l]; COMP_SEC]; // TODO: The u128 type should probably be a u8 array or vector.
+        let t0 : Vec<Vec<u8>> = seed0.iter().map(|&s| {
             let mut prg = ChaCha20Rng::from_seed(s);
-            prg.gen::<u128>()
+            (0..l).map(|_| prg.gen::<u8>()).collect()
         }).collect();
 
-        let t1 : Vec<_> = seed0.iter().map(|&s| {
+        let t1 : Vec<Vec<u8>> = seed0.iter().map(|&s| {
             let mut prg = ChaCha20Rng::from_seed(s);
-            prg.gen::<u128>()
+            (0..l).map(|_| prg.gen::<u8>()).collect()
         }).collect();
 
-        use std::num::Wrapping;
         use itertools::izip;
-        let u : Vec<_> = izip!(t0, t1, x).map(|(t0,t1,x)| Wrapping(t0) + Wrapping(t1) + Wrapping(x)).map(|r| r.0).collect();
+        let u : Vec<Vec<u8>> = izip!(t0, t1, x).map(|(t0,t1,x)|
+            izip!(t0,t1,x).map(|(t0,t1,x)| t0 ^ t1 ^ x).collect()
+        ).collect();
         
         let (s,_) = channel;
         let u = bincode::serialize(&u)?;
@@ -108,9 +127,9 @@ impl ObliviousReceiver for Receiver {
         
         // Receiver outputs `t_j`
         // -- Check correlation --
-        let chi : Vec<_> = (0..128).map(|_| rng.gen::<[u8; COMP_SEC/8]>()).collect();
+        // let chi : Vec<_> = (0..128).map(|_| rng.gen::<[u8; COMP_SEC/8]>()).collect();
 
-        let xsum = izip!(x, chi).map(|(x,chi)| x * chi).sum();
+        // let xsum = izip!(x, chi).map(|(x,chi)| x * chi).sum();
 
         todo!();
     }
