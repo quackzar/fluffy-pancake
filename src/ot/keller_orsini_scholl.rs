@@ -19,19 +19,27 @@ struct Receiver {
     bootstrap: Box<dyn ObliviousSender>,
 }
 
-
-struct Matrix {
-    rows: usize,
-    cols: usize,
-    data: Vec<Vec<u8>>,
+fn transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
+    assert!(!v.is_empty());
+    let len = v[0].len();
+    let mut iters: Vec<_> = v.into_iter().map(|n| n.into_iter()).collect();
+    (0..len)
+        .map(|_| {
+            iters
+                .iter_mut()
+                .map(|n| n.next().unwrap())
+                .collect::<Vec<T>>()
+        })
+        .collect()
 }
-
 
 
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         assert!(msg.len() % 8 == 0, "Message length must be a multiple of 8");
-        let l = msg.len() / 8;
+        let l = msg.len() / 8; // 8 bits stored in a byte.
+
+        // The parameter kappa.
         const K : usize = COMP_SEC / 8;
 
         // COTe
@@ -63,13 +71,15 @@ impl ObliviousSender for Sender {
         let (_,r) = channel;
         let u : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
-        let q : Vec<_> = u8_vec_to_bool_vec(&delta).iter().enumerate().map(
-            |(i,&d)| if d {
-                xor_bytes(&u[i],&t[i])
+        let mut q = Vec::with_capacity(K);
+        for i in 0..K {
+            let delta = u8_vec_to_bool_vec(&delta);
+            if delta[i] {
+                q.push(xor_bytes(&u[i], &t[i]));
             } else {
-                t[i].clone()
+                q.push(t[i].clone());
             }
-        ).collect();
+        }
 
         // Sender outputs `q_j`
 
@@ -77,6 +87,7 @@ impl ObliviousSender for Sender {
         // TODO: this
 
         // -- Randomize --
+        let q = transpose(q);
         let v0 : Vec<Vec<u8>> = q.iter().enumerate().map(|(j,q)|
             hash!(j.to_be_bytes(), q).to_vec()
         ).collect();
@@ -85,17 +96,29 @@ impl ObliviousSender for Sender {
         ).collect();
 
         // -- DeROT --
-        let (d0, d1) : (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1).map(|([m0, m1],v0, v1)| {
-            (xor_bytes(m0, &v0), xor_bytes(m1, &v1))
+        dbg!(v0.len());
+        dbg!(v1.len());
+        use aes_gcm::aead::{Aead, NewAead};
+        use aes_gcm::{Aes256Gcm, Key, Nonce};
+        let (d0, d1) : (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1).
+            map(|([m0, m1],v0, v1)| {
+            // encrypt the messages.
+            let nonce = Nonce::from_slice(b"unique nonce");
+            let cipher = Aes256Gcm::new(Key::from_slice(&v0));
+            let c0 = cipher.encrypt(nonce, m0.as_slice()).unwrap();
+            let cipher = Aes256Gcm::new(Key::from_slice(&v1));
+            let c1 = cipher.encrypt(nonce, m1.as_slice()).unwrap();
+            (c0, c1)
         }).unzip();
+        dbg!(d0.len());
+        dbg!(d1.len());
 
         let (s,_) = channel;
-        for d0 in d0 {
-            s.send(d0)?;
-        }
-        for d1 in d1 {
-            s.send(d1)?;
-        }
+        let d0 = bincode::serialize(&d0)?;
+        let d1 = bincode::serialize(&d1)?;
+        s.send(d0)?;
+        s.send(d1)?;
+
         Ok(())
     }
 }
@@ -117,19 +140,24 @@ impl ObliviousReceiver for Receiver {
 
 
         // INITIALIZATION
-        let seeds0 : [u8; COMP_SEC * K] = rng.gen();
-        let seeds1 : [u8; COMP_SEC * (COMP_SEC)/8] = rng.gen();
-        let seeds = (seeds0, seeds1);
+        let seed0 : [u8; COMP_SEC * K] = rng.gen();
+        let seed1 : [u8; COMP_SEC * K] = rng.gen();
         // do OT.
-        let seed0 : [[u8; (COMP_SEC)/8]; COMP_SEC] = unsafe { std::mem::transmute(seeds.0) };
-        let seed1 : [[u8; (COMP_SEC)/8]; COMP_SEC] = unsafe { std::mem::transmute(seeds.1) };
+        let seed0 : [[u8; K]; COMP_SEC] = unsafe { std::mem::transmute(seed0) };
+        let seed1 : [[u8; K]; COMP_SEC] = unsafe { std::mem::transmute(seed1) };
 
         let msg = Message::new(&seed0, &seed1);
         self.bootstrap.exchange(&msg, channel)?;
 
         // EXTENSION
 
-        let x = vec![vec![0u8; l]; COMP_SEC]; // TODO: The u128 type should probably be a u8 array or vector.
+        let x : Vec<Vec<u8>> = choices.iter().map(|b| {
+            if *b {
+                vec![0x00u8; K]
+            } else {
+                vec![0xFFu8; K]
+            }
+        }).collect();
         let t0 : Vec<Vec<u8>> = seed0.iter().map(|&s| {
             let mut prg = ChaCha20Rng::from_seed(s);
             (0..l).map(|_| prg.gen::<u8>()).collect()
@@ -140,9 +168,14 @@ impl ObliviousReceiver for Receiver {
             (0..l).map(|_| prg.gen::<u8>()).collect()
         }).collect();
 
-        let u : Vec<Vec<u8>> = izip!(&t0, &t1, x).map(|(t0,t1,x)|
-            izip!(t0,t1,x).map(|(t0,t1,x)| t0 ^ t1 ^ x).collect()
-        ).collect();
+        let mut u : Vec<Vec<u8>> = Vec::with_capacity(K);
+        for i in 0..K {
+            let mut vec = Vec::with_capacity(l);
+            for j in 0..l {
+                vec.push(t0[i][j] ^ t1[i][j] ^ x[j][i]);
+            }
+            u.push(vec);
+        }
         
         let (s,_) = channel;
         let u = bincode::serialize(&u)?;
@@ -159,16 +192,26 @@ impl ObliviousReceiver for Receiver {
 
 
         // -- Randomize --
+        let t0 = transpose(t0);
         let v : Vec<Vec<u8>> = t0.iter().enumerate().map(|(j,t)|
             hash!(j.to_be_bytes(), t).to_vec()
         ).collect();
 
         // -- DeROT --
+        use aes_gcm::aead::{Aead, NewAead};
+        use aes_gcm::{Aes256Gcm, Key, Nonce};
         let (_,r) = channel;
-        let d0 = (0..l).map(|_| r.recv().unwrap());
-        let d1 = (0..l).map(|_| r.recv().unwrap());
+        let d0 : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let d1 : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        dbg!(d0.len());
+        dbg!(d1.len());
+        dbg!(v.len());
         let y = izip!(v, choices, d0, d1).map(|(v,c,d0,d1)| {
-            xor_bytes(&v, if *c {&d1} else {&d0})
+            let nonce = Nonce::from_slice(b"unique nonce");
+            let cipher = Aes256Gcm::new(Key::from_slice(&v));
+            let d = if !*c {d1} else {d0};
+            let c = cipher.decrypt(nonce, d.as_slice()).unwrap();
+            c
         }).collect();
         Ok(y)
     }
