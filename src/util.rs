@@ -31,6 +31,21 @@ pub fn u8_vec_to_bool_vec(str: &[u8]) -> Vec<bool> {
     bits
 }
 
+pub fn bool_vec_to_u8_vec(str: &[bool]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(str.len() / 8);
+    let mut byte = 0;
+    for (i, bit) in str.iter().enumerate() {
+        if *bit {
+            byte |= 1 << (7 - i % 8);
+        }
+        if i % 8 == 7 {
+            bytes.push(byte);
+            byte = 0;
+        }
+    }
+    bytes
+}
+
 pub fn to_array(bytes: &[u8]) -> WireBytes {
     debug_assert!(bytes.len() == LENGTH, "Should be {} bytes", LENGTH);
     let mut array = [0u8; LENGTH];

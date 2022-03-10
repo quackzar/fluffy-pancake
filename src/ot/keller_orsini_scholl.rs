@@ -87,7 +87,18 @@ impl ObliviousSender for Sender {
         // TODO: this
 
         // -- Randomize --
+        dbg!(q.len());
+        dbg!(q[0].len());
+        let q : Vec<Vec<bool>> = q.iter().map(|v| u8_vec_to_bool_vec(v)).collect();
+        dbg!(q.len());
+        dbg!(q[0].len());
         let q = transpose(q);
+        dbg!(q.len());
+        dbg!(q[0].len());
+        let q : Vec<Vec<u8>> = q.iter().map(|v| bool_vec_to_u8_vec(v)).collect();
+        dbg!(q.len());
+        dbg!(q[0].len());
+
         let v0 : Vec<Vec<u8>> = q.iter().enumerate().map(|(j,q)|
             hash!(j.to_be_bytes(), q).to_vec()
         ).collect();
@@ -192,7 +203,9 @@ impl ObliviousReceiver for Receiver {
 
 
         // -- Randomize --
+        let t0 = t0.iter().map(|v| u8_vec_to_bool_vec(v)).collect();
         let t0 = transpose(t0);
+        let t0 : Vec<Vec<u8>> = t0.iter().map(|v| bool_vec_to_u8_vec(v)).collect();
         let v : Vec<Vec<u8>> = t0.iter().enumerate().map(|(j,t)|
             hash!(j.to_be_bytes(), t).to_vec()
         ).collect();
