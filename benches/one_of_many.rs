@@ -1,7 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use magic_pake::{
-    ot::one_of_many::*,
-};
+use magic_pake::ot::one_of_many::*;
 
 fn bench_1_of_n_ot(c: &mut Criterion) {
     fn log2(x: u16) -> u16 {

@@ -1,9 +1,7 @@
 use ductile::{ChannelReceiver, ChannelSender};
 pub type Channel<S> = (ChannelSender<S>, ChannelReceiver<S>);
 
-
 pub type Error = Box<dyn std::error::Error>;
-
 
 /// Pair of plaintexts
 pub type PlaintextPair = [Vec<u8>; 2];
@@ -21,7 +19,7 @@ impl Message {
         Message(vec)
     }
 
-    pub fn new<T : AsRef<[u8]>>(m0: &[T], m1: &[T]) -> Self {
+    pub fn new<T: AsRef<[u8]>>(m0: &[T], m1: &[T]) -> Self {
         assert!(m0.len() == m1.len());
         let mut m = Vec::with_capacity(m0.len());
         for i in 0..m0.len() {
@@ -33,6 +31,10 @@ impl Message {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 pub trait ObliviousSender {
@@ -42,6 +44,5 @@ pub trait ObliviousSender {
 pub type Payload = Vec<Vec<u8>>;
 
 pub trait ObliviousReceiver {
-    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>)
-        -> Result<Payload, Error>;
+    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error>;
 }

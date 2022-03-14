@@ -22,15 +22,12 @@ use rayon::prelude::*;
 
 use crate::ot::util::*;
 
-
-
-
 // Channel Impl.
 pub struct OTSender;
 pub struct OTReceiver;
 
 impl ObliviousSender for OTSender {
-    fn exchange(&self, msg: &Message, (s,r): &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, (s, r): &Channel<Vec<u8>>) -> Result<(), Error> {
         let sender = Sender::new(msg);
 
         // round 1
@@ -42,9 +39,10 @@ impl ObliviousSender for OTSender {
 
         // round 2
         let n = msg.0.len();
-        let pb = (0..n).map(|_| r.recv().unwrap())
-                       .map(|p| CompressedEdwardsY::from_slice(&p))
-                       .collect();
+        let pb = (0..n)
+            .map(|_| r.recv().unwrap())
+            .map(|p| CompressedEdwardsY::from_slice(&p))
+            .collect();
         let pb = Public(pb);
 
         // round 3
@@ -57,14 +55,15 @@ impl ObliviousSender for OTSender {
 }
 
 impl ObliviousReceiver for OTReceiver {
-    fn exchange(&self, choices: &[bool], (s,r): &Channel<Vec<u8>>) -> Result<Payload, Error> {
+    fn exchange(&self, choices: &[bool], (s, r): &Channel<Vec<u8>>) -> Result<Payload, Error> {
         let receiver = Receiver::new(choices);
         let n = choices.len();
 
         // round 1
-        let pb = (0..n).map(|_| r.recv().unwrap())
-                       .map(|p| CompressedEdwardsY::from_slice(&p))
-                       .collect();
+        let pb = (0..n)
+            .map(|_| r.recv().unwrap())
+            .map(|p| CompressedEdwardsY::from_slice(&p))
+            .collect();
         let pb = Public(pb);
 
         let receiver = receiver.accept(&pb);
@@ -85,12 +84,10 @@ impl ObliviousReceiver for OTReceiver {
     }
 }
 
-
 // Old (state-machine) Impl.
 
 #[derive(Debug, Clone)]
 pub struct Public(Vec<CompressedEdwardsY>);
-
 
 pub type CiphertextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -251,10 +248,10 @@ mod tests {
 
     #[test]
     fn test_channel_version() {
-        let (s1,r1) = ductile::new_local_channel();
-        let (s2,r2) = ductile::new_local_channel();
-        let ch1 = (s1,r2);
-        let ch2 = (s2,r1);
+        let (s1, r1) = ductile::new_local_channel();
+        let (s2, r2) = ductile::new_local_channel();
+        let ch1 = (s1, r2);
+        let ch2 = (s2, r1);
 
         use std::thread;
         let h1 = thread::spawn(move || {
@@ -316,13 +313,7 @@ mod tests {
 
     #[test]
     fn test_n_ots() {
-        let m: [[[u8;1]; 2]; 5] = [
-            [[1], [6]],
-            [[2], [7]],
-            [[3], [8]],
-            [[4], [9]],
-            [[5], [10]],
-        ];
+        let m: [[[u8; 1]; 2]; 5] = [[[1], [6]], [[2], [7]], [[3], [8]], [[4], [9]], [[5], [10]]];
 
         let msg = Message::new2(&m);
 

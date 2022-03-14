@@ -3,6 +3,7 @@ use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},
     ot::chou_orlandi::*,
+    ot::util::*,
 };
 
 fn run_one_ot() {
@@ -11,7 +12,7 @@ fn run_one_ot() {
 
     // round 0
     let receiver = Receiver::new(&[false]);
-    let sender = Sender::new(&MessagePair::old_new(&[[m0, m1]]));
+    let sender = Sender::new(&Message::new2(&[[m0, m1]]));
 
     // round 1
     let receiver = receiver.accept(&sender.public());
@@ -25,7 +26,7 @@ fn run_one_ot() {
 fn run_ot(msg: &[PlaintextPair], choices: &[bool]) {
     // round 0
     let receiver = Receiver::new(choices);
-    let sender = Sender::new(&MessagePair::old_new(msg));
+    let sender = Sender::new(&Message::new2(msg));
 
     // round 1
     let receiver = receiver.accept(&sender.public());

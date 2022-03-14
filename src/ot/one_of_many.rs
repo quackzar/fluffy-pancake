@@ -1,8 +1,11 @@
 // Library for fast OT.
 // use curve25519_dalek::edwards;
-use sha2::{Digest, Sha256};
-use crate::{ot::chou_orlandi::*, util::{random_bytes, xor_bytes, LENGTH}};
 use crate::ot::util::*;
+use crate::{
+    ot::chou_orlandi::*,
+    util::{random_bytes, xor_bytes, LENGTH},
+};
+use sha2::{Digest, Sha256};
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
 fn fk(key: &[u8], choice: u16) -> Vec<u8> {

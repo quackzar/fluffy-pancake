@@ -2,9 +2,9 @@ use crate::circuit::*;
 use crate::garble::*;
 use crate::ot::chou_orlandi::EncryptedPayload;
 use crate::ot::chou_orlandi::Public;
-use crate::ot::util::Message as MessagePair;
-use crate::ot::chou_orlandi::{Init, Sender as OTSender, Receiver as OTReceiver};
+use crate::ot::chou_orlandi::{Init, Receiver as OTReceiver, Sender as OTSender};
 use crate::ot::one_of_many::*;
+use crate::ot::util::Message as MessagePair;
 use crate::util::*;
 use crate::wires::*;
 
@@ -589,13 +589,13 @@ mod tests {
         let (s2, r2) = unbounded();
         let h1 = thread::spawn(move || {
             // Party 1
-            
+
             OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1)
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            
+
             OneOfManyKey::evaluator_client(&password, number_of_passwords, index, &s1, &r2)
         });
 
@@ -621,20 +621,13 @@ mod tests {
         let (s2, r2) = unbounded();
         let h1 = thread::spawn(move || {
             // Party 1
-            
-            OneOfManyKey::garbler_client(
-                &password,
-                index,
-                number_of_passwords,
-                threshold,
-                &s2,
-                &r1,
-            )
+
+            OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1)
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            
+
             OneOfManyKey::evaluator_server(&passwords, &s1, &r2)
         });
 
