@@ -3,7 +3,7 @@ use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},
     ot::chou_orlandi::*,
-    ot::util::*,
+    ot::common::*,
 };
 
 fn run_one_ot() {

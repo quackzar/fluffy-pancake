@@ -2,7 +2,7 @@
 
 use crate::util::*;
 
-use crate::ot::util::*;
+use crate::ot::common::*;
 use itertools::{izip, Itertools};
 
 /// The computational security paramter (k)

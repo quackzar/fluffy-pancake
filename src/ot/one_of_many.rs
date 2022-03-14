@@ -1,6 +1,6 @@
 // Library for fast OT.
 // use curve25519_dalek::edwards;
-use crate::ot::util::*;
+use crate::ot::common::*;
 use crate::{
     ot::chou_orlandi::*,
     util::{random_bytes, xor_bytes, LENGTH},

@@ -4,7 +4,7 @@ use crate::ot::chou_orlandi::EncryptedPayload;
 use crate::ot::chou_orlandi::Public;
 use crate::ot::chou_orlandi::{Init, Receiver as OTReceiver, Sender as OTSender};
 use crate::ot::one_of_many::*;
-use crate::ot::util::Message as MessagePair;
+use crate::ot::common::Message as MessagePair;
 use crate::util::*;
 use crate::wires::*;
 

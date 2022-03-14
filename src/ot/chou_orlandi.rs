@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 
 use rayon::prelude::*;
 
-use crate::ot::util::*;
+use crate::ot::common::*;
 
 // Channel Impl.
 pub struct OTSender;
