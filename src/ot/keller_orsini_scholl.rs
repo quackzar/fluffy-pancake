@@ -2,7 +2,7 @@
 
 use crate::util::*;
 
-use itertools::izip;
+use itertools::{izip, Itertools};
 use crate::ot::util::*;
 
 /// The computational security paramter (k)
@@ -31,6 +31,13 @@ fn transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
                 .collect::<Vec<T>>()
         })
         .collect()
+}
+
+
+
+fn transpose_sse(m: Vec<Vec<u8>>) -> Vec<Vec<bool>> {
+    // TODO: Use SSE.
+    todo!()
 }
 
 
@@ -87,33 +94,23 @@ impl ObliviousSender for Sender {
         // TODO: this
 
         // -- Randomize --
-        dbg!(q.len());
-        dbg!(q[0].len());
-        let q : Vec<Vec<bool>> = q.iter().map(|v| u8_vec_to_bool_vec(v)).collect();
-        dbg!(q.len());
-        dbg!(q[0].len());
         let q = transpose(q);
-        dbg!(q.len());
-        dbg!(q[0].len());
-        let q : Vec<Vec<u8>> = q.iter().map(|v| bool_vec_to_u8_vec(v)).collect();
-        dbg!(q.len());
-        dbg!(q[0].len());
 
-        let v0 : Vec<Vec<u8>> = q.iter().enumerate().map(|(j,q)|
+        let v0 : Vec<Vec<u8>> = q.iter().enumerate().map(|(j,q)| {
             hash!(j.to_be_bytes(), q).to_vec()
-        ).collect();
-        let v1 : Vec<Vec<u8>> = q.iter().enumerate().map(|(j,q)|
+        }).collect();
+        let v1 : Vec<Vec<u8>> = q.iter().enumerate().map(|(j,q)| {
             hash!(j.to_be_bytes(), xor_bytes(q, &delta)).to_vec()
-        ).collect();
+        }).collect();
 
         // -- DeROT --
-        dbg!(v0.len());
-        dbg!(v1.len());
         use aes_gcm::aead::{Aead, NewAead};
         use aes_gcm::{Aes256Gcm, Key, Nonce};
         let (d0, d1) : (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1).
             map(|([m0, m1],v0, v1)| {
             // encrypt the messages.
+            dbg!(&v0);
+            dbg!(&v1);
             let nonce = Nonce::from_slice(b"unique nonce");
             let cipher = Aes256Gcm::new(Key::from_slice(&v0));
             let c0 = cipher.encrypt(nonce, m0.as_slice()).unwrap();
@@ -121,8 +118,6 @@ impl ObliviousSender for Sender {
             let c1 = cipher.encrypt(nonce, m1.as_slice()).unwrap();
             (c0, c1)
         }).unzip();
-        dbg!(d0.len());
-        dbg!(d1.len());
 
         let (s,_) = channel;
         let d0 = bincode::serialize(&d0)?;
@@ -216,12 +211,10 @@ impl ObliviousReceiver for Receiver {
         let (_,r) = channel;
         let d0 : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
         let d1 : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        dbg!(d0.len());
-        dbg!(d1.len());
-        dbg!(v.len());
         let y = izip!(v, choices, d0, d1).map(|(v,c,d0,d1)| {
             let nonce = Nonce::from_slice(b"unique nonce");
             let cipher = Aes256Gcm::new(Key::from_slice(&v));
+            dbg!(&v);
             let d = if !*c {d1} else {d0};
             let c = cipher.decrypt(nonce, d.as_slice()).unwrap();
             c
