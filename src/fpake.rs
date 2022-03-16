@@ -8,8 +8,6 @@ use crate::ot::common::Message as MessagePair;
 use crate::util::*;
 use crate::wires::*;
 
-// TODO: fPAKE protocol
-
 pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     let mut gates: Vec<Gate> = Vec::new();
     let comparison_domain = bitsize as u16 / 2 + 1;
