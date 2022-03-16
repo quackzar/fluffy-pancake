@@ -5,7 +5,7 @@ use crate::util::*;
 use crate::ot::bitmatrix::*;
 use crate::ot::common::*;
 use bitvec::prelude::*;
-use itertools::{izip, Itertools};
+use itertools::izip;
 
 /// The computational security paramter (k)
 const COMP_SEC: usize = 256;
@@ -20,6 +20,7 @@ struct Receiver {
     bootstrap: Box<dyn ObliviousSender>,
 }
 
+
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         assert!(
@@ -30,6 +31,9 @@ impl ObliviousSender for Sender {
             msg.len() % BLOCK_SIZE == 0,
             "Message length must be a multiple of {BLOCK_SIZE}"
         );
+        let pb = TransactionProperties{msg_size: msg.len()};
+        validate_properties(&pb, channel)?;
+
         let l = msg.len(); // 8 bits stored in a byte.
 
         // The parameter kappa.
@@ -127,7 +131,8 @@ impl ObliviousSender for Sender {
 
 impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
-        let l = choices.len();
+        let pb = TransactionProperties{msg_size: choices.len()};
+        validate_properties(&pb, channel)?;
         assert!(
             choices.len() >= BLOCK_SIZE,
             "Message length must be larger than {BLOCK_SIZE}"
@@ -137,6 +142,8 @@ impl ObliviousReceiver for Receiver {
             "Message length must be a multiple of {BLOCK_SIZE}"
         );
         const K: usize = COMP_SEC;
+        let l = choices.len();
+        // TODO: Extend l to l' = l + K + s, padded with random choices.
 
         // COTe
 

@@ -1,4 +1,5 @@
 use ductile::{ChannelReceiver, ChannelSender};
+use serde::{Serialize, Deserialize};
 pub type Channel<S> = (ChannelSender<S>, ChannelReceiver<S>);
 
 pub type Error = Box<dyn std::error::Error>;
@@ -6,7 +7,38 @@ pub type Error = Box<dyn std::error::Error>;
 /// Pair of plaintexts
 pub type PlaintextPair = [Vec<u8>; 2];
 
-/// Set of messag
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+pub struct TransactionProperties {
+    pub msg_size : usize,
+}
+
+pub(crate) fn validate_properties(pb : &TransactionProperties, (s,r) : &Channel<Vec<u8>>) -> Result<(), Error> {
+    s.send(bincode::serialize(pb)?)?;
+    let pb2 = r.recv()?;
+    let pb2 = bincode::deserialize(&pb2)?;
+    if pb2 != *pb {
+        Err(Box::new(OTError::BadProperties(*pb, pb2)))
+    } else {
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum OTError {
+    BadProperties(TransactionProperties, TransactionProperties),
+}
+
+impl std::error::Error for OTError {}
+impl std::fmt::Display for OTError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OTError::BadProperties(pb1, pb2) => write!(f, "Bad properties: {:?} != {:?}", pb1, pb2),
+        }
+    }
+}
+
+
+/// Set of message
 #[derive(Debug, Clone)]
 pub struct Message(pub Vec<PlaintextPair>);
 
