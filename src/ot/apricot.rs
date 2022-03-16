@@ -2,17 +2,15 @@
 
 use crate::util::*;
 
-use crate::ot::common::*;
 use crate::ot::bitmatrix::*;
-use itertools::{izip, Itertools};
+use crate::ot::common::*;
 use bitvec::prelude::*;
-
+use itertools::{izip, Itertools};
 
 /// The computational security paramter (k)
 const COMP_SEC: usize = 256;
 /// The statistical security paramter (s)
 const STAT_SEC: usize = 128;
-
 
 struct Sender {
     bootstrap: Box<dyn ObliviousReceiver>,
@@ -22,13 +20,16 @@ struct Receiver {
     bootstrap: Box<dyn ObliviousSender>,
 }
 
-
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        dbg!(&msg.len());
-        dbg!(BLOCK_SIZE);
-        assert!(msg.len() >= BLOCK_SIZE, "Message length must be larger than {BLOCK_SIZE}");
-        assert!(msg.len() % BLOCK_SIZE == 0, "Message length must be a multiple of {BLOCK_SIZE}");
+        assert!(
+            msg.len() >= BLOCK_SIZE,
+            "Message length must be larger than {BLOCK_SIZE}"
+        );
+        assert!(
+            msg.len() % BLOCK_SIZE == 0,
+            "Message length must be a multiple of {BLOCK_SIZE}"
+        );
         let l = msg.len(); // 8 bits stored in a byte.
 
         // The parameter kappa.
@@ -44,24 +45,24 @@ impl ObliviousSender for Sender {
         let mut rng = ChaCha20Rng::from_entropy();
 
         // INITIALIZATION
-        let delta: [u8; K/8] = rng.gen();
+        let delta: [u8; K / 8] = rng.gen();
 
         // do OT.
         let payload = self
             .bootstrap
             .exchange(&u8_vec_to_bool_vec(&delta), channel)?;
-        let mut seed = [[0u8; K/8]; K];
+        let mut seed = [[0u8; K / 8]; K];
         for (i, p) in payload.iter().enumerate() {
             seed[i].copy_from_slice(p);
         }
 
         let delta = BitVec::from_vec(delta.to_vec());
         // EXTENSION
-        let t : BitMatrix = seed
+        let t: BitMatrix = seed
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l/BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
                 BitVec::from_vec(v)
             })
             .collect();
@@ -127,6 +128,14 @@ impl ObliviousSender for Sender {
 impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
         let l = choices.len();
+        assert!(
+            choices.len() >= BLOCK_SIZE,
+            "Message length must be larger than {BLOCK_SIZE}"
+        );
+        assert!(
+            choices.len() % BLOCK_SIZE == 0,
+            "Message length must be a multiple of {BLOCK_SIZE}"
+        );
         const K: usize = COMP_SEC;
 
         // COTe
@@ -139,11 +148,11 @@ impl ObliviousReceiver for Receiver {
         let mut rng = ChaCha20Rng::from_entropy();
 
         // INITIALIZATION
-        let seed0: [u8; K * K/8] = rng.gen();
-        let seed1: [u8; K * K/8] = rng.gen();
+        let seed0: [u8; K * K / 8] = rng.gen();
+        let seed1: [u8; K * K / 8] = rng.gen();
         // do OT.
-        let seed0: [[u8; K/8]; K] = unsafe { std::mem::transmute(seed0) };
-        let seed1: [[u8; K/8]; K] = unsafe { std::mem::transmute(seed1) };
+        let seed0: [[u8; K / 8]; K] = unsafe { std::mem::transmute(seed0) };
+        let seed1: [[u8; K / 8]; K] = unsafe { std::mem::transmute(seed1) };
 
         let msg = Message::new(&seed0, &seed1);
         self.bootstrap.exchange(&msg, channel)?;
@@ -152,7 +161,13 @@ impl ObliviousReceiver for Receiver {
 
         let x: BitMatrix = choices
             .iter()
-            .map(|b| if !*b { vec![0x00u8; K/8] } else { vec![0xFFu8; K/8] })
+            .map(|b| {
+                if !*b {
+                    vec![0x00u8; K / 8]
+                } else {
+                    vec![0xFFu8; K / 8]
+                }
+            })
             .map(BitVec::from_vec)
             .collect();
         let x = x.transpose();
@@ -161,7 +176,7 @@ impl ObliviousReceiver for Receiver {
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l/BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
                 BitVec::from_vec(v)
             })
             .collect();
@@ -170,7 +185,7 @@ impl ObliviousReceiver for Receiver {
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l/BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
                 BitVec::from_vec(v)
             })
             .collect();
@@ -180,10 +195,7 @@ impl ObliviousReceiver for Receiver {
         dbg!(x.dims());
         dbg!(t0.dims());
         dbg!(t1.dims());
-        let u : BitMatrix = izip!(
-            x.into_iter(),
-            t0.into_iter(),
-            t1.into_iter())
+        let u: BitMatrix = izip!(x.into_iter(), t0.into_iter(), t1.into_iter())
             .map(|(x, t0, t1)| {
                 let mut u = x;
                 u ^= &t0;

@@ -2,7 +2,7 @@ use std::mem;
 
 // BitMatrix and BitVector
 use bitvec::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub type Block = u8;
 pub const BLOCK_SIZE: usize = mem::size_of::<Block>() * 8;
@@ -12,7 +12,6 @@ pub const BLOCK_SIZE: usize = mem::size_of::<Block>() * 8;
 pub struct BitMatrix {
     rows: Vec<BitVec<Block>>,
 }
-
 
 impl BitMatrix {
     pub fn new(rows: Vec<BitVec<Block>>) -> BitMatrix {
@@ -36,7 +35,6 @@ impl BitMatrix {
         }
         BitMatrix::new(new_rows)
     }
-
 }
 
 impl FromIterator<BitVec<Block>> for BitMatrix {
@@ -57,7 +55,6 @@ impl IntoIterator for BitMatrix {
         self.rows.into_iter()
     }
 }
-
 
 use std::ops::Index;
 impl Index<usize> for BitMatrix {
