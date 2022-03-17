@@ -1,10 +1,12 @@
 use crate::circuit::*;
 use crate::garble::*;
-use crate::ot::*;
+use crate::ot::chou_orlandi::EncryptedPayload;
+use crate::ot::chou_orlandi::Public;
+use crate::ot::chou_orlandi::{Init, Receiver as OTReceiver, Sender as OTSender};
+use crate::ot::common::Message as MessagePair;
+use crate::ot::one_of_many::*;
 use crate::util::*;
 use crate::wires::*;
-
-// TODO: fPAKE protocol
 
 pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     let mut gates: Vec<Gate> = Vec::new();
@@ -70,7 +72,7 @@ use crossbeam_channel::{Receiver, Sender};
 pub enum Event {
     OTInit(Public),
     OTRequest(Public),
-    OTResponse(Payload),
+    OTResponse(EncryptedPayload),
     GCCircuit(GarbledCircuit),
     GCInput(Vec<Wire>),
 }
@@ -97,8 +99,8 @@ impl HalfKey {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
 
-        let msg = Message::new(&e_theirs);
-        let sender = ObliviousSender::new(&msg);
+        let msg = MessagePair::new2(&e_theirs);
+        let sender = OTSender::new(&msg);
         // send OT public key and receive their public.
         s.send(Event::OTInit(sender.public())).unwrap();
 
@@ -123,15 +125,15 @@ impl HalfKey {
 
     pub fn evaluator(password: &[u8], s: &Sender<Event>, r: &Receiver<Event>) -> HalfKey {
         let password = u8_vec_to_bool_vec(password);
-        let receiver = ObliviousReceiver::<Init>::new(&password);
-        // receive ot public key.
+        let receiver = OTReceiver::<Init>::new(&password);
+        // receive chou-orlandi public key.
         let public = match r.recv() {
             Ok(Event::OTInit(p)) => p,
             _ => panic!("expected OTInit"),
         };
         let receiver = receiver.accept(&public);
         s.send(Event::OTRequest(receiver.public())).unwrap();
-        // receive ot payload.
+        // receive chou-orlandi payload.
         let payload = match r.recv() {
             Ok(Event::OTResponse(p)) => p,
             _ => panic!("expected OTResponse"),
@@ -181,18 +183,18 @@ pub enum OneOfManyEvent {
 
     OTKeyChallenge(Public),
     OTKeyResponse(Public),
-    OTKeyPayload(Payload),
+    OTKeyPayload(EncryptedPayload),
 
     OTChallenge(Public, Vec<Vec<u8>>),
     OTResponse(Public),
-    OTPayload(Payload),
+    OTPayload(EncryptedPayload),
 
     // Server evaluates, client garbles
     GCCircuitWithInput(GarbledCircuit, Vec<Wire>),
 
     OTChallenges(Vec<Public>),
     OTResponses(Vec<Public>),
-    OTPayloads(Vec<Payload>),
+    OTPayloads(Vec<EncryptedPayload>),
 }
 
 fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
@@ -201,7 +203,7 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
         wires.push(Wire::from_bytes(util::to_array(chunk), domain));
     }
 
-    return wires;
+    wires
 }
 
 // Bob / server is Garbler
@@ -229,8 +231,8 @@ impl OneOfManyKey {
                 encoding[i][1].to_bytes().to_vec(),
             ])
         }
-        let key_message = Message::new(key.as_slice());
-        let key_sender = ObliviousSender::new(&key_message);
+        let key_message = MessagePair::new2(key.as_slice());
+        let key_sender = OTSender::new(&key_message);
         evaluator.send(OneOfManyEvent::OTKeyChallenge(key_sender.public()));
 
         // 3. Receive response back from OT
@@ -278,7 +280,7 @@ impl OneOfManyKey {
         // At this point the evaluator should have an encoding of both their own version and the servers version of the password.
         //
 
-        return OneOfManyKey(decoding.hashes[0][1]);
+        OneOfManyKey(decoding.hashes[0][1])
     }
 
     pub fn evaluator_client(
@@ -305,7 +307,7 @@ impl OneOfManyKey {
                 choices.push(bit)
             }
         }
-        let key_receiver = ObliviousReceiver::new(choices.as_slice());
+        let key_receiver = OTReceiver::new(choices.as_slice());
         let key_challenge = match garbler.recv() {
             Ok(OneOfManyEvent::OTKeyChallenge(public)) => public,
             _ => panic!("Invalid message received from garbler!"),
@@ -415,7 +417,7 @@ impl OneOfManyKey {
         }
         random_keys.push(cancelling_key);
 
-        let magic = vec![vec![0u8; LENGTH]; password_bits];
+        let _magic = vec![vec![0u8; LENGTH]; password_bits];
 
         let mut random_key = random_keys.iter();
         let mut keys = Vec::with_capacity(number_of_passwords as usize);
@@ -443,8 +445,8 @@ impl OneOfManyKey {
         let mut senders = Vec::with_capacity(number_of_passwords as usize);
         let mut challenges = Vec::with_capacity(number_of_passwords as usize);
         for i in 0..(number_of_passwords as usize) {
-            let message = Message::new(&keys[i]);
-            let sender = ObliviousSender::new(&message);
+            let message = MessagePair::new2(&keys[i]);
+            let sender = OTSender::new(&message);
 
             challenges.push(sender.public());
             senders.push(sender);
@@ -470,7 +472,7 @@ impl OneOfManyKey {
         // At this point the evaluator should have encodings of both inputs and should evaluate the garbled circuit to retrieve their version of they key.
         //
 
-        return OneOfManyKey(decoding.hashes[0][1]);
+        OneOfManyKey(decoding.hashes[0][1])
     }
 
     pub fn evaluator_server(
@@ -505,7 +507,7 @@ impl OneOfManyKey {
                 }
             }
 
-            let receiver = ObliviousReceiver::new(&choices);
+            let receiver = OTReceiver::new(&choices);
             let receiver = receiver.accept(&challenges[i]);
             responses.push(receiver.public());
             receivers.push(receiver);
@@ -585,14 +587,14 @@ mod tests {
         let (s2, r2) = unbounded();
         let h1 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
-            k1
+
+            OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1)
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k2 = OneOfManyKey::evaluator_client(&password, number_of_passwords, index, &s1, &r2);
-            k2
+
+            OneOfManyKey::evaluator_client(&password, number_of_passwords, index, &s1, &r2)
         });
 
         let k1 = h1.join().unwrap();
@@ -617,21 +619,14 @@ mod tests {
         let (s2, r2) = unbounded();
         let h1 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::garbler_client(
-                &password,
-                index,
-                number_of_passwords,
-                threshold,
-                &s2,
-                &r1,
-            );
-            k1
+
+            OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1)
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k2 = OneOfManyKey::evaluator_server(&passwords, &s1, &r2);
-            k2
+
+            OneOfManyKey::evaluator_server(&passwords, &s1, &r2)
         });
 
         let k1 = h1.join().unwrap();
@@ -645,12 +640,7 @@ mod tests {
         use std::thread;
 
         // Setup for client / server
-        let passwords = [
-            vec![0u8; 8],
-            vec![1u8; 8],
-            vec![2u8; 8],
-            vec![3u8; 8]
-        ];
+        let passwords = [vec![0u8; 8], vec![1u8; 8], vec![2u8; 8], vec![3u8; 8]];
         let passwords_2 = passwords.clone();
         let number_of_passwords = passwords.len() as u16;
         let index = 1u16;
@@ -664,13 +654,21 @@ mod tests {
         let h1 = thread::spawn(move || {
             // Party 1
             let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
-            let k2 = OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &s2, &r1);
+            let k2 = OneOfManyKey::garbler_client(
+                &password,
+                index,
+                number_of_passwords,
+                threshold,
+                &s2,
+                &r1,
+            );
             k1.combine(k2)
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &s1, &r2);
+            let k1 =
+                OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &s1, &r2);
             let k2 = OneOfManyKey::evaluator_server(&passwords_2, &s1, &r2);
             k1.combine(k2)
         });
@@ -739,16 +737,10 @@ mod tests {
 
         // encoding OT.
         let e = BinaryEncodingKey::from(e);
-        let msg: Vec<PlaintextPair> =
-            e.0.iter()
-                .zip(e.1)
-                .map(|(w0, w1)| [w0.as_ref().to_vec(), (&w1).as_ref().to_vec()])
-                .collect();
-        println!("msg len: {}", msg.len());
-        let msg = Message::new(&msg);
-        // ot protocol
-        let sender = ObliviousSender::new(&msg);
-        let receiver = ObliviousReceiver::<Init>::new(&x);
+        let msg = MessagePair::new(&e.0, &e.1);
+        // chou-orlandi proold_newol
+        let sender = OTSender::new(&msg);
+        let receiver = OTReceiver::<Init>::new(&x);
         let receiver = receiver.accept(&sender.public());
         let payload = sender.accept(&receiver.public());
         let x_gb = receiver.receive(&payload);
@@ -768,20 +760,19 @@ mod tests {
 
     #[test]
     fn test_ot_wire() {
-        let wire1 = &Wire::new(2);
-        let wire2 = &Wire::new(2);
-        let msg = Message::new(&[[wire1.as_ref().to_vec(), wire2.as_ref().to_vec()]]);
-
-        // ot protocol
-        let sender = ObliviousSender::new(&msg);
-        let receiver = ObliviousReceiver::<Init>::new(&[true]);
+        let wire1 = Wire::new(2);
+        let wire2 = Wire::new(2);
+        let m0 = &vec![wire1];
+        let m1 = &vec![wire2.clone()];
+        let msg = MessagePair::new(m0, m1);
+        // chou-orlandi protocol
+        let sender = OTSender::new(&msg);
+        let receiver = OTReceiver::<Init>::new(&[true]);
         let receiver = receiver.accept(&sender.public());
         let payload = sender.accept(&receiver.public());
         let wire = &receiver.receive(&payload)[0];
         let wire = Wire::from_bytes(to_array(wire), Domain::Binary);
-        println!("{:?}", wire);
-        println!("{:?}", wire2);
-        assert!(&wire == wire2);
+        assert!(wire == wire2);
     }
 
     #[test]
@@ -805,10 +796,10 @@ mod tests {
                 .collect();
 
             // sender sender, receiver receiver.
-            let msg = Message::new(&e_receiver);
-            let sender = ObliviousSender::new(&msg);
+            let msg = MessagePair::new2(&e_receiver);
+            let sender = OTSender::new(&msg);
             let x: Vec<bool> = pwsd_b.iter().map(|&x| x == 1).collect();
-            let receiver = ObliviousReceiver::<Init>::new(&x);
+            let receiver = OTReceiver::<Init>::new(&x);
             let receiver = receiver.accept(&sender.public());
             let payload = sender.accept(&receiver.public());
             let x_receiver = receiver.receive(&payload);
@@ -856,10 +847,10 @@ mod tests {
                 .collect();
 
             // sender sender, receiver receiver.
-            let msg = Message::new(&e_receiver);
-            let sender = ObliviousSender::new(&msg);
+            let msg = MessagePair::new2(&e_receiver);
+            let sender = OTSender::new(&msg);
             let x: Vec<bool> = pwsd_a.iter().map(|&x| x == 1).collect();
-            let receiver = ObliviousReceiver::<Init>::new(&x);
+            let receiver = OTReceiver::<Init>::new(&x);
             let receiver = receiver.accept(&sender.public());
             let payload = sender.accept(&receiver.public());
             let x_receiver = receiver.receive(&payload);

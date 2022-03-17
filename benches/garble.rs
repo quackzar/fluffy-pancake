@@ -8,7 +8,7 @@ fn bench_garble_eval16(c: &mut Criterion) {
     let circuit = build_circuit(BITS, 8);
     c.bench_function("Garble 16bit", |b| b.iter(|| garble(&circuit)));
     let (gc, e, _) = garble(&circuit);
-    let x = encode(&e, &vec![1; 2 * BITS]);
+    let x = encode(&e, &[1; 2 * BITS]);
     c.bench_function("Eval garbled 16bit", |b| b.iter(|| evaluate(&gc, &x)));
 }
 

@@ -1,6 +1,8 @@
 // Library for fast OT.
 // use curve25519_dalek::edwards;
 #![allow(unused_imports)]
+use std::os::unix::prelude::OsStrExt;
+
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use curve25519_dalek::constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
@@ -18,54 +20,95 @@ use sha2::{Digest, Sha256};
 
 use rayon::prelude::*;
 
-// Common
-pub type CiphertextPair = [Vec<u8>; 2];
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Payload(Vec<CiphertextPair>);
+use crate::ot::common::*;
 
-pub type PlaintextPair = [Vec<u8>; 2];
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Message(Vec<PlaintextPair>);
+// Channel Impl.
+pub struct OTSender;
+pub struct OTReceiver;
 
-impl Message {
-    pub fn new(msg: &[PlaintextPair]) -> Message {
-        Message(msg.to_vec())
-    }
+impl ObliviousSender for OTSender {
+    fn exchange(&self, msg: &Message, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
+        let pb = TransactionProperties{msg_size: msg.len()};
+        validate_properties(&pb, ch)?;
+        let (s,r) = ch;
 
-    pub fn from(msg: &[[&[u8]; 2]]) -> Message {
-        let mut vec = Vec::with_capacity(msg.len());
-        for m in msg {
-            let m0 = m[0].to_vec();
-            let m1 = m[1].to_vec();
-            let pair: PlaintextPair = [m0, m1];
-            vec.push(pair);
+        let sender = Sender::new(msg);
+
+        // round 1
+        let pbs = sender.public();
+        let pbs = pbs.0.iter().map(|&p| p.to_bytes());
+        for pb in pbs {
+            s.send(pb.to_vec())?;
         }
-        Message(vec)
+
+        // round 2
+        let n = msg.0.len();
+        let pb = (0..n)
+            .map(|_| r.recv().unwrap())
+            .map(|p| CompressedEdwardsY::from_slice(&p))
+            .collect();
+        let pb = Public(pb);
+
+        // round 3
+        let payload = sender.accept(&pb);
+
+        let msg = bincode::serialize(&payload)?;
+        s.send(msg)?;
+        Ok(())
     }
 }
+
+impl ObliviousReceiver for OTReceiver {
+    fn exchange(&self, choices: &[bool], ch: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+        let pb = TransactionProperties{msg_size: choices.len()};
+        validate_properties(&pb, ch)?;
+        let (s,r) = ch;
+
+        let receiver = Receiver::new(choices);
+        let n = choices.len();
+
+        // round 1
+        let pb = (0..n)
+            .map(|_| r.recv().unwrap())
+            .map(|p| CompressedEdwardsY::from_slice(&p))
+            .collect();
+        let pb = Public(pb);
+
+        let receiver = receiver.accept(&pb);
+
+        // round 2
+        let pbs = receiver.public();
+        let pbs = pbs.0.iter().map(|&p| p.to_bytes());
+        for pb in pbs {
+            s.send(pb.to_vec())?;
+        }
+
+        // round 3
+        let payload = r.recv()?;
+        let payload = bincode::deserialize(&payload)?;
+
+        let msg = receiver.receive(&payload);
+        Ok(msg)
+    }
+}
+
+// Old (state-machine) Impl.
 
 #[derive(Debug, Clone)]
 pub struct Public(Vec<CompressedEdwardsY>);
 
-impl From<&[WireBytes]> for Public {
-    fn from(bytes: &[WireBytes]) -> Public {
-        let mut vec = Vec::with_capacity(bytes.len());
-        for b in bytes {
-            let p = CompressedEdwardsY::from_slice(b);
-            vec.push(p);
-        }
-        Public(vec)
-    }
-}
+pub type CiphertextPair = [Vec<u8>; 2];
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncryptedPayload(pub Vec<CiphertextPair>);
 
 // === Sender ====
-pub struct ObliviousSender {
+pub struct Sender {
     secrets: Vec<Scalar>,
     publics: Public,
     messages: Message,
 }
 
-impl ObliviousSender {
+impl Sender {
     pub fn new(messages: &Message) -> Self {
         // FUTURE: Take randomness as input.
         let n = messages.0.len();
@@ -88,7 +131,7 @@ impl ObliviousSender {
         self.publics.clone()
     }
 
-    pub fn accept(&self, their_public: &Public) -> Payload {
+    pub fn accept(&self, their_public: &Public) -> EncryptedPayload {
         let secrets = &self.secrets;
         let publics = &self.publics;
         assert!(publics.0.len() == their_public.0.len());
@@ -114,14 +157,14 @@ impl ObliviousSender {
                 // TODO: Error handling
                 let cipher = Aes256Gcm::new(Key::from_slice(&k0));
                 let nonce = Nonce::from_slice(b"unique nonce"); // TODO: Something with nonce.
-                let e0 = cipher.encrypt(nonce, m0.as_slice()).unwrap().to_vec();
+                let e0 = cipher.encrypt(nonce, m0.as_ref()).unwrap().to_vec();
                 let cipher = Aes256Gcm::new(Key::from_slice(&k1));
                 let nonce = Nonce::from_slice(b"unique nonce");
-                let e1 = cipher.encrypt(nonce, m1.as_slice()).unwrap().to_vec();
+                let e1 = cipher.encrypt(nonce, m1.as_ref()).unwrap().to_vec();
                 [e0, e1]
             })
             .collect();
-        Payload(payload)
+        EncryptedPayload(payload)
     }
 }
 
@@ -134,13 +177,13 @@ pub struct RetrievingPayload {
     publics: Public,
 }
 
-pub struct ObliviousReceiver<S> {
+pub struct Receiver<S> {
     state: S,
     secrets: Vec<Scalar>,
     choices: Vec<bool>,
 }
 
-impl ObliviousReceiver<Init> {
+impl Receiver<Init> {
     pub fn new(choices: &[bool]) -> Self {
         // FUTURE: Take randomness as input.
         let n = choices.len();
@@ -154,7 +197,7 @@ impl ObliviousReceiver<Init> {
         }
     }
 
-    pub fn accept(&self, their_publics: &Public) -> ObliviousReceiver<RetrievingPayload> {
+    pub fn accept(&self, their_publics: &Public) -> Receiver<RetrievingPayload> {
         assert_eq!(self.choices.len(), their_publics.0.len());
         let (publics, keys): (Vec<CompressedEdwardsY>, _) = their_publics
             .0
@@ -175,7 +218,7 @@ impl ObliviousReceiver<Init> {
             })
             .unzip();
         let publics = Public(publics);
-        ObliviousReceiver {
+        Receiver {
             state: RetrievingPayload { keys, publics },
             secrets: self.secrets.clone(),
             choices: self.choices.clone(),
@@ -183,12 +226,12 @@ impl ObliviousReceiver<Init> {
     }
 }
 
-impl ObliviousReceiver<RetrievingPayload> {
+impl Receiver<RetrievingPayload> {
     pub fn public(&self) -> Public {
         self.state.publics.clone()
     }
 
-    pub fn receive(&self, payload: &Payload) -> Vec<Vec<u8>> {
+    pub fn receive(&self, payload: &EncryptedPayload) -> Vec<Vec<u8>> {
         assert_eq!(self.choices.len(), payload.0.len());
         payload
             .0
@@ -206,171 +249,34 @@ impl ObliviousReceiver<RetrievingPayload> {
     }
 }
 
-// 1-to-n extensions for OT :D
-// https://dl.acm.org/doi/pdf/10.1145/301250.301312
-fn fk(key: &[u8], choice: u16) -> Vec<u8> {
-    let mut hasher = Sha256::new();
-    hasher.update(choice.to_be_bytes());
-    hasher.update(key);
-    let result = hasher.finalize().to_vec();
-
-    let mut output = Vec::with_capacity(key.len());
-    for i in 0..key.len() {
-        output.push(result[i % result.len()]);
-    }
-
-    return output;
-}
-
-// How to 1-to-n:
-// 1. Initiate
-// 2. Challenge respond
-// 3. Choose
-// 4. Finish
-
-// Bob: Initiate 1-to-n OT (initiated by the sender, Bob):
-// - Prepares keys and uses these to generate the required y values sent to Alice
-// - Creates challenges for Alice
-pub fn one_to_n_challenge_create(
-    domain: u16,
-    messages: &[Vec<u8>],
-) -> (ObliviousSender, Public, Vec<Vec<u8>>) {
-    let byte_length = messages[0].len();
-
-    // 1. B: Prepare random keys
-    let l = messages.len();
-    debug_assert!(l == (1 << domain));
-
-    let mut keys: Vec<[Vec<u8>; 2]> = Vec::with_capacity(l);
-    for _i in 0..l {
-        let mut left = vec![0u8; byte_length];
-        let mut right = vec![0u8; byte_length];
-
-        random_bytes(&mut left);
-        random_bytes(&mut right);
-
-        keys.push([left, right]);
-    }
-
-    let domain_max = 1 << domain; // 2^domain
-    let mut y = Vec::with_capacity(domain_max);
-    for i in 0..domain_max {
-        let mut value = messages[i].to_vec();
-        for j in 0..domain {
-            let bit = (i & (1 << j)) >> j;
-            let hash = fk(&keys[j as usize][bit as usize], i as u16);
-            value = xor_bytes(&value, &hash);
-        }
-
-        y.push(value.to_vec());
-    }
-
-    // 2. Initiate 1-out-of-2 OTs by sending challenges
-    let mut messages = Vec::with_capacity(l);
-    for i in 0..l {
-        let m0 = keys[i as usize][0].to_vec();
-        let m1 = keys[i as usize][1].to_vec();
-        messages.push([m0, m1]);
-    }
-
-    let message = Message::new(messages.as_slice());
-    let sender = ObliviousSender::new(&message);
-    let challenge = sender.public();
-
-    (sender, challenge, y)
-}
-
-// Alice: Respond to challenge from Bob
-// - Setup receivers
-// - Create responses for Bob
-pub fn one_to_n_challenge_respond(
-    domain: u16,
-    choice: u16,
-    challenge: &Public,
-) -> (ObliviousReceiver<RetrievingPayload>, Public) {
-    let l = 1 << domain;
-
-    let mut choices: Vec<bool> = Vec::with_capacity(l);
-    for i in 0..l {
-        let bit = (choice & (1 << i)) >> i;
-        choices.push(bit == 1);
-    }
-    let receiver = ObliviousReceiver::new(choices.as_slice());
-    let receiver = receiver.accept(challenge);
-    let response = receiver.public();
-
-    (receiver, response)
-}
-
-// Bob: Create payloads for Alice
-pub fn one_to_n_create_payloads(sender: &ObliviousSender, response: &Public) -> Payload {
-    sender.accept(response)
-}
-
-// Alice: Chose a value
-pub fn one_to_n_choose(
-    domain: u16,
-    choice: u16,
-    receiver: &ObliviousReceiver<RetrievingPayload>,
-    payload: &Payload,
-    y: &Vec<Vec<u8>>,
-) -> Vec<u8> {
-    let l = 1 << domain;
-
-    // Convert payloads to keys
-    let mut keys: Vec<Vec<u8>> = Vec::with_capacity(l);
-    let messages = receiver.receive(payload);
-    for i in 0..l {
-        let message = &messages[i];
-        debug_assert_eq!(message.len() % LENGTH, 0);
-
-        let mut key = Vec::with_capacity(message.len());
-        for j in 0..message.len() {
-            key.push(message[j]);
-        }
-
-        keys.push(key);
-    }
-
-    // Reconstruct X from keys and choice
-    let mut x = y[choice as usize].to_vec();
-    for i in 0..domain {
-        let hash = fk(&keys[i as usize], choice);
-        x = xor_bytes(&x, &hash);
-    }
-
-    return x;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::util::{log2, LENGTH};
 
     #[test]
-    fn test_1_to_n() {
-        let n = 8u8;
-        let domain = log2(n) as u16;
-        let mut messages = Vec::with_capacity(n as usize);
-        for i in 0u8..n {
-            messages.push(vec![i; LENGTH]);
-        }
-        let choice = 4;
+    fn test_channel_version() {
+        let (s1, r1) = ductile::new_local_channel();
+        let (s2, r2) = ductile::new_local_channel();
+        let ch1 = (s1, r2);
+        let ch2 = (s2, r1);
 
-        // Initiate the OT by creating and responding to challenges
-        let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
-        let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
+        use std::thread;
+        let h1 = thread::spawn(move || {
+            let sender = OTSender;
+            let msg = Message::new(&[b"Hello"], &[b"World"]);
+            sender.exchange(&msg, &ch1).unwrap();
+        });
 
-        // Bob: Creates payloads for Alice
-        let payload = one_to_n_create_payloads(&sender, &response);
+        let h2 = thread::spawn(move || {
+            let receiver = OTReceiver;
+            let choices = [true];
+            let msg = receiver.exchange(&choices, &ch2).unwrap();
+            assert_eq!(msg[0], b"World");
+        });
 
-        // Alice: Choose a value
-        let output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
-
-        // Check that we actually got the thing we wanted
-        for i in 0..LENGTH {
-            assert_eq!(messages[choice as usize][i], output[i]);
-        }
+        h1.join().unwrap();
+        h2.join().unwrap();
     }
 
     #[test]
@@ -379,8 +285,8 @@ mod tests {
         let m1 = b"Hello, sweden!".to_vec();
 
         // round 0
-        let receiver = ObliviousReceiver::new(&[false]);
-        let sender = ObliviousSender::new(&Message(vec![[m0.clone(), m1]]));
+        let receiver = Receiver::new(&[false]);
+        let sender = Sender::new(&Message(vec![[m0.clone(), m1]]));
 
         // round 1
         let receiver = receiver.accept(&sender.public());
@@ -399,8 +305,8 @@ mod tests {
         let m1 = b"Hello, sweden!".to_vec();
 
         // round 0
-        let receiver = ObliviousReceiver::new(&[true]);
-        let sender = ObliviousSender::new(&Message(vec![[m0, m1.clone()]]));
+        let receiver = Receiver::new(&[true]);
+        let sender = Sender::new(&Message(vec![[m0, m1.clone()]]));
 
         // round 1
         let receiver = receiver.accept(&sender.public());
@@ -415,19 +321,13 @@ mod tests {
 
     #[test]
     fn test_n_ots() {
-        let m: [[Vec<u8>; 2]; 5] = [
-            [vec![1], vec![6]],
-            [vec![2], vec![7]],
-            [vec![3], vec![8]],
-            [vec![4], vec![9]],
-            [vec![5], vec![10]],
-        ];
+        let m: [[[u8; 1]; 2]; 5] = [[[1], [6]], [[2], [7]], [[3], [8]], [[4], [9]], [[5], [10]]];
 
-        let msg = Message::new(&m);
+        let msg = Message::new2(&m);
 
         let c = [true, false, true, false, true];
-        let receiver = ObliviousReceiver::new(&c);
-        let sender = ObliviousSender::new(&msg);
+        let receiver = Receiver::new(&c);
+        let sender = Sender::new(&msg);
 
         // round 1
         let receiver = receiver.accept(&sender.public());
