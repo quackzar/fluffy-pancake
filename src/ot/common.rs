@@ -26,6 +26,7 @@ pub(crate) fn validate_properties(pb : &TransactionProperties, (s,r) : &Channel<
 #[derive(Debug)]
 pub enum OTError {
     BadProperties(TransactionProperties, TransactionProperties),
+    PolychromaticInput(),
 }
 
 impl std::error::Error for OTError {}
@@ -33,6 +34,7 @@ impl std::fmt::Display for OTError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OTError::BadProperties(pb1, pb2) => write!(f, "Bad properties: {:?} != {:?}", pb1, pb2),
+            OTError::PolychromaticInput() => write!(f, "Polychromatic input, cheating receiver."),
         }
     }
 }

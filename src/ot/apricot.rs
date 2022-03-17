@@ -88,7 +88,30 @@ impl ObliviousSender for Sender {
         let q = q.transpose();
 
         // -- Check correlation --
-        // TODO: this
+        let chi : BitMatrix = bincode::deserialize(&r.recv()?)?;
+
+        use num_bigint::BigUint;
+        use num_traits::Zero;
+        // PERF: Can utilize modulo 2^K.
+        let m : BigUint = BigUint::from(2u32).pow(K as u32);
+        let mut qsum : BigUint = Zero::zero();
+        for (q, chi) in izip!(&q, chi) {
+            let q = BigUint::from_bytes_be(q.as_raw_slice());
+            let chi = chi.as_raw_slice();
+            let chi = BigUint::from_bytes_be(chi);
+            qsum = (qsum + q * chi) % &m;
+        }
+        {
+            let xsum : BigUint = bincode::deserialize(&r.recv()?)?;
+            let tsum : BigUint= bincode::deserialize(&r.recv()?)?;
+            let delta = BigUint::from_bytes_be(delta.as_raw_slice());
+            dbg!(&qsum,&xsum, &tsum, &delta);
+            if tsum != (qsum + xsum * delta) % &m {
+                return Err(Box::new(OTError::PolychromaticInput()));
+            }
+        }
+
+
 
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q
@@ -154,9 +177,8 @@ impl ObliviousReceiver for Receiver {
 
         // INITIALIZATION
         let seed0: [u8; K * K / 8] = rng.gen();
-        let seed1: [u8; K * K / 8] = rng.gen();
-        // do OT.
         let seed0: [[u8; K / 8]; K] = unsafe { std::mem::transmute(seed0) };
+        let seed1: [u8; K * K / 8] = rng.gen();
         let seed1: [[u8; K / 8]; K] = unsafe { std::mem::transmute(seed1) };
 
         let msg = Message::new(&seed0, &seed1);
@@ -197,7 +219,7 @@ impl ObliviousReceiver for Receiver {
 
         let t = t0.transpose(); // saving this for later
 
-        let u: BitMatrix = izip!(x.into_iter(), t0.into_iter(), t1.into_iter())
+        let u: BitMatrix = izip!(x, t0, t1)
             .map(|(x, t0, t1)| {
                 let mut u = x;
                 u ^= &t0;
@@ -212,11 +234,32 @@ impl ObliviousReceiver for Receiver {
 
         // Receiver outputs `t_j`
 
-        // -- Check correlation --
-        // TODO: this
-        // let chi : Vec<_> = (0..128).map(|_| rng.gen::<[u8; COMP_SEC/8]>()).collect();
 
-        // let xsum = izip!(x, chi).map(|(x,chi)| x * chi).sum();
+        // -- Check correlation --
+        let chi : BitMatrix = (0..l).map(|_| {
+            let v = (0..K).map(|_| rng.gen::<Block>()).collect();
+            BitVec::from_vec(v)
+        }).collect();
+        s.send(bincode::serialize(&chi)?)?;
+
+        use num_bigint::BigUint;
+        use num_traits::Zero;
+        let mut xsum : BigUint = Zero::zero();
+        let mut tsum : BigUint = Zero::zero();
+        let m : BigUint = BigUint::from(2u32).pow(K as u32);
+        // PERF: Can utilize modulo 2^K.
+        for (x, t, chi) in izip!(choices, &t, &chi) {
+            let t = t.as_raw_slice();
+            let t = BigUint::from_bytes_be(t);
+            let chi = chi.as_raw_slice();
+            let chi = BigUint::from_bytes_be(chi);
+            if *x { xsum = (xsum + &chi) % &m; }
+            tsum = (tsum + t * &chi) % &m;
+
+        }
+        s.send(bincode::serialize(&xsum)?)?;
+        s.send(bincode::serialize(&tsum)?)?;
+
 
         // -- Randomize --
         let v: Vec<Vec<u8>> = t

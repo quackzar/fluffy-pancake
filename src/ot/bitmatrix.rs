@@ -22,7 +22,7 @@ impl BitMatrix {
         (self.rows.len(), self.rows[0].len())
     }
 
-    // TODO: make this more efficient
+    // PERF: Work on bytes instead of booleans.
     pub fn transpose(&self) -> BitMatrix {
         let (rows, cols) = self.dims();
         let mut new_rows = Vec::with_capacity(cols);
@@ -53,6 +53,15 @@ impl IntoIterator for BitMatrix {
 
     fn into_iter(self) -> Self::IntoIter {
         self.rows.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a BitMatrix {
+    type Item = &'a BitVec<Block>;
+    type IntoIter = std::slice::Iter<'a, BitVec<Block>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.rows.iter()
     }
 }
 
