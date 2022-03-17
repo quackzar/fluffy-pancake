@@ -38,6 +38,10 @@ name = "chou_orlandi"
 harness = false
 
 [[bench]]
+name = "apricot"
+harness = false
+
+[[bench]]
 name = "one_of_many"
 harness = false
 

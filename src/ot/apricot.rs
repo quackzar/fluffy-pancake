@@ -12,12 +12,12 @@ const COMP_SEC: usize = 256;
 /// The statistical security paramter (s)
 const STAT_SEC: usize = 128;
 
-struct Sender {
-    bootstrap: Box<dyn ObliviousReceiver>,
+pub struct Sender {
+    pub bootstrap: Box<dyn ObliviousReceiver>,
 }
 
-struct Receiver {
-    bootstrap: Box<dyn ObliviousSender>,
+pub struct Receiver {
+    pub bootstrap: Box<dyn ObliviousSender>,
 }
 
 
@@ -75,8 +75,6 @@ impl ObliviousSender for Sender {
         let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
 
         let mut q = Vec::with_capacity(K);
-        dbg!(t.dims());
-        dbg!(u.dims());
         for i in 0..K {
             if delta[i] {
                 q.push(u[i].clone() ^ t[i].clone());
@@ -199,9 +197,6 @@ impl ObliviousReceiver for Receiver {
 
         let t = t0.transpose(); // saving this for later
 
-        dbg!(x.dims());
-        dbg!(t0.dims());
-        dbg!(t1.dims());
         let u: BitMatrix = izip!(x.into_iter(), t0.into_iter(), t1.into_iter())
             .map(|(x, t0, t1)| {
                 let mut u = x;
@@ -268,7 +263,7 @@ mod tests {
                 let sender = Sender {
                     bootstrap: Box::new(OTReceiver),
                 };
-                let msg = Message::new(&[b"Hello"; 8], &[b"World"; 8]);
+                let msg = Message::new(&[b"Hello"; 8 << 8], &[b"World"; 8 << 8]);
                 sender.exchange(&msg, &ch1).unwrap();
             });
 
@@ -278,7 +273,7 @@ mod tests {
                 let receiver = Receiver {
                     bootstrap: Box::new(OTSender),
                 };
-                let choices = [true, false, true, false, true, false, true, false];
+                let choices = [true; 8 << 8];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
                 assert_eq!(msg[0], b"World");
             });

@@ -2,12 +2,12 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},
-    ot::chou_orlandi::*,
+    ot::apricot::{Sender, Receiver},
     ot::common::*,
 };
 
-
 fn run_ot(msg : &Message, choices : &[bool]) {
+    use magic_pake::ot::chou_orlandi::{OTReceiver, OTSender};
     let (s1, r1) = ductile::new_local_channel();
     let (s2, r2) = ductile::new_local_channel();
     let ch1 = (s1, r2);
@@ -19,14 +19,18 @@ fn run_ot(msg : &Message, choices : &[bool]) {
     let h1 = thread::Builder::new()
         .name("Sender".to_string())
         .spawn(move || {
-            let sender = OTSender;
+            let sender = Sender {
+                bootstrap: Box::new(OTReceiver),
+            };
             sender.exchange(&msg, &ch1).unwrap();
         });
 
     let h2 = thread::Builder::new()
         .name("Receiver".to_string())
         .spawn(move || {
-            let receiver = OTReceiver;
+            let receiver = Receiver {
+                bootstrap: Box::new(OTSender),
+            };
             let _ = receiver.exchange(&choices, &ch2).unwrap();
         });
 
@@ -36,7 +40,7 @@ fn run_ot(msg : &Message, choices : &[bool]) {
 
 fn bench(c: &mut Criterion) {
     const N : usize = 1048 * 8;
-    let name : String = format!("Chou-Orlandi with {}", N);
+    let name : String = format!("Apricot with {}", N);
     let circuit = build_circuit(N / 2, 0);
     let (_, enc, _) = garble::garble(&circuit);
     let enc = BinaryEncodingKey::from(enc);
@@ -49,7 +53,6 @@ fn bench(c: &mut Criterion) {
     let msg = Message::new2(&enc);
     c.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
 }
-
 
 criterion_group!(
     benches,
