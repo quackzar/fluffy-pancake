@@ -38,6 +38,9 @@ impl ObliviousSender for Sender {
 
         // The parameter kappa.
         const K: usize = COMP_SEC;
+        const S: usize = STAT_SEC;
+
+        let l = l + K + S;
 
         // COTe
         use rand::Rng;
@@ -60,7 +63,7 @@ impl ObliviousSender for Sender {
             seed[i].copy_from_slice(p);
         }
 
-        let delta = BitVec::from_vec(delta.to_vec());
+        let delta : BitVec<Block> = BitVec::from_vec(delta.to_vec());
         // EXTENSION
         let t: BitMatrix = seed
             .iter()
@@ -88,6 +91,7 @@ impl ObliviousSender for Sender {
         let q = q.transpose();
 
         // -- Check correlation --
+        // TODO: Both need to sample chi.
         let chi : BitMatrix = bincode::deserialize(&r.recv()?)?;
 
         use num_bigint::BigUint;
@@ -96,16 +100,15 @@ impl ObliviousSender for Sender {
         let m : BigUint = BigUint::from(2u32).pow(K as u32);
         let mut qsum : BigUint = Zero::zero();
         for (q, chi) in izip!(&q, chi) {
-            let q = BigUint::from_bytes_be(q.as_raw_slice());
+            let q = BigUint::from_bytes_le(q.as_raw_slice());
             let chi = chi.as_raw_slice();
-            let chi = BigUint::from_bytes_be(chi);
+            let chi = BigUint::from_bytes_le(chi);
             qsum = (qsum + q * chi) % &m;
         }
-        {
+        { // TODO: Doesn't work
             let xsum : BigUint = bincode::deserialize(&r.recv()?)?;
             let tsum : BigUint= bincode::deserialize(&r.recv()?)?;
-            let delta = BigUint::from_bytes_be(delta.as_raw_slice());
-            dbg!(&qsum,&xsum, &tsum, &delta);
+            let delta = BigUint::from_bytes_le(delta.as_raw_slice());
             if tsum != (qsum + xsum * delta) % &m {
                 return Err(Box::new(OTError::PolychromaticInput()));
             }
@@ -114,12 +117,12 @@ impl ObliviousSender for Sender {
 
 
         // -- Randomize --
-        let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q
-            .into_iter()
+        let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
+            .iter()
             .enumerate()
             .map(|(j, q)| {
                 let v0 = hash!(j.to_be_bytes(), q.as_raw_slice()).to_vec();
-                let q = q ^ &delta;
+                let q = q.clone() ^ &delta;
                 let v1 = hash!(j.to_be_bytes(), q.as_raw_slice()).to_vec();
                 (v0, v1)
             })
@@ -152,6 +155,11 @@ impl ObliviousSender for Sender {
 
 impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+        use rand::Rng;
+        use rand::SeedableRng;
+        use rand_chacha::ChaCha20Rng;
+        let mut rng = ChaCha20Rng::from_entropy();
+
         let pb = TransactionProperties{msg_size: choices.len()};
         validate_properties(&pb, channel)?;
         assert!(
@@ -163,17 +171,15 @@ impl ObliviousReceiver for Receiver {
             "Message length must be a multiple of {BLOCK_SIZE}"
         );
         const K: usize = COMP_SEC;
+        const S: usize = STAT_SEC;
         let l = choices.len();
-        // TODO: Extend l to l' = l + K + s, padded with random choices.
+        let l = l + K + S;
+        let bonus: [bool; K+S] = rng.gen();
 
         // COTe
 
         // receiver:
         // sample k pairs of k-bit seeds.
-        use rand::Rng;
-        use rand::SeedableRng;
-        use rand_chacha::ChaCha20Rng;
-        let mut rng = ChaCha20Rng::from_entropy();
 
         // INITIALIZATION
         let seed0: [u8; K * K / 8] = rng.gen();
@@ -186,7 +192,7 @@ impl ObliviousReceiver for Receiver {
 
         // EXTENSION
 
-        let x: BitMatrix = choices
+        let x: BitMatrix = [choices, &bonus].concat()
             .iter()
             .map(|b| {
                 if !*b {
@@ -248,11 +254,12 @@ impl ObliviousReceiver for Receiver {
         let mut tsum : BigUint = Zero::zero();
         let m : BigUint = BigUint::from(2u32).pow(K as u32);
         // PERF: Can utilize modulo 2^K.
+        // TODO: Doesn't work
         for (x, t, chi) in izip!(choices, &t, &chi) {
             let t = t.as_raw_slice();
-            let t = BigUint::from_bytes_be(t);
+            let t = BigUint::from_bytes_le(t);
             let chi = chi.as_raw_slice();
-            let chi = BigUint::from_bytes_be(chi);
+            let chi = BigUint::from_bytes_le(chi);
             if *x { xsum = (xsum + &chi) % &m; }
             tsum = (tsum + t * &chi) % &m;
 
@@ -306,7 +313,7 @@ mod tests {
                 let sender = Sender {
                     bootstrap: Box::new(OTReceiver),
                 };
-                let msg = Message::new(&[b"Hello"; 8 << 8], &[b"World"; 8 << 8]);
+                let msg = Message::new(&[b"Hello"; 8 << 2], &[b"World"; 8 << 2]);
                 sender.exchange(&msg, &ch1).unwrap();
             });
 
@@ -316,7 +323,7 @@ mod tests {
                 let receiver = Receiver {
                     bootstrap: Box::new(OTSender),
                 };
-                let choices = [true; 8 << 8];
+                let choices = [true; 8 << 2];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
                 assert_eq!(msg[0], b"World");
             });

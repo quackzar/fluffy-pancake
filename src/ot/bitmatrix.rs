@@ -1,4 +1,8 @@
 use std::mem;
+use std::ops::Range;
+use std::ops::RangeFrom;
+use std::ops::RangeFull;
+use std::ops::RangeInclusive;
 
 // BitMatrix and BitVector
 use bitvec::prelude::*;
@@ -22,7 +26,8 @@ impl BitMatrix {
         (self.rows.len(), self.rows[0].len())
     }
 
-    // PERF: Work on bytes instead of booleans.
+    // PERF: Work on bytes instead of booleans. See below.
+    // // https://stackoverflow.com/questions/31742483/how-would-you-transpose-a-binary-matrix
     pub fn transpose(&self) -> BitMatrix {
         let (rows, cols) = self.dims();
         let mut new_rows = Vec::with_capacity(cols);
@@ -73,3 +78,45 @@ impl Index<usize> for BitMatrix {
         &self.rows[index]
     }
 }
+
+use std::ops::RangeTo;
+impl Index<RangeTo<usize>> for BitMatrix {
+    type Output = [BitVec<Block>];
+
+    fn index(&self, index: RangeTo<usize>) -> &Self::Output {
+        &self.rows[index]
+    }
+}
+
+impl Index<Range<usize>> for BitMatrix {
+    type Output = [BitVec<Block>];
+
+    fn index(&self, index: Range<usize>) -> &Self::Output {
+        &self.rows[index]
+    }
+}
+
+impl Index<RangeInclusive<usize>> for BitMatrix {
+    type Output = [BitVec<Block>];
+
+    fn index(&self, index: RangeInclusive<usize>) -> &Self::Output {
+        &self.rows[index]
+    }
+}
+
+impl Index<RangeFrom<usize>> for BitMatrix {
+    type Output = [BitVec<Block>];
+
+    fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
+        &self.rows[index]
+    }
+}
+
+impl Index<RangeFull> for BitMatrix {
+    type Output = [BitVec<Block>];
+
+    fn index(&self, index: RangeFull) -> &Self::Output {
+        &self.rows[..]
+    }
+}
+
