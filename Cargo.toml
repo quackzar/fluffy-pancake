@@ -26,7 +26,7 @@ ductile = "0.2.0"
 bitvec = {version = "1.0.0", features = ["alloc", "serde"]}
 num-traits = "0.2"
 num-bigint = {version = "0.4.3", features = ["serde"]}
-
+num-integer = "0.1.44"
 
 [features]
 simd = ["curve25519-dalek/simd_backend", "rand/simd_support"]

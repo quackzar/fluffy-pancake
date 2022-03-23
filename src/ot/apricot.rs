@@ -104,7 +104,7 @@ impl ObliviousSender for Sender {
             // polynomial products modulo x^k.
 
             // TODO: We could technically do this in one go, but lets keep it simple for now...
-            polynomial_mul(&mut q_acc, q, chi);
+            polynomial_mul_raw_2(&mut q_acc, q, chi);
             polynomial_acc(&mut q_sum, &q_acc);
 
             // TODO: Depending on the performance of the bitvector it might be faster to add a check
@@ -120,7 +120,7 @@ impl ObliviousSender for Sender {
             let t_sum = bincode::deserialize(&r.recv()?)?;
 
             let mut acc = polynomial_new(q[0].len());
-            polynomial_mul(&mut acc, &x_sum, &delta);
+            polynomial_mul_raw_2(&mut acc, &x_sum, &delta);
             polynomial_acc(&mut acc, &q_sum);
 
             if !polynomial_eq(&t_sum, &acc) {
@@ -273,7 +273,7 @@ impl ObliviousReceiver for Receiver {
                 polynomial_acc(&mut x_sum, &chi);
             }
 
-            polynomial_mul(&mut t_acc, &t, &chi);
+            polynomial_mul_raw_2(&mut t_acc, &t, &chi);
             polynomial_acc(&mut t_sum, &t_acc);
 
             polynomial_zero(&mut t_acc);
