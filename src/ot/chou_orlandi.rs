@@ -1,8 +1,6 @@
 // Library for fast OT.
 // use curve25519_dalek::edwards;
 #![allow(unused_imports)]
-use std::os::unix::prelude::OsStrExt;
-
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use curve25519_dalek::constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
