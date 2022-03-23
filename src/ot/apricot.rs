@@ -4,6 +4,7 @@ use crate::util::*;
 
 use crate::ot::bitmatrix::*;
 use crate::ot::common::*;
+use crate::ot::polynomial::*;
 use bitvec::prelude::*;
 use itertools::izip;
 
@@ -18,68 +19,6 @@ pub struct Sender {
 
 pub struct Receiver {
     pub bootstrap: Box<dyn ObliviousSender>,
-}
-
-fn polynomial_new(size: usize) -> BitVec<Block> {
-    let mut result = BitVec::with_capacity(size);
-    for _ in 0..size {
-        result.push(false);
-    }
-
-    return result;
-}
-fn polynomial_zero(coefficients: &mut BitVec<Block>) {
-    coefficients.fill(false);
-}
-fn polynomial_add(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    debug_assert!(left.len() == result.len());
-
-    *result = left ^ right;
-}
-fn polynomial_acc(left: &mut BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    *left ^= right;
-}
-fn polynomial_mul(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    debug_assert!(left.len() == result.len());
-
-    // NOTE: By convention the coefficients start at index 0
-    let size = left.len();
-    let mut intermediate = polynomial_new(left.len() * 2);
-
-    // Multiply by the constant part from the lhs
-    if left[0] {
-        for i in 0..size {
-            intermediate.set(i, right[i])
-        }
-    }
-
-    // Multiply by the remainder of the lhs
-    for i in 1..size {
-        // TODO: It might be faster to check the LHS before looping, depending on how good the
-        //       branch predictor is.
-        for j in 0..size {
-            let l = left[i];
-            let r = right[j];
-
-            if l && r {
-                let target = i + j;
-                let value = intermediate[target] ^ true;
-                intermediate.set(target, value);
-            }
-        }
-    }
-
-    // TODO: What about the modulo/overflow?
-    for i in 0..size {
-        result.set(i, intermediate[i]);
-    }
-}
-fn polynomial_eq(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
-    debug_assert!(left.len() == right.len());
-    return left.eq(right);
 }
 
 impl ObliviousSender for Sender {
