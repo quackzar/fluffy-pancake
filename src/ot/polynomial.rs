@@ -12,8 +12,19 @@ pub fn polynomial_new(size: usize) -> BitVec<Block> {
 
     return result;
 }
+pub fn polynomial_new_raw(size: usize) -> BitVec<Block> {
+    let bytes = vec![0u8; size / 8];
+    return BitVec::from_slice(bytes.as_slice());
+}
+
 pub fn polynomial_zero(coefficients: &mut BitVec<Block>) {
     coefficients.fill(false);
+}
+pub fn polynomial_zero_raw(coefficients: &mut BitVec<Block>) {
+    let bytes = coefficients.as_raw_mut_slice();
+    for i in 0..bytes.len() {
+        bytes[i] = 0;
+    }
 }
 
 pub fn polynomial_acc(left: &mut BitVec<Block>, right: &BitVec<Block>) {
@@ -26,7 +37,7 @@ pub fn polynomial_acc_raw(left: &mut BitVec<Block>, right: &BitVec<Block>) {
     let left_bytes = left.as_raw_mut_slice();
     let right_bytes = right.as_raw_slice();
 
-    for i in 0..right.len() {
+    for i in 0..right_bytes.len() {
         left_bytes[i] ^= right_bytes[i];
     }
 }
@@ -245,9 +256,24 @@ pub fn polynomial_mul_raw_5(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
         result_bytes[i] = intermediate_bytes[i];
     }
 }
+
 pub fn polynomial_eq(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
     debug_assert!(left.len() == right.len());
     return left.eq(right);
+}
+pub fn polynomial_eq_raw(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
+    debug_assert!(left.len() == right.len());
+
+    let left_bytes = left.as_raw_slice();
+    let right_bytes = right.as_raw_slice();
+
+    for i in 0..left_bytes.len() {
+        if left_bytes[i] != right_bytes[i] {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 pub fn polynomial_print(polynomial: &BitVec<Block>) {

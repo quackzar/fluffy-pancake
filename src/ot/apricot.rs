@@ -93,8 +93,8 @@ impl ObliviousSender for Sender {
         // -- Check correlation --
         let chi: BitMatrix = bincode::deserialize(&r.recv()?)?;
         let vector_len = chi[0].len();
-        let mut q_sum = polynomial_new(vector_len);
-        let mut q_acc = polynomial_new(vector_len);
+        let mut q_sum = polynomial_new_raw(vector_len);
+        let mut q_acc = polynomial_new_raw(vector_len);
         for (q, chi) in izip!(&q, &chi) {
             // We would like to work in the finite field F_(2^k) in order to achieve this we will
             // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
@@ -105,13 +105,13 @@ impl ObliviousSender for Sender {
 
             // TODO: We could technically do this in one go, but lets keep it simple for now...
             polynomial_mul_raw_3(&mut q_acc, q, chi);
-            polynomial_acc(&mut q_sum, &q_acc);
+            polynomial_acc_raw(&mut q_sum, &q_acc);
 
             // TODO: Depending on the performance of the bitvector it might be faster to add a check
             //       here, so we avoid doing unnecessary work the last iteration. (This depends
             //       greatly on the underlying implementation and the performance of the branch
             //       predictor)
-            polynomial_zero(&mut q_acc);
+            polynomial_zero_raw(&mut q_acc);
         }
 
         // TODO: *Maybe* doesn't work
@@ -119,11 +119,11 @@ impl ObliviousSender for Sender {
             let x_sum = bincode::deserialize(&r.recv()?)?;
             let t_sum = bincode::deserialize(&r.recv()?)?;
 
-            let mut acc = polynomial_new(q[0].len());
+            let mut acc = polynomial_new_raw(q[0].len());
             polynomial_mul_raw_3(&mut acc, &x_sum, &delta);
-            polynomial_acc(&mut acc, &q_sum);
+            polynomial_acc_raw(&mut acc, &q_sum);
 
-            if !polynomial_eq(&t_sum, &acc) {
+            if !polynomial_eq_raw(&t_sum, &acc) {
                 return Err(Box::new(OTError::PolychromaticInput()));
             }
         }
@@ -265,18 +265,18 @@ impl ObliviousReceiver for Receiver {
         s.send(bincode::serialize(&chi)?)?;
 
         let vector_len = chi[0].len();
-        let mut x_sum = polynomial_new(vector_len);
-        let mut t_sum = polynomial_new(vector_len);
-        let mut t_acc = polynomial_new(vector_len);
+        let mut x_sum = polynomial_new_raw(vector_len);
+        let mut t_sum = polynomial_new_raw(vector_len);
+        let mut t_acc = polynomial_new_raw(vector_len);
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
             if x {
-                polynomial_acc(&mut x_sum, &chi);
+                polynomial_acc_raw(&mut x_sum, &chi);
             }
 
             polynomial_mul_raw_3(&mut t_acc, &t, &chi);
-            polynomial_acc(&mut t_sum, &t_acc);
+            polynomial_acc_raw(&mut t_sum, &t_acc);
 
-            polynomial_zero(&mut t_acc);
+            polynomial_zero_raw(&mut t_acc);
         }
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
