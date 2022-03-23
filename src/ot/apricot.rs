@@ -35,18 +35,11 @@ fn polynomial_add(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitV
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
-    for i in 0..left.len() {
-        let value = left[i] ^ right[i];
-        result.set(i, value);
-    }
+    *result = left ^ right;
 }
 fn polynomial_acc(left: &mut BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
-
-    for i in 0..left.len() {
-        let value = left[i] ^ right[i];
-        left.set(i, value);
-    }
+    *left ^= right;
 }
 fn polynomial_mul(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
