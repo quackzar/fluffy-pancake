@@ -20,6 +20,74 @@ pub struct Receiver {
     pub bootstrap: Box<dyn ObliviousSender>,
 }
 
+fn polynomial_new(size: usize) -> BitVec<Block> {
+    let mut result = BitVec::with_capacity(size);
+    for _ in 0..size {
+        result.push(false);
+    }
+
+    return result;
+}
+fn polynomial_zero(coefficients: &mut BitVec<Block>) {
+    coefficients.fill(false);
+}
+fn polynomial_add(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    debug_assert!(left.len() == right.len());
+    debug_assert!(left.len() == result.len());
+
+    for i in 0..left.len() {
+        let value = left[i] ^ right[i];
+        result.set(i, value);
+    }
+}
+fn polynomial_acc(left: &mut BitVec<Block>, right: &BitVec<Block>) {
+    debug_assert!(left.len() == right.len());
+
+    for i in 0..left.len() {
+        let value = left[i] ^ right[i];
+        left.set(i, value);
+    }
+}
+fn polynomial_mul(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    debug_assert!(left.len() == right.len());
+    debug_assert!(left.len() == result.len());
+
+    // NOTE: By convention the coefficients start at index 0
+    let size = left.len();
+    let mut intermediate = polynomial_new(left.len() * 2);
+
+    // Multiply by the constant part from the lhs
+    if left[0] {
+        for i in 0..size {
+            intermediate.set(i, right[i])
+        }
+    }
+
+    // Multiply by the remainder of the lhs
+    for i in 1..size {
+        // TODO: It might be faster to check the LHS before looping, depending on how good the
+        //       branch predictor is.
+        for j in 0..size {
+            let l = left[i];
+            let r = right[j];
+
+            if l && r {
+                let target = i + j;
+                let value = intermediate[target] ^ true;
+                intermediate.set(target, value);
+            }
+        }
+    }
+
+    // TODO: What about the modulo/overflow?
+    for i in 0..size {
+        result.set(i, intermediate[i]);
+    }
+}
+fn polynomial_eq(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
+    debug_assert!(left.len() == right.len());
+    return left.eq(right);
+}
 
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
@@ -91,25 +159,39 @@ impl ObliviousSender for Sender {
         let q = q.transpose();
 
         // -- Check correlation --
-        // TODO: Both need to sample chi.
-        let chi : BitMatrix = bincode::deserialize(&r.recv()?)?;
+        let chi: BitMatrix = bincode::deserialize(&r.recv()?)?;
+        let vector_len = chi[0].len();
+        let mut q_sum = polynomial_new(vector_len);
+        let mut q_acc = polynomial_new(vector_len);
+        for (q, chi) in izip!(&q, &chi) {
+            // We would like to work in the finite field F_(2^k) in order to achieve this we will
+            // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
+            // represented directly as strings of bits and the sum of two of these polynomials will
+            // be the xor of these bitstrings (as dictated by the operations on the underlying field
+            // to which the coefficients belong). The product of two elements will be the standard
+            // polynomial products modulo x^k.
 
-        use num_bigint::BigUint;
-        use num_traits::Zero;
-        // PERF: Can utilize modulo 2^K.
-        let m : BigUint = BigUint::from(2u32).pow(K as u32);
-        let mut qsum : BigUint = Zero::zero();
-        for (q, chi) in izip!(&q, chi) {
-            let q = BigUint::from_bytes_le(q.as_raw_slice());
-            let chi = chi.as_raw_slice();
-            let chi = BigUint::from_bytes_le(chi);
-            qsum = (qsum + q * chi) % &m;
+            // TODO: We could technically do this in one go, but lets keep it simple for now...
+            polynomial_mul(&mut q_acc, q, chi);
+            polynomial_acc(&mut q_sum, &q_acc);
+
+            // TODO: Depending on the performance of the bitvector it might be faster to add a check
+            //       here, so we avoid doing unnecessary work the last iteration. (This depends
+            //       greatly on the underlying implementation and the performance of the branch
+            //       predictor)
+            polynomial_zero(&mut q_acc);
         }
-        { // TODO: Doesn't work
-            let xsum : BigUint = bincode::deserialize(&r.recv()?)?;
-            let tsum : BigUint= bincode::deserialize(&r.recv()?)?;
-            let delta = BigUint::from_bytes_le(delta.as_raw_slice());
-            if tsum != (qsum + xsum * delta) % &m {
+
+        // TODO: *Maybe* doesn't work
+        {
+            let x_sum = bincode::deserialize(&r.recv()?)?;
+            let t_sum = bincode::deserialize(&r.recv()?)?;
+
+            let mut acc = polynomial_new(q[0].len());
+            polynomial_mul(&mut acc, &x_sum, &delta);
+            polynomial_acc(&mut acc, &q_sum);
+
+            if !polynomial_eq(&t_sum, &acc) {
                 return Err(Box::new(OTError::PolychromaticInput()));
             }
         }
@@ -192,7 +274,8 @@ impl ObliviousReceiver for Receiver {
 
         // EXTENSION
 
-        let x: BitMatrix = [choices, &bonus].concat()
+        let padded_choices = [choices, &bonus].concat();
+        let x: BitMatrix = padded_choices
             .iter()
             .map(|b| {
                 if !*b {
@@ -242,30 +325,29 @@ impl ObliviousReceiver for Receiver {
 
 
         // -- Check correlation --
+        let k_blocks = K / 8;
         let chi : BitMatrix = (0..l).map(|_| {
-            let v = (0..K).map(|_| rng.gen::<Block>()).collect();
+            let v = (0..k_blocks).map(|_| rng.gen::<Block>()).collect();
             BitVec::from_vec(v)
         }).collect();
         s.send(bincode::serialize(&chi)?)?;
 
-        use num_bigint::BigUint;
-        use num_traits::Zero;
-        let mut xsum : BigUint = Zero::zero();
-        let mut tsum : BigUint = Zero::zero();
-        let m : BigUint = BigUint::from(2u32).pow(K as u32);
-        // PERF: Can utilize modulo 2^K.
-        // TODO: Doesn't work
-        for (x, t, chi) in izip!(choices, &t, &chi) {
-            let t = t.as_raw_slice();
-            let t = BigUint::from_bytes_le(t);
-            let chi = chi.as_raw_slice();
-            let chi = BigUint::from_bytes_le(chi);
-            if *x { xsum = (xsum + &chi) % &m; }
-            tsum = (tsum + t * &chi) % &m;
+        let vector_len = chi[0].len();
+        let mut x_sum = polynomial_new(vector_len);
+        let mut t_sum = polynomial_new(vector_len);
+        let mut t_acc = polynomial_new(vector_len);
+        for (x, t, chi) in izip!(padded_choices, &t, &chi) {
+            if x {
+                polynomial_acc(&mut x_sum, &chi);
+            }
 
+            polynomial_mul(&mut t_acc, &t, &chi);
+            polynomial_acc(&mut t_sum, &t_acc);
+
+            polynomial_zero(&mut t_acc);
         }
-        s.send(bincode::serialize(&xsum)?)?;
-        s.send(bincode::serialize(&tsum)?)?;
+        s.send(bincode::serialize(&x_sum)?)?;
+        s.send(bincode::serialize(&t_sum)?)?;
 
 
         // -- Randomize --
