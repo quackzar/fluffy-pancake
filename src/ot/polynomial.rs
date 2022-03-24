@@ -1,5 +1,46 @@
 use crate::ot::bitmatrix::*;
 use bitvec::prelude::*;
+use serde::{Serialize, Deserialize};
+use std::ops::{Add, Mul, AddAssign, MulAssign};
+
+#[repr(transparent)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Polynomial (BitVec<Block>);
+
+impl Polynomial {
+    pub fn new(size: usize) -> Self {
+        Self(polynomial_new_bytes(size))
+    }
+
+    pub fn from_bitvec(bitvec: &BitVec<Block>) -> &Self {
+        unsafe { core::mem::transmute(bitvec) }
+    }
+
+    pub fn add_assign(&mut self, other: &Self) {
+        self.0 ^= &other.0;
+
+    }
+
+    pub fn add(&self, other: &Self) -> Self {
+        let mut res = self.0.clone();
+        res ^= &other.0;
+        Self(res)
+
+    }
+
+    pub fn mul_assign(&mut self, other: &Self) {
+        let mut res = self.0.clone();
+        polynomial_mul_bitvec(&mut res, &self.0, &other.0);
+        self.0 = res;
+    }
+
+    pub fn mul(&self, other: &Self) -> Self {
+        let mut res = self.0.clone();
+        polynomial_mul_bitvec(&mut res, &self.0, &other.0);
+        Polynomial(res)
+    }
+}
+
 
 // Implementations using BitVec
 pub fn polynomial_new_bitvec(size: usize) -> BitVec<Block> {

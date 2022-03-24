@@ -93,8 +93,7 @@ impl ObliviousSender for Sender {
         // -- Check correlation --
         let chi: BitMatrix = bincode::deserialize(&r.recv()?)?;
         let vector_len = chi[0].len();
-        let mut q_sum = polynomial_new_bytes(vector_len);
-        let mut q_acc = polynomial_new_bytes(vector_len);
+        let mut q_sum = Polynomial::new(vector_len);
         for (q, chi) in izip!(&q, &chi) {
             // We would like to work in the finite field F_(2^k) in order to achieve this we will
             // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
@@ -102,27 +101,28 @@ impl ObliviousSender for Sender {
             // be the xor of these bitstrings (as dictated by the operations on the underlying field
             // to which the coefficients belong). The product of two elements will be the standard
             // polynomial products modulo x^k.
+            let q = Polynomial::from_bitvec(q);
+            let chi = Polynomial::from_bitvec(chi);
 
-            unsafe {
-                polynomial_mul_bytes(&mut q_sum, q, &chi);
-            }
+            q_sum.add_assign(&q.mul(chi));
+
+
 
             // TODO: Depending on the performance of the bitvector it might be faster to add a check
             //       here, so we avoid doing unnecessary work the last iteration. (This depends
             //       greatly on the underlying implementation and the performance of the branch
             //       predictor)
-            polynomial_zero_bytes(&mut q_acc);
+            // polynomial_zero_bytes(&mut q_acc);
         }
 
         // TODO: *Maybe* doesn't work
         {
-            let x_sum = bincode::deserialize(&r.recv()?)?;
-            let t_sum = bincode::deserialize(&r.recv()?)?;
+            let x_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
+            let t_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
+            let delta = Polynomial::from_bitvec(&delta);
+            q_sum.add(&x_sum.mul(delta));
 
-            unsafe {
-                polynomial_mul_bytes(&mut q_sum, &x_sum, &delta);
-            }
-            if !polynomial_eq_bytes(&t_sum, &q_sum) {
+            if t_sum != q_sum {
                 //return Err(Box::new(OTError::PolychromaticInput()));
             }
         }
@@ -264,18 +264,18 @@ impl ObliviousReceiver for Receiver {
         s.send(bincode::serialize(&chi)?)?;
 
         let vector_len = chi[0].len();
-        let mut x_sum = polynomial_new_bytes(vector_len);
-        let mut t_sum = polynomial_new_bytes(vector_len);
-        let mut t_acc = polynomial_new_bytes(vector_len);
+        let mut x_sum = Polynomial::new(vector_len);
+        let mut t_sum = Polynomial::new(vector_len);
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
+            let t = Polynomial::from_bitvec(t);
+            let chi = Polynomial::from_bitvec(chi);
             if x {
-                polynomial_acc_bytes(&mut x_sum, &chi);
+                x_sum.add_assign(chi)
             }
 
-            unsafe {
-                polynomial_mul_bytes(&mut t_sum, &t, &chi);
-            }
-            polynomial_zero_bytes(&mut t_acc);
+            t_sum.add_assign(&t.mul(chi));
+
+            // polynomial_zero_bytes(&mut t_acc);
         }
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
