@@ -257,6 +257,78 @@ pub fn polynomial_mul_raw_5(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
     }
 }
 
+pub fn polynomial_mul_acc(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    debug_assert!(left.len() == right.len());
+    debug_assert!(left.len() == result.len());
+
+    let size = left.len();
+    let size_bytes = size / 8;
+
+    let left_bytes = left.as_raw_slice();
+    let right_bytes = right.as_raw_slice();
+
+    let mut intermediate = polynomial_new(left.len() * 2);
+    let intermediate_bytes = intermediate.as_raw_mut_slice();
+
+    for i in 0..size_bytes {
+        for j in 0..size_bytes {
+            for ib in 0..8 {
+                for jb in 0..8 {
+                    let ii = i * 8 + ib;
+                    let jj = j * 8 + jb;
+                    let l = left_bytes[i] & (1 << ib) > 0;
+                    let r = right_bytes[j] & (1 << jb) > 0;
+
+                    if l && r {
+                        let target = ii + jj;
+                        let result_index = target / 8;
+                        let result_bit = target % 8;
+                        intermediate_bytes[result_index] ^= 1 << result_bit;
+                    }
+                }
+            }
+        }
+    }
+
+    let result_bytes = result.as_raw_mut_slice();
+    for i in 0..size_bytes {
+        result_bytes[i] ^= intermediate_bytes[i];
+    }
+}
+
+pub fn polynomial_mul_acc_2(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    debug_assert!(left.len() == right.len());
+    debug_assert!(left.len() == result.len());
+
+    let size = left.len();
+    let size_bytes = size / 8;
+
+    let left_bytes = left.as_raw_slice();
+    let right_bytes = right.as_raw_slice();
+    let result_bytes = result.as_raw_mut_slice();
+
+    for i in 0..size_bytes {
+        for j in 0..size_bytes {
+            for ib in 0..8 {
+                for jb in 0..8 {
+                    let ii = i * 8 + ib;
+                    let jj = j * 8 + jb;
+                    let l = left_bytes[i] & (1 << ib) > 0;
+                    let r = right_bytes[j] & (1 << jb) > 0;
+
+                    let target = ii + jj;
+                    let result_index = target / 8;
+                    let result_bit = target % 8;
+
+                    if l && r && result_index < size_bytes {
+                        result_bytes[result_index] ^= 1 << result_bit;
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn polynomial_eq(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
     debug_assert!(left.len() == right.len());
     return left.eq(right);

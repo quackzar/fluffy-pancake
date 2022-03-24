@@ -47,6 +47,21 @@ fn bench(c: &mut Criterion) {
 
     c.bench_function("polynomial_new", |b| b.iter(|| polynomial_new(SIZE * 8)));
     c.bench_function("polynomial_new_raw", |b| b.iter(|| polynomial_new_raw(SIZE * 8)));
+
+    polynomial_zero(&mut result);
+    let mut acc = polynomial_new(SIZE * 8);
+    c.bench_function("polynomial_mul, polynomial_acc", |b| b.iter(|| {
+        polynomial_mul_raw_3(&mut acc, &left, &right);
+        polynomial_acc(&mut result, &acc);
+    }));
+
+    polynomial_zero(&mut acc);
+    polynomial_zero(&mut result);
+    c.bench_function("polynomial_mul_acc", |b| b.iter(|| polynomial_mul_acc(&mut result, &left, &right)));
+
+    polynomial_zero(&mut acc);
+    polynomial_zero(&mut result);
+    c.bench_function("polynomial_mul_acc_2", |b| b.iter(|| polynomial_mul_acc_2(&mut result, &left, &right)));
 }
 
 criterion_group!(

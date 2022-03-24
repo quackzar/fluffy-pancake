@@ -103,9 +103,7 @@ impl ObliviousSender for Sender {
             // to which the coefficients belong). The product of two elements will be the standard
             // polynomial products modulo x^k.
 
-            // TODO: We could technically do this in one go, but lets keep it simple for now...
-            polynomial_mul_raw_3(&mut q_acc, q, chi);
-            polynomial_acc_raw(&mut q_sum, &q_acc);
+            polynomial_mul_acc(&mut q_sum, q, &chi);
 
             // TODO: Depending on the performance of the bitvector it might be faster to add a check
             //       here, so we avoid doing unnecessary work the last iteration. (This depends
@@ -119,11 +117,8 @@ impl ObliviousSender for Sender {
             let x_sum = bincode::deserialize(&r.recv()?)?;
             let t_sum = bincode::deserialize(&r.recv()?)?;
 
-            let mut acc = polynomial_new_raw(q[0].len());
-            polynomial_mul_raw_3(&mut acc, &x_sum, &delta);
-            polynomial_acc_raw(&mut acc, &q_sum);
-
-            if !polynomial_eq_raw(&t_sum, &acc) {
+            polynomial_mul_acc(&mut q_sum, &x_sum, &delta);
+            if !polynomial_eq_raw(&t_sum, &q_sum) {
                 return Err(Box::new(OTError::PolychromaticInput()));
             }
         }
@@ -273,9 +268,7 @@ impl ObliviousReceiver for Receiver {
                 polynomial_acc_raw(&mut x_sum, &chi);
             }
 
-            polynomial_mul_raw_3(&mut t_acc, &t, &chi);
-            polynomial_acc_raw(&mut t_sum, &t_acc);
-
+            polynomial_mul_acc(&mut t_sum, & t, &chi);
             polynomial_zero_raw(&mut t_acc);
         }
         s.send(bincode::serialize(&x_sum)?)?;
