@@ -1,8 +1,8 @@
-use std::io::Write;
-use std::ops::BitXor;
-use num_integer;
 use crate::ot::bitmatrix::*;
 use bitvec::prelude::*;
+use num_integer;
+use std::io::Write;
+use std::ops::BitXor;
 
 pub fn polynomial_new(size: usize) -> BitVec<Block> {
     let mut result = BitVec::with_capacity(size);
@@ -106,7 +106,11 @@ pub fn polynomial_mul_raw(result: &mut BitVec<Block>, left: &BitVec<Block>, righ
         result.set(i, intermediate[i]);
     }
 }
-pub fn polynomial_mul_raw_2(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_mul_raw_2(
+    result: &mut BitVec<Block>,
+    left: &BitVec<Block>,
+    right: &BitVec<Block>,
+) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -123,7 +127,7 @@ pub fn polynomial_mul_raw_2(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
         for j in 0..size_bytes {
             for ib in 0..8 {
                 for jb in 0..8 {
-                    let ii = i * 8+ ib;
+                    let ii = i * 8 + ib;
                     let jj = j * 8 + jb;
                     let l = left_bytes[i] & (1 << ib) > 0;
                     let r = right_bytes[j] & (1 << jb) > 0;
@@ -144,7 +148,11 @@ pub fn polynomial_mul_raw_2(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
         result.set(i, intermediate[i]);
     }
 }
-pub fn polynomial_mul_raw_3(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_mul_raw_3(
+    result: &mut BitVec<Block>,
+    left: &BitVec<Block>,
+    right: &BitVec<Block>,
+) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -182,7 +190,11 @@ pub fn polynomial_mul_raw_3(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
         result_bytes[i] = intermediate_bytes[i];
     }
 }
-pub fn polynomial_mul_raw_4(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_mul_raw_4(
+    result: &mut BitVec<Block>,
+    left: &BitVec<Block>,
+    right: &BitVec<Block>,
+) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -220,7 +232,11 @@ pub fn polynomial_mul_raw_4(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
         result_bytes[i] = intermediate_bytes[i];
     }
 }
-pub fn polynomial_mul_raw_5(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_mul_raw_5(
+    result: &mut BitVec<Block>,
+    left: &BitVec<Block>,
+    right: &BitVec<Block>,
+) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 

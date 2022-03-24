@@ -31,7 +31,9 @@ impl ObliviousSender for Sender {
             msg.len() % BLOCK_SIZE == 0,
             "Message length must be a multiple of {BLOCK_SIZE}"
         );
-        let pb = TransactionProperties{msg_size: msg.len()};
+        let pb = TransactionProperties {
+            msg_size: msg.len(),
+        };
         validate_properties(&pb, channel)?;
 
         let l = msg.len(); // 8 bits stored in a byte.
@@ -63,7 +65,7 @@ impl ObliviousSender for Sender {
             seed[i].copy_from_slice(p);
         }
 
-        let delta : BitVec<Block> = BitVec::from_vec(delta.to_vec());
+        let delta: BitVec<Block> = BitVec::from_vec(delta.to_vec());
         // EXTENSION
         let t: BitMatrix = seed
             .iter()
@@ -128,8 +130,6 @@ impl ObliviousSender for Sender {
             }
         }
 
-
-
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
             .iter()
@@ -174,7 +174,9 @@ impl ObliviousReceiver for Receiver {
         use rand_chacha::ChaCha20Rng;
         let mut rng = ChaCha20Rng::from_entropy();
 
-        let pb = TransactionProperties{msg_size: choices.len()};
+        let pb = TransactionProperties {
+            msg_size: choices.len(),
+        };
         validate_properties(&pb, channel)?;
         assert!(
             choices.len() >= BLOCK_SIZE,
@@ -188,7 +190,7 @@ impl ObliviousReceiver for Receiver {
         const S: usize = STAT_SEC;
         let l = choices.len();
         let l = l + K + S;
-        let bonus: [bool; K+S] = rng.gen();
+        let bonus: [bool; K + S] = rng.gen();
 
         // COTe
 
@@ -255,13 +257,14 @@ impl ObliviousReceiver for Receiver {
 
         // Receiver outputs `t_j`
 
-
         // -- Check correlation --
         let k_blocks = K / 8;
-        let chi : BitMatrix = (0..l).map(|_| {
-            let v = (0..k_blocks).map(|_| rng.gen::<Block>()).collect();
-            BitVec::from_vec(v)
-        }).collect();
+        let chi: BitMatrix = (0..l)
+            .map(|_| {
+                let v = (0..k_blocks).map(|_| rng.gen::<Block>()).collect();
+                BitVec::from_vec(v)
+            })
+            .collect();
         s.send(bincode::serialize(&chi)?)?;
 
         let vector_len = chi[0].len();
@@ -280,7 +283,6 @@ impl ObliviousReceiver for Receiver {
         }
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
-
 
         // -- Randomize --
         let v: Vec<Vec<u8>> = t

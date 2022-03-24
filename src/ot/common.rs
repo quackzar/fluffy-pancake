@@ -1,5 +1,5 @@
 use ductile::{ChannelReceiver, ChannelSender};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 pub type Channel<S> = (ChannelSender<S>, ChannelReceiver<S>);
 
 pub type Error = Box<dyn std::error::Error>;
@@ -9,10 +9,13 @@ pub type PlaintextPair = [Vec<u8>; 2];
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TransactionProperties {
-    pub msg_size : usize,
+    pub msg_size: usize,
 }
 
-pub(crate) fn validate_properties(pb : &TransactionProperties, (s,r) : &Channel<Vec<u8>>) -> Result<(), Error> {
+pub(crate) fn validate_properties(
+    pb: &TransactionProperties,
+    (s, r): &Channel<Vec<u8>>,
+) -> Result<(), Error> {
     s.send(bincode::serialize(pb)?)?;
     let pb2 = r.recv()?;
     let pb2 = bincode::deserialize(&pb2)?;
@@ -38,7 +41,6 @@ impl std::fmt::Display for OTError {
         }
     }
 }
-
 
 /// Set of message
 #[derive(Debug, Clone)]

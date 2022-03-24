@@ -119,4 +119,3 @@ impl Index<RangeFull> for BitMatrix {
         &self.rows[..]
     }
 }
-
