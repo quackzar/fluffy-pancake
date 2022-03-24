@@ -59,6 +59,11 @@ fn bench(c: &mut Criterion) {
     polynomial_zero_bitvec(&mut acc);
     polynomial_zero_bitvec(&mut result);
     c.bench_function("polynomial_mul_acc_bytes_alt", |b| b.iter(|| polynomial_mul_acc_bytes_alt(&mut result, &left, &right)));
+    polynomial_zero_bitvec(&mut acc);
+    polynomial_zero_bitvec(&mut result);
+    unsafe {
+        c.bench_function("polynomial_mul_acc_fast", |b| b.iter(|| polynomial_mul_acc_fast(&mut result, &left, &right)));
+    }
 
     // polynomial_gf128_mul
     polynomial_zero_bitvec(&mut result);

@@ -2,11 +2,11 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},
-    ot::apricot::{Sender, Receiver},
+    ot::apricot::{Receiver, Sender},
     ot::common::*,
 };
 
-fn run_ot(msg : &Message, choices : &[bool]) {
+fn run_ot(msg: &Message, choices: &[bool]) {
     use magic_pake::ot::chou_orlandi::{OTReceiver, OTSender};
     let (s1, r1) = ductile::new_local_channel();
     let (s2, r2) = ductile::new_local_channel();
@@ -39,8 +39,8 @@ fn run_ot(msg : &Message, choices : &[bool]) {
 }
 
 fn bench(c: &mut Criterion) {
-    const N : usize = 1048 * 8;
-    let name : String = format!("Apricot with {}", N);
+    const N: usize = 1048 * 8;
+    let name: String = format!("Apricot with {}", N);
     let circuit = build_circuit(N / 2, 0);
     let (_, enc, _) = garble::garble(&circuit);
     let enc = BinaryEncodingKey::from(enc);
@@ -54,8 +54,5 @@ fn bench(c: &mut Criterion) {
     c.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
 }
 
-criterion_group!(
-    benches,
-    bench,
-);
+criterion_group!(benches, bench,);
 criterion_main!(benches);

@@ -26,9 +26,11 @@ pub struct OTReceiver;
 
 impl ObliviousSender for OTSender {
     fn exchange(&self, msg: &Message, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
-        let pb = TransactionProperties{msg_size: msg.len()};
+        let pb = TransactionProperties {
+            msg_size: msg.len(),
+        };
         validate_properties(&pb, ch)?;
-        let (s,r) = ch;
+        let (s, r) = ch;
 
         let sender = Sender::new(msg);
 
@@ -58,9 +60,11 @@ impl ObliviousSender for OTSender {
 
 impl ObliviousReceiver for OTReceiver {
     fn exchange(&self, choices: &[bool], ch: &Channel<Vec<u8>>) -> Result<Payload, Error> {
-        let pb = TransactionProperties{msg_size: choices.len()};
+        let pb = TransactionProperties {
+            msg_size: choices.len(),
+        };
         validate_properties(&pb, ch)?;
-        let (s,r) = ch;
+        let (s, r) = ch;
 
         let receiver = Receiver::new(choices);
         let n = choices.len();
