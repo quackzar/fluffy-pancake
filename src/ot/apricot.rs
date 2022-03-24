@@ -123,7 +123,7 @@ impl ObliviousSender for Sender {
             q_sum.add(&x_sum.mul(delta));
 
             if t_sum != q_sum {
-                //return Err(Box::new(OTError::PolychromaticInput()));
+                return Err(Box::new(OTError::PolychromaticInput()));
             }
         }
 
