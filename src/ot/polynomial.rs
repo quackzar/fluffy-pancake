@@ -1,8 +1,3 @@
-use std::arch::x86_64::{__m128i, _mm_clmulepi64_si128, _mm_extract_epi64, _mm_lddqu_si128, _mm_set_epi64x, _mm_slli_si128, _mm_srli_si128, _mm_store_si128, _mm_xor_si128};
-use std::borrow::Borrow;
-use std::io::Write;
-use std::ops::BitXor;
-use num_integer;
 use crate::ot::bitmatrix::*;
 use bitvec::prelude::*;
 
@@ -226,8 +221,9 @@ pub fn polynomial_print(polynomial: &BitVec<Block>) {
     println!();
 }
 
-use std::arch::x86_64;
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
+    use std::arch::x86_64::*;
     let x2 = _mm_extract_epi64(x32, 0) as u64;
     let x3 = _mm_extract_epi64(x32, 1) as u64;
 
@@ -247,7 +243,10 @@ pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
 
     return _mm_xor_si128(h, x10);
 }
+
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_mul_lower(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    use std::arch::x86_64::*;
     let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
     let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
     let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
@@ -269,7 +268,10 @@ pub unsafe fn polynomial_gf128_mul_lower(result: &mut BitVec<Block>, left: &BitV
 
     _mm_store_si128(result_bytes, right);
 }
+
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_mul_ocelot(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    use std::arch::x86_64::*;
     let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
     let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
     let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
@@ -292,7 +294,10 @@ pub unsafe fn polynomial_gf128_mul_ocelot(result: &mut BitVec<Block>, left: &Bit
 
     _mm_store_si128(result_bytes, xor);
 }
+
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_mul_reduce(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    use std::arch::x86_64::*;
     let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
     let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
     let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
@@ -316,7 +321,9 @@ pub unsafe fn polynomial_gf128_mul_reduce(result: &mut BitVec<Block>, left: &Bit
     _mm_store_si128(result_bytes, reduced);
 }
 
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_mul_acc_fast(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    use std::arch::x86_64::*;
     let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
     let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
     let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
@@ -383,6 +390,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_polynomial_gf128_mul_lower() {
         let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
         let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1
@@ -401,6 +409,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_polynomial_gf128_mul_ocelot() {
         let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
         let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1
@@ -419,6 +428,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_polynomial_gf128_mul_reduce() {
         let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
         let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1

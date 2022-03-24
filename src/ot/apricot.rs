@@ -104,7 +104,7 @@ impl ObliviousSender for Sender {
             // polynomial products modulo x^k.
 
             unsafe {
-                polynomial_mul_acc_fast(&mut q_sum, q, &chi);
+                polynomial_mul_bytes(&mut q_sum, q, &chi);
             }
 
             // TODO: Depending on the performance of the bitvector it might be faster to add a check
@@ -120,7 +120,7 @@ impl ObliviousSender for Sender {
             let t_sum = bincode::deserialize(&r.recv()?)?;
 
             unsafe {
-                polynomial_mul_acc_fast(&mut q_sum, &x_sum, &delta);
+                polynomial_mul_bytes(&mut q_sum, &x_sum, &delta);
             }
             if !polynomial_eq_bytes(&t_sum, &q_sum) {
                 //return Err(Box::new(OTError::PolychromaticInput()));
@@ -273,7 +273,7 @@ impl ObliviousReceiver for Receiver {
             }
 
             unsafe {
-                polynomial_mul_acc_fast(&mut t_sum, &t, &chi);
+                polynomial_mul_bytes(&mut t_sum, &t, &chi);
             }
             polynomial_zero_bytes(&mut t_acc);
         }
