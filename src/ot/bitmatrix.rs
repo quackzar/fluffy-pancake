@@ -115,7 +115,7 @@ impl Index<RangeFrom<usize>> for BitMatrix {
 impl Index<RangeFull> for BitMatrix {
     type Output = [BitVec<Block>];
 
-    fn index(&self, index: RangeFull) -> &Self::Output {
+    fn index(&self, _index: RangeFull) -> &Self::Output {
         &self.rows[..]
     }
 }

@@ -273,10 +273,10 @@ impl ObliviousReceiver for Receiver {
         let mut t_acc = polynomial_new_raw(vector_len);
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
             if x {
-                polynomial_acc_raw(&mut x_sum, &chi);
+                polynomial_acc_raw(&mut x_sum, chi);
             }
 
-            polynomial_mul_raw_3(&mut t_acc, &t, &chi);
+            polynomial_mul_raw_3(&mut t_acc, t, chi);
             polynomial_acc_raw(&mut t_sum, &t_acc);
 
             polynomial_zero_raw(&mut t_acc);

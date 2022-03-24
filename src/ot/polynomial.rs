@@ -1,8 +1,8 @@
 use crate::ot::bitmatrix::*;
 use bitvec::prelude::*;
-use num_integer;
-use std::io::Write;
-use std::ops::BitXor;
+
+
+
 
 pub fn polynomial_new(size: usize) -> BitVec<Block> {
     let mut result = BitVec::with_capacity(size);
@@ -10,7 +10,7 @@ pub fn polynomial_new(size: usize) -> BitVec<Block> {
         result.push(false);
     }
 
-    return result;
+    result
 }
 pub fn polynomial_new_raw(size: usize) -> BitVec<Block> {
     let bytes = vec![0u8; size / 8];
@@ -275,7 +275,7 @@ pub fn polynomial_mul_raw_5(
 
 pub fn polynomial_eq(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
     debug_assert!(left.len() == right.len());
-    return left.eq(right);
+    left.eq(right)
 }
 pub fn polynomial_eq_raw(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
     debug_assert!(left.len() == right.len());
@@ -289,7 +289,7 @@ pub fn polynomial_eq_raw(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
         }
     }
 
-    return true;
+    true
 }
 
 pub fn polynomial_print(polynomial: &BitVec<Block>) {
