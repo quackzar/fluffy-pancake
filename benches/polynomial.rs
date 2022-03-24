@@ -10,58 +10,69 @@ fn bench(c: &mut Criterion) {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
-    const SIZE: usize = 256 / 8;
+    const SIZE: usize = 128 / 8;
     let mut rng = ChaCha20Rng::from_entropy();
     let left = BitVec::from_vec((0..SIZE).map(|_| rng.gen::<Block>()).collect());
     let right = BitVec::from_vec((0..SIZE).map(|_| rng.gen::<Block>()).collect());
-    let mut result = polynomial_new(SIZE * 8);
+    let mut result = polynomial_new_bitvec(SIZE * 8);
 
-    c.bench_function("polynomial_mul", |b| b.iter(|| polynomial_mul(&mut result, &left, &right)));
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_mul_raw", |b| b.iter(|| polynomial_mul_raw(&mut result, &left, &right)));
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_mul_raw_2", |b| b.iter(|| polynomial_mul_raw_2(&mut result, &left, &right)));
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_mul_raw_3", |b| b.iter(|| polynomial_mul_raw_3(&mut result, &left, &right)));
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_mul_raw_4", |b| b.iter(|| polynomial_mul_raw_4(&mut result, &left, &right)));
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_mul_raw_5", |b| b.iter(|| polynomial_mul_raw_5(&mut result, &left, &right)));
+    // polynomial_mul
+    c.bench_function("polynomial_mul_bitvec", |b| b.iter(|| polynomial_mul_bitvec(&mut result, &left, &right)));
+    polynomial_zero_bitvec(&mut result);
+    c.bench_function("polynomial_mul_bytes", |b| b.iter(|| polynomial_mul_bytes(&mut result, &left, &right)));
+    polynomial_zero_bitvec(&mut result);
 
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_acc", |b| b.iter(|| polynomial_acc(&mut result, &left)));
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_acc_raw", |b| b.iter(|| polynomial_acc_raw(&mut result, &left)));
+    // polynomial_acc
+    polynomial_zero_bitvec(&mut result);
+    c.bench_function("polynomial_acc_bitvec", |b| b.iter(|| polynomial_acc_bitvec(&mut result, &left)));
+    polynomial_zero_bitvec(&mut result);
+    c.bench_function("polynomial_acc_bytes", |b| b.iter(|| polynomial_acc_bytes(&mut result, &left)));
 
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_eq", |b| b.iter(|| polynomial_eq(&left, &right)));
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_eq_raw", |b| b.iter(|| polynomial_eq_raw(&left, &right)));
+    // polynomial_eq
+    polynomial_zero_bitvec(&mut result);
+    c.bench_function("polynomial_eq_bitvec", |b| b.iter(|| polynomial_eq_bitvec(&left, &right)));
+    polynomial_zero_bitvec(&mut result);
+    c.bench_function("polynomial_eq_bytes", |b| b.iter(|| polynomial_eq_bytes(&left, &right)));
 
-    polynomial_zero(&mut result);
-    polynomial_acc(&mut result, &left);
-    c.bench_function("polynomial_zero", |b| b.iter(|| polynomial_zero(&mut result)));
-    polynomial_zero(&mut result);
-    polynomial_acc(&mut result, &left);
-    c.bench_function("polynomial_zero_raw", |b| b.iter(|| polynomial_zero_raw(&mut result)));
+    // polynomial_zero
+    polynomial_zero_bitvec(&mut result);
+    polynomial_acc_bitvec(&mut result, &left);
+    c.bench_function("polynomial_zero_bitvec", |b| b.iter(|| polynomial_zero_bitvec(&mut result)));
+    polynomial_zero_bitvec(&mut result);
+    polynomial_acc_bitvec(&mut result, &left);
+    c.bench_function("polynomial_zero_bytes", |b| b.iter(|| polynomial_zero_bytes(&mut result)));
 
-    c.bench_function("polynomial_new", |b| b.iter(|| polynomial_new(SIZE * 8)));
-    c.bench_function("polynomial_new_raw", |b| b.iter(|| polynomial_new_raw(SIZE * 8)));
+    // polynomial_new
+    c.bench_function("polynomial_new_bitvec", |b| b.iter(|| polynomial_new_bitvec(SIZE * 8)));
+    c.bench_function("polynomial_new_bytes", |b| b.iter(|| polynomial_new_bytes(SIZE * 8)));
 
-    polynomial_zero(&mut result);
-    let mut acc = polynomial_new(SIZE * 8);
-    c.bench_function("polynomial_mul, polynomial_acc", |b| b.iter(|| {
-        polynomial_mul_raw_3(&mut acc, &left, &right);
-        polynomial_acc(&mut result, &acc);
+    // polynomial_mul_acc
+    polynomial_zero_bitvec(&mut result);
+    let mut acc = polynomial_new_bitvec(SIZE * 8);
+    c.bench_function("polynomial_mul_bytes, polynomial_acc_bytes", |b| b.iter(|| {
+        polynomial_mul_bytes(&mut acc, &left, &right);
+        polynomial_acc_bitvec(&mut result, &acc);
     }));
+    polynomial_zero_bitvec(&mut acc);
+    polynomial_zero_bitvec(&mut result);
+    c.bench_function("polynomial_mul_acc_bytes", |b| b.iter(|| polynomial_mul_acc_bytes(&mut result, &left, &right)));
+    polynomial_zero_bitvec(&mut acc);
+    polynomial_zero_bitvec(&mut result);
+    c.bench_function("polynomial_mul_acc_bytes_alt", |b| b.iter(|| polynomial_mul_acc_bytes_alt(&mut result, &left, &right)));
 
-    polynomial_zero(&mut acc);
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_mul_acc", |b| b.iter(|| polynomial_mul_acc(&mut result, &left, &right)));
-
-    polynomial_zero(&mut acc);
-    polynomial_zero(&mut result);
-    c.bench_function("polynomial_mul_acc_2", |b| b.iter(|| polynomial_mul_acc_2(&mut result, &left, &right)));
+    // polynomial_gf128_mul
+    polynomial_zero_bitvec(&mut result);
+    unsafe {
+        c.bench_function("polynomial_gf128_mul_lower", |b| b.iter(|| polynomial_gf128_mul_lower(&mut result, &left, &right)));
+    }
+    polynomial_zero_bitvec(&mut result);
+    unsafe {
+        c.bench_function("polynomial_gf128_mul_ocelot", |b| b.iter(|| polynomial_gf128_mul_ocelot(&mut result, &left, &right)));
+    }
+    polynomial_zero_bitvec(&mut result);
+    unsafe {
+        c.bench_function("polynomial_gf128_mul_reduce", |b| b.iter(|| polynomial_gf128_mul_reduce(&mut result, &left, &right)));
+    }
 }
 
 criterion_group!(

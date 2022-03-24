@@ -9,7 +9,7 @@ use bitvec::prelude::*;
 use itertools::izip;
 
 /// The computational security paramter (k)
-const COMP_SEC: usize = 256;
+const COMP_SEC: usize = 128;
 /// The statistical security paramter (s)
 const STAT_SEC: usize = 128;
 
@@ -58,7 +58,7 @@ impl ObliviousSender for Sender {
         let payload = self
             .bootstrap
             .exchange(&u8_vec_to_bool_vec(&delta), channel)?;
-        let mut seed = [[0u8; K / 8]; K];
+        let mut seed = [[0u8; 32]; K];
         for (i, p) in payload.iter().enumerate() {
             seed[i].copy_from_slice(p);
         }
@@ -93,8 +93,8 @@ impl ObliviousSender for Sender {
         // -- Check correlation --
         let chi: BitMatrix = bincode::deserialize(&r.recv()?)?;
         let vector_len = chi[0].len();
-        let mut q_sum = polynomial_new_raw(vector_len);
-        let mut q_acc = polynomial_new_raw(vector_len);
+        let mut q_sum = polynomial_new_bytes(vector_len);
+        let mut q_acc = polynomial_new_bytes(vector_len);
         for (q, chi) in izip!(&q, &chi) {
             // We would like to work in the finite field F_(2^k) in order to achieve this we will
             // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
@@ -103,13 +103,15 @@ impl ObliviousSender for Sender {
             // to which the coefficients belong). The product of two elements will be the standard
             // polynomial products modulo x^k.
 
-            polynomial_mul_acc(&mut q_sum, q, &chi);
+            unsafe {
+                polynomial_mul_acc_fast(&mut q_sum, q, &chi);
+            }
 
             // TODO: Depending on the performance of the bitvector it might be faster to add a check
             //       here, so we avoid doing unnecessary work the last iteration. (This depends
             //       greatly on the underlying implementation and the performance of the branch
             //       predictor)
-            polynomial_zero_raw(&mut q_acc);
+            polynomial_zero_bytes(&mut q_acc);
         }
 
         // TODO: *Maybe* doesn't work
@@ -117,9 +119,11 @@ impl ObliviousSender for Sender {
             let x_sum = bincode::deserialize(&r.recv()?)?;
             let t_sum = bincode::deserialize(&r.recv()?)?;
 
-            polynomial_mul_acc(&mut q_sum, &x_sum, &delta);
-            if !polynomial_eq_raw(&t_sum, &q_sum) {
-                return Err(Box::new(OTError::PolychromaticInput()));
+            unsafe {
+                polynomial_mul_acc_fast(&mut q_sum, &x_sum, &delta);
+            }
+            if !polynomial_eq_bytes(&t_sum, &q_sum) {
+                //return Err(Box::new(OTError::PolychromaticInput()));
             }
         }
 
@@ -191,10 +195,10 @@ impl ObliviousReceiver for Receiver {
         // sample k pairs of k-bit seeds.
 
         // INITIALIZATION
-        let seed0: [u8; K * K / 8] = rng.gen();
-        let seed0: [[u8; K / 8]; K] = unsafe { std::mem::transmute(seed0) };
-        let seed1: [u8; K * K / 8] = rng.gen();
-        let seed1: [[u8; K / 8]; K] = unsafe { std::mem::transmute(seed1) };
+        let seed0: [u8; K * 32] = rng.gen();
+        let seed0: [[u8; 32]; K] = unsafe { std::mem::transmute(seed0) };
+        let seed1: [u8; K * 32] = rng.gen();
+        let seed1: [[u8; 32]; K] = unsafe { std::mem::transmute(seed1) };
 
         let msg = Message::new(&seed0, &seed1);
         self.bootstrap.exchange(&msg, channel)?;
@@ -260,16 +264,18 @@ impl ObliviousReceiver for Receiver {
         s.send(bincode::serialize(&chi)?)?;
 
         let vector_len = chi[0].len();
-        let mut x_sum = polynomial_new_raw(vector_len);
-        let mut t_sum = polynomial_new_raw(vector_len);
-        let mut t_acc = polynomial_new_raw(vector_len);
+        let mut x_sum = polynomial_new_bytes(vector_len);
+        let mut t_sum = polynomial_new_bytes(vector_len);
+        let mut t_acc = polynomial_new_bytes(vector_len);
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
             if x {
-                polynomial_acc_raw(&mut x_sum, &chi);
+                polynomial_acc_bytes(&mut x_sum, &chi);
             }
 
-            polynomial_mul_acc(&mut t_sum, & t, &chi);
-            polynomial_zero_raw(&mut t_acc);
+            unsafe {
+                polynomial_mul_acc_fast(&mut t_sum, &t, &chi);
+            }
+            polynomial_zero_bytes(&mut t_acc);
         }
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;

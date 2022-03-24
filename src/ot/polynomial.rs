@@ -1,10 +1,13 @@
+use std::arch::x86_64::{__m128i, _mm_clmulepi64_si128, _mm_extract_epi64, _mm_lddqu_si128, _mm_set_epi64x, _mm_slli_si128, _mm_srli_si128, _mm_store_si128, _mm_xor_si128};
+use std::borrow::Borrow;
 use std::io::Write;
 use std::ops::BitXor;
 use num_integer;
 use crate::ot::bitmatrix::*;
 use bitvec::prelude::*;
 
-pub fn polynomial_new(size: usize) -> BitVec<Block> {
+// Implementations using BitVec
+pub fn polynomial_new_bitvec(size: usize) -> BitVec<Block> {
     let mut result = BitVec::with_capacity(size);
     for _ in 0..size {
         result.push(false);
@@ -12,42 +15,23 @@ pub fn polynomial_new(size: usize) -> BitVec<Block> {
 
     return result;
 }
-pub fn polynomial_new_raw(size: usize) -> BitVec<Block> {
-    let bytes = vec![0u8; size / 8];
-    return BitVec::from_slice(bytes.as_slice());
-}
-
-pub fn polynomial_zero(coefficients: &mut BitVec<Block>) {
+pub fn polynomial_zero_bitvec(coefficients: &mut BitVec<Block>) {
     coefficients.fill(false);
 }
-pub fn polynomial_zero_raw(coefficients: &mut BitVec<Block>) {
-    let bytes = coefficients.as_raw_mut_slice();
-    for i in 0..bytes.len() {
-        bytes[i] = 0;
-    }
-}
-
-pub fn polynomial_acc(left: &mut BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_acc_bitvec(left: &mut BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     *left ^= right;
 }
-pub fn polynomial_acc_raw(left: &mut BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_eq_bitvec(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
     debug_assert!(left.len() == right.len());
-
-    let left_bytes = left.as_raw_mut_slice();
-    let right_bytes = right.as_raw_slice();
-
-    for i in 0..right_bytes.len() {
-        left_bytes[i] ^= right_bytes[i];
-    }
+    return left.eq(right);
 }
-
-pub fn polynomial_mul(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_mul_bitvec(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
     let size = left.len();
-    let mut intermediate = polynomial_new(left.len() * 2);
+    let mut intermediate = polynomial_new_bitvec(left.len() * 2);
 
     // Multiply by the remainder of the lhs
     for i in 0..size {
@@ -70,43 +54,43 @@ pub fn polynomial_mul(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &
         result.set(i, intermediate[i]);
     }
 }
-pub fn polynomial_mul_raw(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    debug_assert!(left.len() == result.len());
 
-    let size = left.len();
-    let size_bytes = size / 8;
+// Implmentation manipulating bytes of the BitVec
+pub fn polynomial_new_bytes(size: usize) -> BitVec<Block> {
+    let bytes = vec![0u8; size / 8];
+    return BitVec::from_slice(bytes.as_slice());
+}
+pub fn polynomial_zero_bytes(coefficients: &mut BitVec<Block>) {
+    let bytes = coefficients.as_raw_mut_slice();
+    for i in 0..bytes.len() {
+        bytes[i] = 0;
+    }
+}
+pub fn polynomial_acc_bytes(left: &mut BitVec<Block>, right: &BitVec<Block>) {
+    debug_assert!(left.len() == right.len());
+
+    let left_bytes = left.as_raw_mut_slice();
+    let right_bytes = right.as_raw_slice();
+
+    for i in 0..right_bytes.len() {
+        left_bytes[i] ^= right_bytes[i];
+    }
+}
+pub fn polynomial_eq_bytes(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
+    debug_assert!(left.len() == right.len());
 
     let left_bytes = left.as_raw_slice();
     let right_bytes = right.as_raw_slice();
 
-    let mut intermediate = polynomial_new(left.len() * 2);
-
-    for i in 0..size_bytes {
-        for j in 0..size_bytes {
-            for ib in 0..8 {
-                for jb in 0..8 {
-                    let ii = i * 8 + ib;
-                    let jj = j * 8 + jb;
-                    let l = left_bytes[i] & (1 << ib) > 0;
-                    let r = right_bytes[j] & (1 << jb) > 0;
-
-                    if l && r {
-                        let target = ii + jj;
-                        let value = intermediate[target] ^ true;
-                        intermediate.set(target, value);
-                    }
-                }
-            }
+    for i in 0..left_bytes.len() {
+        if left_bytes[i] != right_bytes[i] {
+            return false;
         }
     }
 
-    // TODO: What about the modulo/overflow?
-    for i in 0..size {
-        result.set(i, intermediate[i]);
-    }
+    return true;
 }
-pub fn polynomial_mul_raw_2(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_mul_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -116,45 +100,7 @@ pub fn polynomial_mul_raw_2(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
     let left_bytes = left.as_raw_slice();
     let right_bytes = right.as_raw_slice();
 
-    let mut intermediate = polynomial_new(left.len() * 2);
-    let intermediate_bytes = intermediate.as_raw_mut_slice();
-
-    for i in 0..size_bytes {
-        for j in 0..size_bytes {
-            for ib in 0..8 {
-                for jb in 0..8 {
-                    let ii = i * 8+ ib;
-                    let jj = j * 8 + jb;
-                    let l = left_bytes[i] & (1 << ib) > 0;
-                    let r = right_bytes[j] & (1 << jb) > 0;
-
-                    if l && r {
-                        let target = ii + jj;
-                        let result_index = target / 8;
-                        let result_bit = target % 8;
-                        intermediate_bytes[result_index] ^= 1 << result_bit;
-                    }
-                }
-            }
-        }
-    }
-
-    // TODO: What about the modulo/overflow?
-    for i in 0..size {
-        result.set(i, intermediate[i]);
-    }
-}
-pub fn polynomial_mul_raw_3(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    debug_assert!(left.len() == result.len());
-
-    let size = left.len();
-    let size_bytes = size / 8;
-
-    let left_bytes = left.as_raw_slice();
-    let right_bytes = right.as_raw_slice();
-
-    let mut intermediate = polynomial_new(left.len() * 2);
+    let mut intermediate = polynomial_new_bitvec(left.len() * 2);
     let intermediate_bytes = intermediate.as_raw_mut_slice();
 
     for i in 0..size_bytes {
@@ -182,7 +128,7 @@ pub fn polynomial_mul_raw_3(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
         result_bytes[i] = intermediate_bytes[i];
     }
 }
-pub fn polynomial_mul_raw_4(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_mul_acc_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -192,82 +138,7 @@ pub fn polynomial_mul_raw_4(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
     let left_bytes = left.as_raw_slice();
     let right_bytes = right.as_raw_slice();
 
-    let mut intermediate = polynomial_new(left.len() * 2);
-    let intermediate_bytes = intermediate.as_raw_mut_slice();
-
-    for i in 0..size_bytes {
-        for j in 0..size_bytes {
-            for ib in 0..8 {
-                for jb in 0..8 {
-                    let ii = i * 8 + ib;
-                    let jj = j * 8 + jb;
-                    let l = left_bytes[i] & (1 << ib) > 0;
-                    let r = right_bytes[j] & (1 << jb) > 0;
-
-                    if l & r {
-                        let target = ii + jj;
-                        let result_index = target / 8;
-                        let result_bit = target % 8;
-                        intermediate_bytes[result_index] ^= 1 << result_bit;
-                    }
-                }
-            }
-        }
-    }
-
-    let result_bytes = result.as_raw_mut_slice();
-    for i in 0..size_bytes {
-        result_bytes[i] = intermediate_bytes[i];
-    }
-}
-pub fn polynomial_mul_raw_5(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    debug_assert!(left.len() == result.len());
-
-    let size = left.len();
-    let size_bytes = size / 8;
-
-    let left_bytes = left.as_raw_slice();
-    let right_bytes = right.as_raw_slice();
-
-    let mut intermediate = polynomial_new(left.len() * 2);
-    let intermediate_bytes = intermediate.as_raw_mut_slice();
-
-    for i in 0..size_bytes {
-        for j in 0..size_bytes {
-            for ib in 0..8 {
-                for jb in 0..8 {
-                    let ii = i * 8 + ib;
-                    let jj = j * 8 + jb;
-                    let l = left_bytes[i] & (1 << ib) > 0;
-                    let r = right_bytes[j] & (1 << jb) > 0;
-
-                    let target = ii + jj;
-                    let result_index = target / 8;
-                    let result_bit = target % 8;
-                    intermediate_bytes[result_index] ^= ((l && r) as u8) << result_bit;
-                }
-            }
-        }
-    }
-
-    let result_bytes = result.as_raw_mut_slice();
-    for i in 0..size_bytes {
-        result_bytes[i] = intermediate_bytes[i];
-    }
-}
-
-pub fn polynomial_mul_acc(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    debug_assert!(left.len() == result.len());
-
-    let size = left.len();
-    let size_bytes = size / 8;
-
-    let left_bytes = left.as_raw_slice();
-    let right_bytes = right.as_raw_slice();
-
-    let mut intermediate = polynomial_new(left.len() * 2);
+    let mut intermediate = polynomial_new_bitvec(left.len() * 2);
     let intermediate_bytes = intermediate.as_raw_mut_slice();
 
     for i in 0..size_bytes {
@@ -295,8 +166,7 @@ pub fn polynomial_mul_acc(result: &mut BitVec<Block>, left: &BitVec<Block>, righ
         result_bytes[i] ^= intermediate_bytes[i];
     }
 }
-
-pub fn polynomial_mul_acc_2(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+pub fn polynomial_mul_acc_bytes_alt(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -329,25 +199,6 @@ pub fn polynomial_mul_acc_2(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
     }
 }
 
-pub fn polynomial_eq(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
-    debug_assert!(left.len() == right.len());
-    return left.eq(right);
-}
-pub fn polynomial_eq_raw(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
-    debug_assert!(left.len() == right.len());
-
-    let left_bytes = left.as_raw_slice();
-    let right_bytes = right.as_raw_slice();
-
-    for i in 0..left_bytes.len() {
-        if left_bytes[i] != right_bytes[i] {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 pub fn polynomial_print(polynomial: &BitVec<Block>) {
     let len = polynomial.len();
     let mut last = 0;
@@ -375,17 +226,131 @@ pub fn polynomial_print(polynomial: &BitVec<Block>) {
     println!();
 }
 
+use std::arch::x86_64;
+pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
+    let x2 = _mm_extract_epi64(x32, 0) as u64;
+    let x3 = _mm_extract_epi64(x32, 1) as u64;
+
+    let a = x3 >> 63;
+    let b = x3 >> 62;
+    let c = x3 >> 57;
+    let d = x2 ^ a ^ b ^ c;
+
+    let x3d = _mm_set_epi64x(x3 as i64, d as i64);
+    let e = _mm_slli_si128(x3d, 1);
+    let f = _mm_slli_si128(x3d, 2);
+    let g = _mm_slli_si128(x3d, 7);
+
+    let h = _mm_xor_si128(x3d, e);
+    let h = _mm_xor_si128(h, f);
+    let h = _mm_xor_si128(h, g);
+
+    return _mm_xor_si128(h, x10);
+}
+pub unsafe fn polynomial_gf128_mul_lower(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
+    let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
+    let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
+
+    let a = _mm_lddqu_si128(left_bytes);
+    let b = _mm_lddqu_si128(right_bytes);
+
+    let c = _mm_clmulepi64_si128(a, b, 0x00);
+    let d = _mm_clmulepi64_si128(a, b, 0x11);
+    let e = _mm_clmulepi64_si128(a, b, 0x01);
+    let f = _mm_clmulepi64_si128(a, b, 0x10);
+
+    let ef = _mm_xor_si128(e, f);
+    let lower = _mm_slli_si128(ef, 64 / 8);
+    let upper = _mm_srli_si128(ef, 64 / 8);
+
+    let left = _mm_xor_si128(d, upper);
+    let right = _mm_xor_si128(c, lower);
+
+    _mm_store_si128(result_bytes, right);
+}
+pub unsafe fn polynomial_gf128_mul_ocelot(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
+    let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
+    let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
+
+    let a = _mm_lddqu_si128(left_bytes);
+    let b = _mm_lddqu_si128(right_bytes);
+
+    let c = _mm_clmulepi64_si128(a, b, 0x00);
+    let d = _mm_clmulepi64_si128(a, b, 0x11);
+    let e = _mm_clmulepi64_si128(a, b, 0x01);
+    let f = _mm_clmulepi64_si128(a, b, 0x10);
+
+    let ef = _mm_xor_si128(e, f);
+    let lower = _mm_slli_si128(ef, 64 / 8);
+    let upper = _mm_srli_si128(ef, 64 / 8);
+
+    let left = _mm_xor_si128(d, upper);
+    let right = _mm_xor_si128(c, lower);
+    let xor = _mm_xor_si128(left, right);
+
+    _mm_store_si128(result_bytes, xor);
+}
+pub unsafe fn polynomial_gf128_mul_reduce(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
+    let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
+    let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
+
+    let a = _mm_lddqu_si128(left_bytes);
+    let b = _mm_lddqu_si128(right_bytes);
+
+    let c = _mm_clmulepi64_si128(a, b, 0x00);
+    let d = _mm_clmulepi64_si128(a, b, 0x11);
+    let e = _mm_clmulepi64_si128(a, b, 0x01);
+    let f = _mm_clmulepi64_si128(a, b, 0x10);
+
+    let ef = _mm_xor_si128(e, f);
+    let lower = _mm_slli_si128(ef, 64 / 8);
+    let upper = _mm_srli_si128(ef, 64 / 8);
+
+    let left = _mm_xor_si128(d, upper);
+    let right = _mm_xor_si128(c, lower);
+
+    let reduced = polynomial_gf128_reduce(left, right);
+    _mm_store_si128(result_bytes, reduced);
+}
+
+pub unsafe fn polynomial_mul_acc_fast(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
+    let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
+    let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
+    let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
+
+    let a = _mm_lddqu_si128(left_bytes);
+    let b = _mm_lddqu_si128(right_bytes);
+
+    let c = _mm_clmulepi64_si128(a, b, 0x00);
+    let d = _mm_clmulepi64_si128(a, b, 0x11);
+    let e = _mm_clmulepi64_si128(a, b, 0x01);
+    let f = _mm_clmulepi64_si128(a, b, 0x10);
+
+    let ef = _mm_xor_si128(e, f);
+    let lower = _mm_slli_si128(ef, 64 / 8);
+    let upper = _mm_srli_si128(ef, 64 / 8);
+
+    let left = _mm_xor_si128(d, upper);
+    let right = _mm_xor_si128(c, lower);
+    let xor = _mm_xor_si128(left, right);
+
+    *result_bytes = _mm_xor_si128(*result_bytes, xor);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_polynomial_mul() {
+    fn test_polynomial_mul_bitvec() {
         let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011]); // x + 1
         let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101]); // x^2 + 1
-        let mut result = polynomial_new(8);
+        let mut result = polynomial_new_bitvec(8);
 
-        polynomial_mul(&mut result, &left, &right);
+        polynomial_mul_bitvec(&mut result, &left, &right);
 
         // Expecting x^3 + x^2 + x + 1
         assert_eq!(true, result[0]);
@@ -399,12 +364,12 @@ mod tests {
     }
 
     #[test]
-    fn test_polynomial_mul_raw() {
+    fn test_polynomial_mul_bytes() {
         let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011]); // x + 1
         let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101]); // x^2 + 1
-        let mut result = polynomial_new(8);
+        let mut result = polynomial_new_bitvec(8);
 
-        polynomial_mul_raw(&mut result, &left, &right);
+        polynomial_mul_bytes(&mut result, &left, &right);
 
         // Expecting x^3 + x^2 + x + 1
         assert_eq!(true, result[0]);
@@ -418,82 +383,56 @@ mod tests {
     }
 
     #[test]
-    fn test_polynomial_mul_raw_2() {
-        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011]); // x + 1
-        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101]); // x^2 + 1
-        let mut result = polynomial_new(8);
+    fn test_polynomial_gf128_mul_lower() {
+        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
+        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1
+        let mut result = polynomial_new_bitvec(128);
 
-        polynomial_mul_raw_2(&mut result, &left, &right);
+        unsafe {
+            polynomial_gf128_mul_lower(&mut result, &left, &right);
+        }
 
         // Expecting x^3 + x^2 + x + 1
-        assert_eq!(true, result[0]);
-        assert_eq!(true, result[1]);
-        assert_eq!(true, result[2]);
-        assert_eq!(true, result[3]);
-        assert_eq!(false, result[4]);
-        assert_eq!(false, result[5]);
-        assert_eq!(false, result[6]);
-        assert_eq!(false, result[7]);
+        let result_bytes = result.as_raw_slice();
+        assert_eq!(0b0000_1111, result_bytes[0]);
+        for i in 1..16 {
+            assert_eq!(0, result_bytes[i]);
+        }
     }
 
     #[test]
-    fn test_polynomial_mul_raw_3() {
-        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011]); // x + 1
-        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101]); // x^2 + 1
-        let mut result = polynomial_new(8);
+    fn test_polynomial_gf128_mul_ocelot() {
+        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
+        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1
+        let mut result = polynomial_new_bitvec(128);
 
-        polynomial_mul_raw_3(&mut result, &left, &right);
+        unsafe {
+            polynomial_gf128_mul_ocelot(&mut result, &left, &right);
+        }
 
         // Expecting x^3 + x^2 + x + 1
-        assert_eq!(true, result[0]);
-        assert_eq!(true, result[1]);
-        assert_eq!(true, result[2]);
-        assert_eq!(true, result[3]);
-        assert_eq!(false, result[4]);
-        assert_eq!(false, result[5]);
-        assert_eq!(false, result[6]);
-        assert_eq!(false, result[7]);
+        let result_bytes = result.as_raw_slice();
+        assert_eq!(0b0000_1111, result_bytes[0]);
+        for i in 1..16 {
+            assert_eq!(0, result_bytes[i]);
+        }
     }
 
     #[test]
-    fn test_polynomial_mul_raw_4() {
-        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011]); // x + 1
-        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101]); // x^2 + 1
-        let mut result = polynomial_new(8);
+    fn test_polynomial_gf128_mul_reduce() {
+        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
+        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1
+        let mut result = polynomial_new_bitvec(128);
 
-        polynomial_mul_raw_4(&mut result, &left, &right);
-        print!("Result ->");
-        polynomial_print(&result);
-
-        // Expecting x^3 + x^2 + x + 1
-        assert_eq!(true, result[0]);
-        assert_eq!(true, result[1]);
-        assert_eq!(true, result[2]);
-        assert_eq!(true, result[3]);
-        assert_eq!(false, result[4]);
-        assert_eq!(false, result[5]);
-        assert_eq!(false, result[6]);
-        assert_eq!(false, result[7]);
-    }
-
-    #[test]
-    fn test_polynomial_mul_raw_5() {
-        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011]); // x + 1
-        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101]); // x^2 + 1
-        let mut result = polynomial_new(8);
-
-        polynomial_mul_raw_5(&mut result, &left, &right);
-        print!("Result -> ");
-        polynomial_print(&result);
+        unsafe {
+            polynomial_gf128_mul_reduce(&mut result, &left, &right);
+        }
 
         // Expecting x^3 + x^2 + x + 1
-        assert_eq!(true, result[0]);
-        assert_eq!(true, result[1]);
-        assert_eq!(true, result[2]);
-        assert_eq!(true, result[3]);
-        assert_eq!(false, result[4]);
-        assert_eq!(false, result[5]);
-        assert_eq!(false, result[6]);
-        assert_eq!(false, result[7]);
+        let result_bytes = result.as_raw_slice();
+        assert_eq!(0b0000_1111, result_bytes[0]);
+        for i in 1..16 {
+            assert_eq!(0, result_bytes[i]);
+        }
     }
 }
