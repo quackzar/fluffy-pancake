@@ -104,7 +104,8 @@ impl ObliviousSender for Sender {
             let q = Polynomial::from_bitvec(q);
             let chi = Polynomial::from_bitvec(chi);
 
-            q_sum.add_assign(&q.mul(chi));
+            // q_sum.add_assign(&q.mul(chi));
+            q_sum.mul_add_assign(q, chi);
 
 
 
@@ -120,7 +121,7 @@ impl ObliviousSender for Sender {
             let x_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
             let t_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
             let delta = Polynomial::from_bitvec(&delta);
-            q_sum.add(&x_sum.mul(delta));
+            q_sum.mul_add_assign(&x_sum, delta);
 
             if t_sum != q_sum {
                 return Err(Box::new(OTError::PolychromaticInput()));
@@ -273,7 +274,8 @@ impl ObliviousReceiver for Receiver {
                 x_sum.add_assign(chi)
             }
 
-            t_sum.add_assign(&t.mul(chi));
+            // t_sum.add_assign(&t.mul(chi));
+            t_sum.mul_add_assign(t, chi);
 
             // polynomial_zero_bytes(&mut t_acc);
         }

@@ -8,19 +8,23 @@ use std::ops::{Add, Mul, AddAssign, MulAssign};
 pub struct Polynomial (BitVec<Block>);
 
 impl Polynomial {
+    #[inline]
     pub fn new(size: usize) -> Self {
         Self(polynomial_new_bytes(size))
     }
 
+    #[inline]
     pub fn from_bitvec(bitvec: &BitVec<Block>) -> &Self {
         unsafe { core::mem::transmute(bitvec) }
     }
 
+    #[inline]
     pub fn add_assign(&mut self, other: &Self) {
         self.0 ^= &other.0;
 
     }
 
+    #[inline]
     pub fn add(&self, other: &Self) -> Self {
         let mut res = self.0.clone();
         res ^= &other.0;
@@ -28,16 +32,23 @@ impl Polynomial {
 
     }
 
+    #[inline]
     pub fn mul_assign(&mut self, other: &Self) {
         let mut res = self.0.clone();
-        polynomial_mul_bitvec(&mut res, &self.0, &other.0);
+        polynomial_mul_bytes(&mut res, &self.0, &other.0);
         self.0 = res;
     }
 
+    #[inline]
     pub fn mul(&self, other: &Self) -> Self {
         let mut res = self.0.clone();
-        polynomial_mul_bitvec(&mut res, &self.0, &other.0);
+        polynomial_mul_bytes(&mut res, &self.0, &other.0);
         Polynomial(res)
+    }
+
+    #[inline]
+    pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
+        polynomial_mul_acc_bytes(&mut self.0, &a.0, &b.0);
     }
 }
 
