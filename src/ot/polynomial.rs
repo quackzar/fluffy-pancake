@@ -1,7 +1,7 @@
 use crate::ot::bitmatrix::*;
 use bitvec::prelude::*;
 use serde::{Serialize, Deserialize};
-use std::ops::{Add, Mul, AddAssign, MulAssign};
+use std::{ops::{Add, Mul, AddAssign, MulAssign}, fmt::Display};
 
 #[repr(transparent)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -14,42 +14,101 @@ impl Polynomial {
     }
 
     #[inline]
-    pub fn from_bitvec(bitvec: &BitVec<Block>) -> &Self {
+    pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
+        polynomial_mul_acc_bytes(&mut self.0, &a.0, &b.0);
+    }
+}
+
+impl From<BitVec<Block>> for Polynomial {
+    #[inline]
+    fn from(bitvec: BitVec<Block>) -> Self {
+        debug_assert_eq!(bitvec.len(), 128);
+        Self(bitvec)
+    }
+}
+
+impl From<&BitVec<Block>> for &Polynomial {
+    #[inline]
+    fn from(bitvec: &BitVec<Block>) -> Self {
+        debug_assert_eq!(bitvec.len(), 128);
         unsafe { core::mem::transmute(bitvec) }
     }
+}
+
+impl Add for Polynomial {
+    type Output = Self;
 
     #[inline]
-    pub fn add_assign(&mut self, other: &Self) {
-        self.0 ^= &other.0;
-
-    }
-
-    #[inline]
-    pub fn add(&self, other: &Self) -> Self {
+    fn add(self, other: Self) -> Self {
         let mut res = self.0.clone();
         res ^= &other.0;
         Self(res)
-
     }
+}
+
+
+impl AddAssign<&Self> for Polynomial {
+    #[inline]
+    fn add_assign(&mut self, other: &Self) {
+        self.0 ^= &other.0;
+    }
+}
+
+impl AddAssign<Self> for Polynomial {
+    #[inline]
+    fn add_assign(&mut self, other: Self) {
+        self.0 ^= other.0;
+    }
+}
+
+impl Mul for Polynomial {
+    type Output = Self;
 
     #[inline]
-    pub fn mul_assign(&mut self, other: &Self) {
+    fn mul(self, other: Self) -> Self {
+        let mut res = self.0.clone();
+        polynomial_mul_bytes(&mut res, &self.0, &other.0);
+        Self(res)
+    }
+}
+
+impl MulAssign for Polynomial {
+    #[inline]
+    fn mul_assign(&mut self, other: Self) {
         let mut res = self.0.clone();
         polynomial_mul_bytes(&mut res, &self.0, &other.0);
         self.0 = res;
     }
+}
 
-    #[inline]
-    pub fn mul(&self, other: &Self) -> Self {
-        let mut res = self.0.clone();
-        polynomial_mul_bytes(&mut res, &self.0, &other.0);
-        Polynomial(res)
+impl Display for Polynomial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let len = self.0.len();
+        let mut last = 0;
+        for i in 0..len {
+            if self.0[len - i - 1] {
+                last = i;
+            }
+        }
+
+        for i in 0..len {
+            if self.0[len - i - 1] {
+                if i == 0 {
+                    write!(f, "1")?;
+                } else if i == 1 {
+                    write!(f, "X")?;
+                } else {
+                    write!(f, "X^{}", len - i - 1)?;
+                }
+
+                if i != last {
+                    write!(f, " + ")?;
+                }
+            }
+        }
+        Ok(())
     }
 
-    #[inline]
-    pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
-        polynomial_mul_acc_bytes(&mut self.0, &a.0, &b.0);
-    }
 }
 
 
@@ -107,12 +166,14 @@ pub fn polynomial_new_bytes(size: usize) -> BitVec<Block> {
     let bytes = vec![0u8; size / 8];
     return BitVec::from_slice(bytes.as_slice());
 }
+
 pub fn polynomial_zero_bytes(coefficients: &mut BitVec<Block>) {
     let bytes = coefficients.as_raw_mut_slice();
     for i in 0..bytes.len() {
         bytes[i] = 0;
     }
 }
+
 pub fn polynomial_acc_bytes(left: &mut BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
 
@@ -123,6 +184,7 @@ pub fn polynomial_acc_bytes(left: &mut BitVec<Block>, right: &BitVec<Block>) {
         left_bytes[i] ^= right_bytes[i];
     }
 }
+
 pub fn polynomial_eq_bytes(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
     debug_assert!(left.len() == right.len());
 
@@ -137,6 +199,7 @@ pub fn polynomial_eq_bytes(left: &BitVec<Block>, right: &BitVec<Block>) -> bool 
 
     return true;
 }
+
 pub fn polynomial_mul_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
@@ -175,6 +238,7 @@ pub fn polynomial_mul_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
         result_bytes[i] = intermediate_bytes[i];
     }
 }
+
 pub fn polynomial_mul_acc_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
@@ -213,6 +277,7 @@ pub fn polynomial_mul_acc_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>
         result_bytes[i] ^= intermediate_bytes[i];
     }
 }
+
 pub fn polynomial_mul_acc_bytes_alt(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
@@ -399,6 +464,25 @@ pub unsafe fn polynomial_mul_acc_fast(result: &mut BitVec<Block>, left: &BitVec<
     *result_bytes = _mm_xor_si128(*result_bytes, xor);
 }
 
+// https://stackoverflow.com/questions/38553881/convert-mm-clmulepi64-si128-to-vmull-high-p64
+#[allow(clippy::missing_safety_doc)]
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn polynomial_mul_acc_fast(left: &BitVec<Block>, right: &BitVec<Block>) -> BitVec<Block> {
+    debug_assert!(left.len() == 128);
+    debug_assert!(right.len() == 128);
+    use std::arch::aarch64::*;
+    let left = left.as_raw_slice().as_ptr() as *const u64;
+    let right = right.as_raw_slice().as_ptr() as *const u64;
+    
+    let a = vmull_p64(*left, *right); // first 'low' 64 bits
+    let left = vld1q_p64(left);
+    let right = vld1q_p64(right);
+    let b = vmull_high_p64(left, right); // second 'high' 64 bits
+    let c = (b & 0xFFFFFFFF00000000u128) ^ (a & 0x00000000FFFFFFFFu128); // combine
+    let res : [Block; 128 / BLOCK_SIZE] = std::mem::transmute(c);
+    BitVec::<Block>::from_slice(&res)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -495,6 +579,27 @@ mod tests {
         assert_eq!(0b0000_1111, result_bytes[0]);
         for i in 1..16 {
             assert_eq!(0, result_bytes[i]);
+        }
+    }
+
+    #[test]
+    #[cfg(target_arch = "aarch64")]
+    fn test_aarch64_poly() {
+        use rand::{thread_rng, Rng};
+        for _ in 0..100 {
+            let a = thread_rng().gen::<[u8; 16]>();
+            let b = thread_rng().gen::<[u8; 16]>();
+            let a = BitVec::<Block>::from_slice(&a);
+            let b = BitVec::<Block>::from_slice(&b);
+            // let mut c = BitVec::<Block>::from_slice(&[0x00; 16]);
+            let c = unsafe { polynomial_mul_acc_fast(&a, &b) };
+            let r1 = Polynomial::from(c);
+
+            let mut c = BitVec::<Block>::from_slice(&[0x00; 16]);
+            polynomial_mul_bytes(&mut c, &a, &b);
+            let r2 = Polynomial::from(c);
+
+            assert_eq!(r1, r2);
         }
     }
 }

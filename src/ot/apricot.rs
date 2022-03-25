@@ -101,8 +101,8 @@ impl ObliviousSender for Sender {
             // be the xor of these bitstrings (as dictated by the operations on the underlying field
             // to which the coefficients belong). The product of two elements will be the standard
             // polynomial products modulo x^k.
-            let q = Polynomial::from_bitvec(q);
-            let chi = Polynomial::from_bitvec(chi);
+            let q = <&Polynomial>::from(q);
+            let chi = <&Polynomial>::from(chi);
 
             // q_sum.add_assign(&q.mul(chi));
             q_sum.mul_add_assign(q, chi);
@@ -120,7 +120,7 @@ impl ObliviousSender for Sender {
         {
             let x_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
             let t_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
-            let delta = Polynomial::from_bitvec(&delta);
+            let delta = <&Polynomial>::from(&delta);
             q_sum.mul_add_assign(&x_sum, delta);
 
             if t_sum != q_sum {
@@ -268,10 +268,10 @@ impl ObliviousReceiver for Receiver {
         let mut x_sum = Polynomial::new(vector_len);
         let mut t_sum = Polynomial::new(vector_len);
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
-            let t = Polynomial::from_bitvec(t);
-            let chi = Polynomial::from_bitvec(chi);
+            let t = <&Polynomial>::from(t);
+            let chi = <&Polynomial>::from(chi);
             if x {
-                x_sum.add_assign(chi)
+                x_sum += chi
             }
 
             // t_sum.add_assign(&t.mul(chi));
