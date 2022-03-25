@@ -123,6 +123,22 @@ pub fn polynomial_acc_bytes(left: &mut BitVec<Block>, right: &BitVec<Block>) {
         left_bytes[i] ^= right_bytes[i];
     }
 }
+#[cfg(target_arch = "x86_64")]
+pub fn polynomial_acc_bytes_sse(left: &mut BitVec<Block>, right: &BitVec<Block>) {
+    debug_assert!(left.len() == right.len());
+
+    unsafe {
+        use std::arch::x86_64::*;
+
+        let left_bytes = left.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
+        let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
+
+        let a = _mm_lddqu_si128(left_bytes);
+        let b = _mm_lddqu_si128(right_bytes);
+
+        *left_bytes = _mm_xor_si128(a, b);
+    }
+}
 pub fn polynomial_eq_bytes(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
     debug_assert!(left.len() == right.len());
 
@@ -274,8 +290,8 @@ pub fn polynomial_print(polynomial: &BitVec<Block>) {
 }
 
 #[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
 pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
-    use std::arch::x86_64::*;
     let x2 = _mm_extract_epi64(x32, 0) as u64;
     let x3 = _mm_extract_epi64(x32, 1) as u64;
 

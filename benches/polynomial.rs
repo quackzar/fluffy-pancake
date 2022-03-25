@@ -27,6 +27,8 @@ fn bench(c: &mut Criterion) {
     c.bench_function("polynomial_acc_bitvec", |b| b.iter(|| polynomial_acc_bitvec(&mut result, &left)));
     polynomial_zero_bitvec(&mut result);
     c.bench_function("polynomial_acc_bytes", |b| b.iter(|| polynomial_acc_bytes(&mut result, &left)));
+    polynomial_zero_bitvec(&mut result);
+    c.bench_function("polynomial_acc_bytes_sse", |b| b.iter(|| polynomial_acc_bytes_sse(&mut result, &left)));
 
     // polynomial_eq
     polynomial_zero_bitvec(&mut result);
