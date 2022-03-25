@@ -5,17 +5,22 @@ use std::{ops::{Add, Mul, AddAssign, MulAssign}, fmt::Display};
 
 #[repr(transparent)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Polynomial (BitVec<Block>);
+pub struct Polynomial (pub BitVec<Block>);
 
 impl Polynomial {
     #[inline]
     pub fn new(size: usize) -> Self {
-        Self(polynomial_new_bytes(size))
+        Self(BitVec::from_vec(vec![0; size/8]))
     }
 
     #[inline]
     pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
         polynomial_mul_acc_bytes(&mut self.0, &a.0, &b.0);
+    }
+
+    #[inline]
+    pub fn zeroize(&mut self) {
+        self.0.fill(false);
     }
 }
 
@@ -40,9 +45,7 @@ impl Add for Polynomial {
 
     #[inline]
     fn add(self, other: Self) -> Self {
-        let mut res = self.0.clone();
-        res ^= &other.0;
-        Self(res)
+        Self(self.0 ^ &other.0)
     }
 }
 
@@ -81,6 +84,7 @@ impl MulAssign for Polynomial {
     }
 }
 
+
 impl Display for Polynomial {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let len = self.0.len();
@@ -112,67 +116,7 @@ impl Display for Polynomial {
 }
 
 
-// Implementations using BitVec
-pub fn polynomial_new_bitvec(size: usize) -> BitVec<Block> {
-    let mut result = BitVec::with_capacity(size);
-    for _ in 0..size {
-        result.push(false);
-    }
-
-    return result;
-}
-pub fn polynomial_zero_bitvec(coefficients: &mut BitVec<Block>) {
-    coefficients.fill(false);
-}
-pub fn polynomial_acc_bitvec(left: &mut BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    *left ^= right;
-}
-pub fn polynomial_eq_bitvec(left: &BitVec<Block>, right: &BitVec<Block>) -> bool {
-    debug_assert!(left.len() == right.len());
-    return left.eq(right);
-}
-pub fn polynomial_mul_bitvec(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
-    debug_assert!(left.len() == right.len());
-    debug_assert!(left.len() == result.len());
-
-    let size = left.len();
-    let mut intermediate = polynomial_new_bitvec(left.len() * 2);
-
-    // Multiply by the remainder of the lhs
-    for i in 0..size {
-        // TODO: It might be faster to check the LHS before looping, depending on how good the
-        //       branch predictor is.
-        for j in 0..size {
-            let l = left[i];
-            let r = right[j];
-
-            if l && r {
-                let target = i + j;
-                let value = intermediate[target] ^ true;
-                intermediate.set(target, value);
-            }
-        }
-    }
-
-    // TODO: What about the modulo/overflow?
-    for i in 0..size {
-        result.set(i, intermediate[i]);
-    }
-}
-
 // Implmentation manipulating bytes of the BitVec
-pub fn polynomial_new_bytes(size: usize) -> BitVec<Block> {
-    let bytes = vec![0u8; size / 8];
-    return BitVec::from_slice(bytes.as_slice());
-}
-
-pub fn polynomial_zero_bytes(coefficients: &mut BitVec<Block>) {
-    let bytes = coefficients.as_raw_mut_slice();
-    for i in 0..bytes.len() {
-        bytes[i] = 0;
-    }
-}
 
 pub fn polynomial_acc_bytes(left: &mut BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
@@ -200,6 +144,8 @@ pub fn polynomial_eq_bytes(left: &BitVec<Block>, right: &BitVec<Block>) -> bool 
     return true;
 }
 
+
+// NOTE: This is dependent on the size of the block being 8 bit.
 pub fn polynomial_mul_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>, right: &BitVec<Block>) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
@@ -210,8 +156,7 @@ pub fn polynomial_mul_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>, ri
     let left_bytes = left.as_raw_slice();
     let right_bytes = right.as_raw_slice();
 
-    let mut intermediate = polynomial_new_bitvec(left.len() * 2);
-    let intermediate_bytes = intermediate.as_raw_mut_slice();
+    let mut intermediate_bytes = [0u8; 128];
 
     for i in 0..size_bytes {
         for j in 0..size_bytes {
@@ -249,8 +194,7 @@ pub fn polynomial_mul_acc_bytes(result: &mut BitVec<Block>, left: &BitVec<Block>
     let left_bytes = left.as_raw_slice();
     let right_bytes = right.as_raw_slice();
 
-    let mut intermediate = polynomial_new_bitvec(left.len() * 2);
-    let intermediate_bytes = intermediate.as_raw_mut_slice();
+    let mut intermediate_bytes = [0u8; 128];
 
     for i in 0..size_bytes {
         for j in 0..size_bytes {
@@ -309,33 +253,6 @@ pub fn polynomial_mul_acc_bytes_alt(result: &mut BitVec<Block>, left: &BitVec<Bl
             }
         }
     }
-}
-
-pub fn polynomial_print(polynomial: &BitVec<Block>) {
-    let len = polynomial.len();
-    let mut last = 0;
-    for i in 0..len {
-        if polynomial[len - i - 1] {
-            last = i;
-        }
-    }
-
-    for i in 0..len {
-        if polynomial[len - i - 1] {
-            if i == 0 {
-                print!("1");
-            } else if i == 1 {
-                print!("X");
-            } else {
-                print!("X^{}", len - i - 1);
-            }
-
-            if i != last {
-                print!(" + ");
-            }
-        }
-    }
-    println!();
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -486,44 +403,6 @@ pub unsafe fn polynomial_mul_acc_fast(left: &BitVec<Block>, right: &BitVec<Block
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_polynomial_mul_bitvec() {
-        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011]); // x + 1
-        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101]); // x^2 + 1
-        let mut result = polynomial_new_bitvec(8);
-
-        polynomial_mul_bitvec(&mut result, &left, &right);
-
-        // Expecting x^3 + x^2 + x + 1
-        assert_eq!(true, result[0]);
-        assert_eq!(true, result[1]);
-        assert_eq!(true, result[2]);
-        assert_eq!(true, result[3]);
-        assert_eq!(false, result[4]);
-        assert_eq!(false, result[5]);
-        assert_eq!(false, result[6]);
-        assert_eq!(false, result[7]);
-    }
-
-    #[test]
-    fn test_polynomial_mul_bytes() {
-        let left: BitVec<Block> = BitVec::from_vec(vec![0b00000011]); // x + 1
-        let right: BitVec<Block> = BitVec::from_vec(vec![0b00000101]); // x^2 + 1
-        let mut result = polynomial_new_bitvec(8);
-
-        polynomial_mul_bytes(&mut result, &left, &right);
-
-        // Expecting x^3 + x^2 + x + 1
-        assert_eq!(true, result[0]);
-        assert_eq!(true, result[1]);
-        assert_eq!(true, result[2]);
-        assert_eq!(true, result[3]);
-        assert_eq!(false, result[4]);
-        assert_eq!(false, result[5]);
-        assert_eq!(false, result[6]);
-        assert_eq!(false, result[7]);
-    }
 
     #[test]
     #[cfg(target_arch = "x86_64")]
