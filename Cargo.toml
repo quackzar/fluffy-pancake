@@ -58,3 +58,7 @@ harness = false
 [[bench]]
 name = "polynomial"
 harness = false
+
+[[bench]]
+name = "bits"
+harness = false
