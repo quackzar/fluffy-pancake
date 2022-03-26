@@ -205,10 +205,8 @@ impl ObliviousReceiver for Receiver {
         // sample k pairs of k-bit seeds.
 
         // INITIALIZATION
-        let seed0: [u8; K * 32] = rng.gen();
-        let seed0: [[u8; 32]; K] = unsafe { std::mem::transmute(seed0) };
-        let seed1: [u8; K * 32] = rng.gen();
-        let seed1: [[u8; 32]; K] = unsafe { std::mem::transmute(seed1) };
+        let seed0: [[u8; 32]; K] = rng.gen();
+        let seed1: [[u8; 32]; K] = rng.gen();
 
         let msg = Message::new(&seed0, &seed1);
         self.bootstrap.exchange(&msg, channel)?;
