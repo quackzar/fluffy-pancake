@@ -4,3 +4,4 @@ pub mod chou_orlandi;
 pub mod common;
 pub mod one_of_many;
 pub mod polynomial;
+mod coinflip;
