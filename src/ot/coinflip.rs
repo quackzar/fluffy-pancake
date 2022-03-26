@@ -21,8 +21,11 @@ impl std::fmt::Display for CoinFlipError {
 }
 
 // TODO: Parameterize RNG.
-
-pub fn coinflip_sender<const N : usize>((s,r) : Channel<Vec<u8>>) -> Result<[u8; N], Error> {
+/// Coin flip protocol for generating N random bytes.
+/// This part first randomly selects N bytes, commits to them and sends a that commit
+/// It then opens the commitment.
+/// It then receives N bytes which it then XORs with its own random bytes.
+pub fn coinflip_sender<const N : usize>((s,r) : &Channel<Vec<u8>>) -> Result<[u8; N], Error> {
     let mut rng = rand::thread_rng();
     let v : [u8; N] = rng.gen();
     let commit = hash!(v);
@@ -39,8 +42,11 @@ pub fn coinflip_sender<const N : usize>((s,r) : Channel<Vec<u8>>) -> Result<[u8;
     Ok(w)
 }
 
-
-pub fn coinflip_receiver<const N : usize>((s,r) : Channel<Vec<u8>>) -> Result<[u8; N], Error> {
+/// Coin flip protocol for generating N random bytes.
+/// This first waits for a sender to send a commitment,
+/// then it picks N random bytes and sends them.
+/// The commitment is then opened and XORed with the bytes.
+pub fn coinflip_receiver<const N : usize>((s,r) : &Channel<Vec<u8>>) -> Result<[u8; N], Error> {
     let mut rng = rand::thread_rng();
     let u : [u8; N] = rng.gen();
     let commit = r.recv()?;
@@ -76,13 +82,13 @@ mod tests {
         let h1 = thread::Builder::new()
             .name("Sender".to_string())
             .spawn(move || {
-                coinflip_sender::<8>(ch1).unwrap()
+                coinflip_sender::<8>(&ch1).unwrap()
             });
 
         let h2 = thread::Builder::new()
             .name("Receiver".to_string())
             .spawn(move || {
-                coinflip_receiver::<8>(ch2).unwrap()
+                coinflip_receiver::<8>(&ch2).unwrap()
             });
 
         let w1 = h1.unwrap().join().unwrap();

@@ -1,5 +1,7 @@
 // https://eprint.iacr.org/2015/546.pdf
 
+use crate::ot::coinflip::coinflip_receiver;
+use crate::ot::coinflip::coinflip_sender;
 use crate::util::*;
 
 use crate::ot::bitmatrix::*;
@@ -93,9 +95,16 @@ impl ObliviousSender for Sender {
         let q = q.transpose();
 
         // -- Check correlation --
-        let chi: BitMatrix = bincode::deserialize(&r.recv()?)?;
-        let vector_len = chi[0].len();
-        let mut q_sum = Polynomial::new(vector_len);
+        let seed = coinflip_receiver::<32>(channel)?;
+        let mut prg = ChaCha20Rng::from_seed(seed);
+        let k_blocks = K / 8;
+        let chi: BitMatrix = (0..l)
+            .map(|_| {
+                let v = (0..k_blocks).map(|_| prg.gen::<Block>()).collect();
+                BitVec::from_vec(v)
+            })
+            .collect();
+        let mut q_sum = Polynomial::new(chi[0].len());
         for (q, chi) in izip!(&q, &chi) {
             // We would like to work in the finite field F_(2^k) in order to achieve this we will
             // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
@@ -256,14 +265,15 @@ impl ObliviousReceiver for Receiver {
         // Receiver outputs `t_j`
 
         // -- Check correlation --
+        let seed = coinflip_sender::<32>(channel)?;
+        let mut prg = ChaCha20Rng::from_seed(seed);
         let k_blocks = K / 8;
         let chi: BitMatrix = (0..l)
             .map(|_| {
-                let v = (0..k_blocks).map(|_| rng.gen::<Block>()).collect();
+                let v = (0..k_blocks).map(|_| prg.gen::<Block>()).collect();
                 BitVec::from_vec(v)
             })
             .collect();
-        s.send(bincode::serialize(&chi)?)?;
 
         let vector_len = chi[0].len();
         let mut x_sum = Polynomial::new(vector_len);
