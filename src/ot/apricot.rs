@@ -1,5 +1,7 @@
 // https://eprint.iacr.org/2015/546.pdf
 
+use crate::ot::coinflip::coinflip_receiver;
+use crate::ot::coinflip::coinflip_sender;
 use crate::util::*;
 
 use crate::ot::bitmatrix::*;
@@ -7,7 +9,6 @@ use crate::ot::common::*;
 use crate::ot::polynomial::*;
 use bitvec::prelude::*;
 use itertools::izip;
-use rand::RngCore;
 
 /// The computational security paramter (k)
 const COMP_SEC: usize = 128;
@@ -22,22 +23,6 @@ pub struct Receiver {
     pub bootstrap: Box<dyn ObliviousSender>,
 }
 
-fn print_matrix(matrix: &BitMatrix) {
-    for row_idx in 0..matrix.dims().0 {
-        for col_idx in 0..matrix.dims().1 {
-            print!("{}", if matrix[row_idx][col_idx] { 1 } else { 0 });
-        }
-        println!();
-    }
-}
-
-fn print_bits(array: &BitVec<Block>) {
-    for i in 0..array.len() {
-        let bit = if array[i] { 1 } else { 0 };
-        print!("{}", bit);
-    }
-}
-
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         assert!(
@@ -48,7 +33,9 @@ impl ObliviousSender for Sender {
             msg.len() % BLOCK_SIZE == 0,
             "Message length must be a multiple of {BLOCK_SIZE}"
         );
-        let pb = TransactionProperties{msg_size: msg.len()};
+        let pb = TransactionProperties {
+            msg_size: msg.len(),
+        };
         validate_properties(&pb, channel)?;
 
         let l = msg.len(); // 8 bits stored in a byte.
@@ -66,12 +53,10 @@ impl ObliviousSender for Sender {
         // receiver:
         // sample k pairs of k-bit seeds.
         use rand_chacha::ChaCha20Rng;
-        let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
+        let mut rng = ChaCha20Rng::from_entropy();
 
         // INITIALIZATION
-        let mut delta = [0u8; K / 8];
-        let delta = delta.as_mut_slice();
-        rng.fill_bytes(delta);
+        let delta: [u8; K / 8] = rng.gen();
 
         // do OT.
         let payload = self
@@ -82,14 +67,13 @@ impl ObliviousSender for Sender {
             seed[i].copy_from_slice(p);
         }
 
-        let delta : BitVec<Block> = BitVec::from_vec(delta.to_vec());
+        let delta: BitVec<Block> = BitVec::from_vec(delta.to_vec());
         // EXTENSION
         let t: BitMatrix = seed
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let mut v = vec![0u8; l / BLOCK_SIZE];
-                prg.fill_bytes(v.as_mut_slice());
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
                 BitVec::from_vec(v)
             })
             .collect();
@@ -111,10 +95,16 @@ impl ObliviousSender for Sender {
         let q = q.transpose();
 
         // -- Check correlation --
-        let chi: BitMatrix = bincode::deserialize(&r.recv()?)?;
-
-        let vector_len = chi[0].len();
-        let mut q_sum = Polynomial::new(vector_len);
+        let seed = coinflip_receiver::<32>(channel)?;
+        let mut prg = ChaCha20Rng::from_seed(seed);
+        let k_blocks = K / 8;
+        let chi: BitMatrix = (0..l)
+            .map(|_| {
+                let v = (0..k_blocks).map(|_| prg.gen::<Block>()).collect();
+                BitVec::from_vec(v)
+            })
+            .collect();
+        let mut q_sum = Polynomial::new(chi[0].len());
         for (q, chi) in izip!(&q, &chi) {
             // We would like to work in the finite field F_(2^k) in order to achieve this we will
             // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
@@ -122,13 +112,11 @@ impl ObliviousSender for Sender {
             // be the xor of these bitstrings (as dictated by the operations on the underlying field
             // to which the coefficients belong). The product of two elements will be the standard
             // polynomial products modulo x^k.
-            let q = Polynomial::from_bitvec(q);
-            let chi = Polynomial::from_bitvec(chi);
+            let q = <&Polynomial>::from(q);
+            let chi = <&Polynomial>::from(chi);
 
             // q_sum.add_assign(&q.mul(chi));
             q_sum.mul_add_assign(q, chi);
-
-
 
             // TODO: Depending on the performance of the bitvector it might be faster to add a check
             //       here, so we avoid doing unnecessary work the last iteration. (This depends
@@ -139,9 +127,9 @@ impl ObliviousSender for Sender {
 
         // TODO: *Maybe* doesn't work
         {
-            let x_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
-            let t_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
-            let delta = Polynomial::from_bitvec(&delta);
+            let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+            let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+            let delta = <&Polynomial>::from(&delta);
             q_sum.mul_add_assign(&x_sum, delta);
 
             if t_sum != q_sum {
@@ -191,9 +179,11 @@ impl ObliviousReceiver for Receiver {
         use rand::Rng;
         use rand::SeedableRng;
         use rand_chacha::ChaCha20Rng;
-        let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
+        let mut rng = ChaCha20Rng::from_entropy();
 
-        let pb = TransactionProperties{msg_size: choices.len()};
+        let pb = TransactionProperties {
+            msg_size: choices.len(),
+        };
         validate_properties(&pb, channel)?;
         assert!(
             choices.len() >= BLOCK_SIZE,
@@ -207,7 +197,7 @@ impl ObliviousReceiver for Receiver {
         const S: usize = STAT_SEC;
         let l = choices.len();
         let l = l + K + S;
-        let bonus: [bool; K+S] = rng.gen();
+        let bonus: [bool; K + S] = rng.gen();
 
         // COTe
 
@@ -215,10 +205,8 @@ impl ObliviousReceiver for Receiver {
         // sample k pairs of k-bit seeds.
 
         // INITIALIZATION
-        let seed0: [u8; K * 32] = rng.gen();
-        let seed0: [[u8; 32]; K] = unsafe { std::mem::transmute(seed0) };
-        let seed1: [u8; K * 32] = rng.gen();
-        let seed1: [[u8; 32]; K] = unsafe { std::mem::transmute(seed1) };
+        let seed0: [[u8; 32]; K] = rng.gen();
+        let seed1: [[u8; 32]; K] = rng.gen();
 
         let msg = Message::new(&seed0, &seed1);
         self.bootstrap.exchange(&msg, channel)?;
@@ -243,8 +231,7 @@ impl ObliviousReceiver for Receiver {
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let mut v = vec![0u8; l / BLOCK_SIZE];
-                prg.fill_bytes(v.as_mut_slice());
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
                 BitVec::from_vec(v)
             })
             .collect();
@@ -253,8 +240,7 @@ impl ObliviousReceiver for Receiver {
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let mut v = vec![0u8; l / BLOCK_SIZE];
-                prg.fill_bytes(v.as_mut_slice());
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
                 BitVec::from_vec(v)
             })
             .collect();
@@ -276,24 +262,25 @@ impl ObliviousReceiver for Receiver {
 
         // Receiver outputs `t_j`
 
-
         // -- Check correlation --
+        let seed = coinflip_sender::<32>(channel)?;
+        let mut prg = ChaCha20Rng::from_seed(seed);
         let k_blocks = K / 8;
-        let chi : BitMatrix = (0..l).map(|_| {
-            let mut v = vec![0u8; k_blocks];
-            rng.fill_bytes(v.as_mut_slice());
-            BitVec::from_vec(v)
-        }).collect();
-        s.send(bincode::serialize(&chi)?)?;
+        let chi: BitMatrix = (0..l)
+            .map(|_| {
+                let v = (0..k_blocks).map(|_| prg.gen::<Block>()).collect();
+                BitVec::from_vec(v)
+            })
+            .collect();
 
         let vector_len = chi[0].len();
         let mut x_sum = Polynomial::new(vector_len);
         let mut t_sum = Polynomial::new(vector_len);
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
-            let t = Polynomial::from_bitvec(t);
-            let chi = Polynomial::from_bitvec(chi);
+            let t = <&Polynomial>::from(t);
+            let chi = <&Polynomial>::from(chi);
             if x {
-                x_sum.add_assign(chi)
+                x_sum += chi
             }
 
             // t_sum.add_assign(&t.mul(chi));
@@ -303,7 +290,6 @@ impl ObliviousReceiver for Receiver {
         }
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
-
 
         // -- Randomize --
         let v: Vec<Vec<u8>> = t

@@ -8,6 +8,7 @@ use std::ops::RangeInclusive;
 use bitvec::prelude::*;
 use serde::{Deserialize, Serialize};
 
+// PERF: Change to u128 or u64
 pub type Block = u8;
 pub const BLOCK_SIZE: usize = mem::size_of::<Block>() * 8;
 
