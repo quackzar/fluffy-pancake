@@ -1,7 +1,5 @@
 use crate::util::*;
-
 use crate::ot::common::*;
-use crate::ot::polynomial::*;
 use crate::ot::bitmatrix::*;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -369,10 +367,8 @@ impl ObliviousReceiver for Receiver {
 
         // INITIALIZATION
         let bonus: [bool; K + S] = random.gen();
-        let seed0: [u8; K * 32] = random.gen();
-        let seed0: [[u8; 32]; K] = unsafe { std::mem::transmute(seed0) };
-        let seed1: [u8; K * 32] = random.gen();
-        let seed1: [[u8; 32]; K] = unsafe { std::mem::transmute(seed1) };
+        let seed0: [[u8; 32]; K] = random.gen();
+        let seed1: [[u8; 32]; K] = random.gen();
 
         let msg = Message::new(&seed0, &seed1);
         self.bootstrap.exchange(&msg, channel)?;
