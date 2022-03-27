@@ -221,7 +221,7 @@ impl OneOfManyKey {
         let circuit = build_circuit(password_bits, threshold);
         let (gc, encoding, decoding) = garble(&circuit);
         let encoding = BinaryEncodingKey::from(encoding).zipped();
-        evaluator.send(OneOfManyEvent::GCCircuit(gc));
+        let _ = evaluator.send(OneOfManyEvent::GCCircuit(gc));
 
         // 2. Use regular OT to get the encoded password for the evaluator
         let mut key = Vec::with_capacity(password_bits);
@@ -233,7 +233,7 @@ impl OneOfManyKey {
         }
         let key_message = MessagePair::new2(key.as_slice());
         let key_sender = OTSender::new(&key_message);
-        evaluator.send(OneOfManyEvent::OTKeyChallenge(key_sender.public()));
+        let _ = evaluator.send(OneOfManyEvent::OTKeyChallenge(key_sender.public()));
 
         // 3. Receive response back from OT
         let key_response = match garbler.recv() {
@@ -241,7 +241,7 @@ impl OneOfManyKey {
             _ => panic!("Invalid message received from evaluator!"),
         };
         let key_payload = key_sender.accept(&key_response);
-        evaluator.send(OneOfManyEvent::OTKeyPayload(key_payload));
+        let _ = evaluator.send(OneOfManyEvent::OTKeyPayload(key_payload));
 
         // 4. Encode all passwords
         let domain = log2(passwords.len()) as u16;
@@ -268,13 +268,13 @@ impl OneOfManyKey {
 
         // 5. Send 1-to-n challenge and Y to evaluator and get response
         let (sender, challenge, y) = one_to_n_challenge_create(domain, &encodings);
-        evaluator.send(OneOfManyEvent::OTChallenge(challenge, y));
+        let _ = evaluator.send(OneOfManyEvent::OTChallenge(challenge, y));
         let challenge_response = match garbler.recv() {
             Ok(OneOfManyEvent::OTResponse(public)) => public,
             _ => panic!("Invalid message received from evaluator!"),
         };
         let payload = one_to_n_create_payloads(&sender, &challenge_response);
-        evaluator.send(OneOfManyEvent::OTPayload(payload));
+        let _ = evaluator.send(OneOfManyEvent::OTPayload(payload));
 
         //
         // At this point the evaluator should have an encoding of both their own version and the servers version of the password.
@@ -313,7 +313,7 @@ impl OneOfManyKey {
             _ => panic!("Invalid message received from garbler!"),
         };
         let key_receiver = key_receiver.accept(&key_challenge);
-        evaluator.send(OneOfManyEvent::OTKeyResponse(key_receiver.public()));
+        let _ = evaluator.send(OneOfManyEvent::OTKeyResponse(key_receiver.public()));
 
         // 3. Chose our encoding from the payload
         let key_payload = match garbler.recv() {
@@ -332,7 +332,7 @@ impl OneOfManyKey {
         };
         let domain = log2(number_of_password) as u16;
         let (receiver, response) = one_to_n_challenge_respond(domain, index, &challenge);
-        evaluator.send(OneOfManyEvent::OTResponse(response));
+        let _ = evaluator.send(OneOfManyEvent::OTResponse(response));
 
         // 5: Receive payload for 1-to-n and choose
         let payload = match garbler.recv() {
@@ -394,7 +394,7 @@ impl OneOfManyKey {
             }
         }
 
-        evaluator.send(OneOfManyEvent::GCCircuitWithInput(gc, encoded_password));
+        let _ = evaluator.send(OneOfManyEvent::GCCircuitWithInput(gc, encoded_password));
 
         // We now need to do a series of OTs for each possible password in the database for the so
         // that the server/evaluator can obtain an encoding of the password they have in their
@@ -451,7 +451,7 @@ impl OneOfManyKey {
             challenges.push(sender.public());
             senders.push(sender);
         }
-        evaluator.send(OneOfManyEvent::OTChallenges(challenges));
+        let _ = evaluator.send(OneOfManyEvent::OTChallenges(challenges));
 
         // 4. Get responses and send payloads
         let responses = match garbler.recv() {
@@ -466,7 +466,7 @@ impl OneOfManyKey {
             let payload = sender.accept(&responses[i]);
             payloads.push(payload);
         }
-        evaluator.send(OneOfManyEvent::OTPayloads(payloads));
+        let _ = evaluator.send(OneOfManyEvent::OTPayloads(payloads));
 
         //
         // At this point the evaluator should have encodings of both inputs and should evaluate the garbled circuit to retrieve their version of they key.
@@ -512,7 +512,7 @@ impl OneOfManyKey {
             responses.push(receiver.public());
             receivers.push(receiver);
         }
-        evaluator.send(OneOfManyEvent::OTResponses(responses));
+        let _ = evaluator.send(OneOfManyEvent::OTResponses(responses));
 
         // 3. Receive payloads and choose
         let payloads = match garbler.recv() {
