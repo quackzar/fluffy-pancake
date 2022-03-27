@@ -7,6 +7,7 @@ use crate::ot::common::*;
 use crate::ot::polynomial::*;
 use bitvec::prelude::*;
 use itertools::izip;
+use rand::RngCore;
 
 /// The computational security paramter (k)
 const COMP_SEC: usize = 128;
@@ -19,6 +20,22 @@ pub struct Sender {
 
 pub struct Receiver {
     pub bootstrap: Box<dyn ObliviousSender>,
+}
+
+fn print_matrix(matrix: &BitMatrix) {
+    for row_idx in 0..matrix.dims().0 {
+        for col_idx in 0..matrix.dims().1 {
+            print!("{}", if matrix[row_idx][col_idx] { 1 } else { 0 });
+        }
+        println!();
+    }
+}
+
+fn print_bits(array: &BitVec<Block>) {
+    for i in 0..array.len() {
+        let bit = if array[i] { 1 } else { 0 };
+        print!("{}", bit);
+    }
 }
 
 impl ObliviousSender for Sender {
@@ -49,10 +66,12 @@ impl ObliviousSender for Sender {
         // receiver:
         // sample k pairs of k-bit seeds.
         use rand_chacha::ChaCha20Rng;
-        let mut rng = ChaCha20Rng::from_entropy();
+        let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
 
         // INITIALIZATION
-        let delta: [u8; K / 8] = rng.gen();
+        let mut delta = [0u8; K / 8];
+        let delta = delta.as_mut_slice();
+        rng.fill_bytes(delta);
 
         // do OT.
         let payload = self
@@ -69,7 +88,8 @@ impl ObliviousSender for Sender {
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                let mut v = vec![0u8; l / BLOCK_SIZE];
+                prg.fill_bytes(v.as_mut_slice());
                 BitVec::from_vec(v)
             })
             .collect();
@@ -92,6 +112,7 @@ impl ObliviousSender for Sender {
 
         // -- Check correlation --
         let chi: BitMatrix = bincode::deserialize(&r.recv()?)?;
+
         let vector_len = chi[0].len();
         let mut q_sum = Polynomial::new(vector_len);
         for (q, chi) in izip!(&q, &chi) {
@@ -127,8 +148,6 @@ impl ObliviousSender for Sender {
                 return Err(Box::new(OTError::PolychromaticInput()));
             }
         }
-
-
 
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
@@ -172,7 +191,7 @@ impl ObliviousReceiver for Receiver {
         use rand::Rng;
         use rand::SeedableRng;
         use rand_chacha::ChaCha20Rng;
-        let mut rng = ChaCha20Rng::from_entropy();
+        let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
 
         let pb = TransactionProperties{msg_size: choices.len()};
         validate_properties(&pb, channel)?;
@@ -224,7 +243,8 @@ impl ObliviousReceiver for Receiver {
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                let mut v = vec![0u8; l / BLOCK_SIZE];
+                prg.fill_bytes(v.as_mut_slice());
                 BitVec::from_vec(v)
             })
             .collect();
@@ -233,7 +253,8 @@ impl ObliviousReceiver for Receiver {
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                let mut v = vec![0u8; l / BLOCK_SIZE];
+                prg.fill_bytes(v.as_mut_slice());
                 BitVec::from_vec(v)
             })
             .collect();
@@ -259,7 +280,8 @@ impl ObliviousReceiver for Receiver {
         // -- Check correlation --
         let k_blocks = K / 8;
         let chi : BitMatrix = (0..l).map(|_| {
-            let v = (0..k_blocks).map(|_| rng.gen::<Block>()).collect();
+            let mut v = vec![0u8; k_blocks];
+            rng.fill_bytes(v.as_mut_slice());
             BitVec::from_vec(v)
         }).collect();
         s.send(bincode::serialize(&chi)?)?;

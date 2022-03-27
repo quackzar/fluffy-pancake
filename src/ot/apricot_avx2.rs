@@ -2,16 +2,12 @@ use crate::util::*;
 
 use crate::ot::common::*;
 use crate::ot::polynomial::*;
+use crate::ot::bitmatrix::*;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::arch::x86_64::*;
-use itertools::izip;
-use crate::circuit::ProjKind::Map;
-
-
-use crate::ot::bitmatrix::*;
 use bitvec::prelude::*;
-use crate::util;
+use aes_gcm::aead::{Aead, NewAead};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
 
 const K: usize = 128;
 const S: usize = 128;
@@ -21,9 +17,11 @@ const K_BYTES: usize = K / 8;
 pub struct Sender {
     pub bootstrap: Box<dyn ObliviousReceiver>,
 }
+
 pub struct Receiver {
     pub bootstrap: Box<dyn ObliviousSender>,
 }
+
 // -------------------------------------------------------------------------------------------------
 // TEMPORARY: Helper functions
 fn assert_compare_matrix(bitmatrix: &BitMatrix, raw: &Vec<Vec<u8>>, width: usize, height: usize) {
@@ -40,6 +38,53 @@ fn assert_compare_matrix(bitmatrix: &BitMatrix, raw: &Vec<Vec<u8>>, width: usize
             }
         }
     }
+}
+
+fn print_matrix(matrix: &Vec<Vec<u8>>) {
+    let width = matrix[0].len();
+    let height = matrix.len();
+
+    for row_idx in 0..height {
+        for col_idx in 0..width {
+            for b in 0..8 {
+                let bit = (matrix[row_idx][col_idx] >> b) & 1;
+                print!("{}", bit);
+            }
+        }
+        println!();
+    }
+}
+
+fn print_matrix_transposed(matrix: &Vec<Vec<u8>>) {
+    let width = matrix[0].len();
+    let height = matrix.len();
+
+    for col_idx in 0..width {
+        for b in 0..8 {
+            for row_idx in 0..height {
+                let bit = (matrix[row_idx][col_idx] >> b) & 1;
+                print!("{}", bit);
+            }
+            println!();
+        }
+    }
+}
+
+fn print_bits(array: &[u8]) {
+    for i in 0..array.len() {
+        for b in 0..8 {
+            let bit = (array[i] >> b) & 1;
+            print!("{}", bit);
+        }
+    }
+}
+
+fn print_array(array: &[u8]) {
+    println!("0x");
+    for i in 0..array.len() {
+        print!("{:02X}", array[i]);
+    }
+    println!();
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -74,9 +119,11 @@ fn random_bytes(seed: [u8; 32], count: usize) -> BitVec<Block> {
 
     return BitVec::from_vec(vector);
 }
+
 #[inline]
-fn fill_random_bytes(seed: [u8; 32], bytes: &mut [u8]) {
-    let mut random = ChaCha20Rng::from_seed(seed);
+fn fill_random_bytes_from_seed(seed: &[u8; 32], bytes: &mut [u8]) {
+    // TODO: Is it better to not have it be a reference?
+    let mut random = ChaCha20Rng::from_seed(*seed);
     random.fill_bytes(bytes);
 }
 
@@ -92,6 +139,8 @@ fn xor(destination: &mut [u8], left: &[u8], right: &[u8]) {
         destination[i] = left[i] ^ right[i];
     }
 }
+
+#[inline]
 fn xor_inplace(destination: &mut [u8], right: &[u8]) {
     debug_assert_eq!(right.len(), destination.len());
 
@@ -101,18 +150,85 @@ fn xor_inplace(destination: &mut [u8], right: &[u8]) {
     }
 }
 
+#[inline]
+fn and(destination: &mut [u8], left: &[u8], right: &[u8]) {
+    debug_assert_eq!(left.len(), right.len());
+    debug_assert_eq!(left.len(), destination.len());
+
+    // TODO: Vectorize this!
+    for i in 0..left.len() {
+        destination[i] = left[i] & right[i];
+    }
+}
+
+#[inline]
+fn and_inplace(destination: &mut [u8], right: &[u8]) {
+    debug_assert_eq!(right.len(), destination.len());
+
+    // TODO: Vectorize this!
+    for i in 0..right.len() {
+        destination[i] &= right[i];
+    }
+}
+
+#[inline]
+fn eq(left: &[u8], right: &[u8]) -> bool {
+    debug_assert_eq!(left.len(), right.len());
+
+    // TODO: Vectorize this!
+    for i in 0..left.len() {
+        if left[i] != right[i] {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+#[inline]
+fn polynomial_mul_acc(destination: &mut [u8], left: &[u8], right: &[u8]) {
+    use std::arch::x86_64::*;
+    unsafe {
+        let left_bytes = left.as_ptr() as *const __m128i;
+        let right_bytes = right.as_ptr() as *const __m128i;
+        let result_bytes = destination.as_mut_ptr() as *mut __m128i;
+
+        let a = _mm_lddqu_si128(left_bytes);
+        let b = _mm_lddqu_si128(right_bytes);
+
+        let c = _mm_clmulepi64_si128(a, b, 0x00);
+        let d = _mm_clmulepi64_si128(a, b, 0x11);
+        let e = _mm_clmulepi64_si128(a, b, 0x01);
+        let f = _mm_clmulepi64_si128(a, b, 0x10);
+
+        let ef = _mm_xor_si128(e, f);
+        let lower = _mm_slli_si128(ef, 64 / 8);
+        let upper = _mm_srli_si128(ef, 64 / 8);
+
+        let left = _mm_xor_si128(d, upper);
+        let right = _mm_xor_si128(c, lower);
+        let xor = _mm_xor_si128(left, right);
+
+        *result_bytes = _mm_xor_si128(*result_bytes, xor);
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Polynomials
+
+
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         debug_assert!(msg.len() >= BLOCK_SIZE, "Message must be longer than {BLOCK_SIZE} bytes");
         debug_assert!(msg.len() % BLOCK_SIZE == 0, "Message length must be multiple of {BLOCK_SIZE} bytes");
 
         // TODO: What the hell are these?
-        let transaction_properties = TransactionProperties{msg_size: msg.len()};
+        let transaction_properties = TransactionProperties { msg_size: msg.len() };
         validate_properties(&transaction_properties, channel)?;
 
         // "Constants" and things we need throughout
         let l = msg.len() + K + S;
-        let l_bytes = l / 8;
+        let _l_bytes = l / 8;
         const K_BYTES: usize = K / 8;
 
         let matrix_width = K_BYTES;
@@ -120,8 +236,8 @@ impl ObliviousSender for Sender {
         let matrix_transposed_width = matrix_height / 8;
         let matrix_transposed_height = matrix_width * 8;
 
-        let mut random = ChaCha20Rng::from_entropy();
-        let (_, r) = channel;
+        let mut random = ChaCha20Rng::from_seed([0u8; 32]);
+        let (s, r) = channel;
 
         // Generate random delta
         let mut delta = [0u8; K_BYTES];
@@ -130,121 +246,100 @@ impl ObliviousSender for Sender {
         let delta_choices = unsafe { bool_vec(delta) };
 
         // do OT.
-        let payload = self.bootstrap.exchange(&delta_choices, channel)?;
-        let mut t_rows = Vec::with_capacity(matrix_height);
-        for p in payload.iter() {
-            let seed: [u8; 32] = array(p);
-            let bits = random_bytes(seed, matrix_width);
-
-            t_rows.push(bits);
+        let payloads = self.bootstrap.exchange(&delta_choices, channel)?;
+        let mut t_raw = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
+        for row_idx in 0..matrix_transposed_height {
+            let payload = &payloads[row_idx];
+            let seed: [u8; 32] = array(payload);
+            let row = t_raw[row_idx].as_mut_slice();
+            fill_random_bytes_from_seed(&seed, row);
         }
-        // TODO: Lets not have this be a bit matrix!
-        let t = BitMatrix::new(t_rows);
 
-        // NOTE: OPTIMIZED/CLEANED DRAFT:
-        // TODO: Lets not have this be a bit matrix!
-        let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
-        /*
-        let mut q = Vec::with_capacity(K);
-        for i in K_BYTES {
-            for b in 0..8 {
-                let delta_bit = (delta[i] >> b) & 1;
-                if delta_bit == 1 {
+        let u_raw: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let mut q_orig = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
+        for row_idx in 0..matrix_transposed_height {
+            let row = q_orig[row_idx].as_mut_slice();
+            let d = (delta[row_idx / 8] >> row_idx % 8) & 1;
+            if d == 1 {
+                xor_inplace(row, u_raw[row_idx].as_slice());
+            }
+            xor_inplace(row, t_raw[row_idx].as_slice());
+        }
 
-                } else {
+        let mut q_raw = vec![vec![0u8; matrix_width]; matrix_height];
+        for row_idx in 0..matrix_transposed_height {
+            for col_idx in 0..matrix_transposed_width {
+                let source_byte = q_orig[row_idx][col_idx];
+                for b in 0..8 {
+                    let source_bit = (source_byte >> b) & 1;
 
+                    let target_row = col_idx * 8 + b;
+                    let target_col = row_idx / 8;
+                    let target_shift = row_idx % 8;
+
+                    q_raw[target_row][target_col] |= source_bit << target_shift;
                 }
             }
         }
-        */
-
-        // NOTE: THIS IS WHAT WE ARE CURRENTLY OPTIMIZING/CLEANING
-        let delta : BitVec<Block> = BitVec::from_vec(delta.to_vec());
-        let mut q = Vec::with_capacity(K);
-        for i in 0..K {
-            if delta[i] {
-                q.push(u[i].clone() ^ t[i].clone());
-            } else {
-                q.push(t[i].clone());
-            }
-        }
-
-        // NOTE: END OF OPTIMIZING/CLEANING
-        let q = BitMatrix::new(q);
-        let q = q.transpose();
 
         // -- Check correlation --
-        let chi: BitMatrix = bincode::deserialize(&r.recv()?)?;
-        let vector_len = chi[0].len();
-        let mut q_sum = Polynomial::new(vector_len);
-        for (q, chi) in izip!(&q, &chi) {
-            // We would like to work in the finite field F_(2^k) in order to achieve this we will
-            // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
-            // represented directly as strings of bits and the sum of two of these polynomials will
-            // be the xor of these bitstrings (as dictated by the operations on the underlying field
-            // to which the coefficients belong). The product of two elements will be the standard
-            // polynomial products modulo x^k.
-            let q = Polynomial::from_bitvec(q);
-            let chi = Polynomial::from_bitvec(chi);
+        let chi: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
-            // q_sum.add_assign(&q.mul(chi));
-            q_sum.mul_add_assign(q, chi);
+        let mut q_sum = vec![0u8; matrix_width];
+        for row_idx in 0..matrix_height {
+            let q_row = q_raw[row_idx].as_slice();
+            let chi_row = chi[row_idx].as_slice();
 
-
-
-            // TODO: Depending on the performance of the bitvector it might be faster to add a check
-            //       here, so we avoid doing unnecessary work the last iteration. (This depends
-            //       greatly on the underlying implementation and the performance of the branch
-            //       predictor)
-            // polynomial_zero_bytes(&mut q_acc);
+            polynomial_mul_acc(q_sum.as_mut_slice(), q_row, chi_row);
         }
 
-        // TODO: *Maybe* doesn't work
-        {
-            let x_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
-            let t_sum : Polynomial = bincode::deserialize(&r.recv()?)?;
-            let delta = Polynomial::from_bitvec(&delta);
-            q_sum.mul_add_assign(&x_sum, delta);
+        let x_sum: Vec<u8> = bincode::deserialize(&r.recv()?)?;
+        let t_sum: Vec<u8> = bincode::deserialize(&r.recv()?)?;
+        polynomial_mul_acc(q_sum.as_mut_slice(), x_sum.as_slice(), delta);
 
-            if t_sum != q_sum {
-                return Err(Box::new(OTError::PolychromaticInput()));
-            }
+        if !eq(t_sum.as_slice(), q_sum.as_slice()) {
+            return Err(Box::new(OTError::PolychromaticInput()));
         }
 
-
+        // BUG(frm): Everything is good up until here!
 
         // -- Randomize --
-        let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
-            .iter()
-            .enumerate()
-            .map(|(j, q)| {
-                let v0 = hash!(j.to_be_bytes(), q.as_raw_slice()).to_vec();
-                let q = q.clone() ^ &delta;
-                let v1 = hash!(j.to_be_bytes(), q.as_raw_slice()).to_vec();
-                (v0, v1)
-            })
-            .unzip();
+        // TODO: Should we put msg.len() in a variable?
+        let mut v0_raw = vec![vec![0u8; 32]; msg.len()];
+        let mut v1_raw = vec![vec![0u8; 32]; msg.len()];
+        for row_idx in 0..msg.len() {
+            let row0 = v0_raw[row_idx].as_mut_slice();
+            let row1 = v1_raw[row_idx].as_mut_slice();
 
-        // -- DeROT --
-        use aes_gcm::aead::{Aead, NewAead};
-        use aes_gcm::{Aes256Gcm, Key, Nonce};
-        let (d0, d1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1)
-            .map(|([m0, m1], v0, v1)| {
-                // encrypt the messages.
-                let nonce = Nonce::from_slice(b"unique nonce");
-                let cipher = Aes256Gcm::new(Key::from_slice(&v0));
-                let c0 = cipher.encrypt(nonce, m0.as_slice()).unwrap();
-                let cipher = Aes256Gcm::new(Key::from_slice(&v1));
-                let c1 = cipher.encrypt(nonce, m1.as_slice()).unwrap();
-                (c0, c1) // TODO: Proper error handling.
-            })
-            .unzip();
+            let hash = hash!(row_idx.to_be_bytes(), q_raw[row_idx].as_slice());
+            xor_inplace(row0, &hash);
 
-        let (s, _) = channel;
-        let d0 = bincode::serialize(&d0)?;
-        let d1 = bincode::serialize(&d1)?;
-        s.send(d0)?;
-        s.send(d1)?;
+            // TODO: Can we move this out?
+            let mut q_delta = vec![0u8; matrix_width];
+            xor(q_delta.as_mut_slice(), q_raw[row_idx].as_slice(), delta);
+            let hash = hash!(row_idx.to_be_bytes(), q_delta);
+            xor_inplace(row1, &hash);
+        }
+
+        // TODO: We can probably do this in the same loop that computes v0 and v1
+        let mut d0_raw = Vec::with_capacity(msg.len());
+        let mut d1_raw = Vec::with_capacity(msg.len());
+        for row_idx in 0..msg.len() {
+            let nonce = Nonce::from_slice(b"unique nonce");
+            let m0 = msg.0[row_idx][0].as_slice();
+            let m1 = msg.0[row_idx][1].as_slice();
+
+            let cipher = Aes256Gcm::new(Key::from_slice(v0_raw[row_idx].as_slice()));
+            let c0 = cipher.encrypt(nonce, m0).unwrap();
+            d0_raw.push(c0);
+
+            let cipher = Aes256Gcm::new(Key::from_slice(v1_raw[row_idx].as_slice()));
+            let c1 = cipher.encrypt(nonce, m1).unwrap();
+            d1_raw.push(c1);
+        }
+
+        s.send(bincode::serialize(&d0_raw)?)?;
+        s.send(bincode::serialize(&d1_raw)?)?;
 
         return Ok(());
     }
@@ -256,7 +351,7 @@ impl ObliviousReceiver for Receiver {
         debug_assert!(choices.len() % BLOCK_SIZE == 0, "Choices length must be multiple of {BLOCK_SIZE} bytes");
 
         // TODO: What the hell are these?
-        let transaction_properties = TransactionProperties{msg_size: choices.len()};
+        let transaction_properties = TransactionProperties { msg_size: choices.len() };
         validate_properties(&transaction_properties, channel)?;
 
         // "Constants" and things we need throughout
@@ -269,8 +364,8 @@ impl ObliviousReceiver for Receiver {
         let matrix_transposed_width = matrix_height / 8;
         let matrix_transposed_height = matrix_width * 8;
 
-        let mut random = ChaCha20Rng::from_entropy();
-        let (s, _) = channel;
+        let mut random = ChaCha20Rng::from_seed([0u8; 32]);
+        let (s, r) = channel;
 
         // INITIALIZATION
         let bonus: [bool; K + S] = random.gen();
@@ -295,42 +390,32 @@ impl ObliviousReceiver for Receiver {
         let mut t0_raw = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
             let row = t0_raw[row_idx].as_mut_slice();
-            fill_random_bytes(seed0[row_idx], row);
+            fill_random_bytes_from_seed(&seed0[row_idx], row);
         }
-        println!("t0: {} by {}", t0_raw[0].len() * 8, t0_raw.len());
+
+        // TODO: It might be beneficial to do this in the loop for t0!
+        // TODO: Can we vectorize the transposing?
+        let mut t_raw = vec![vec![0u8; matrix_width]; matrix_height];
+        for row_idx in 0..matrix_transposed_height {
+            for col_idx in 0..matrix_transposed_width {
+                let source_byte = t0_raw[row_idx][col_idx];
+                for b in 0..8 {
+                    let source_bit = (source_byte >> b) & 1;
+
+                    let target_row = col_idx * 8 + b;
+                    let target_col = row_idx / 8;
+                    let target_shift = row_idx % 8;
+
+                    t_raw[target_row][target_col] |= source_bit << target_shift;
+                }
+            }
+        }
 
         let mut t1_raw = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
             let row = t1_raw[row_idx].as_mut_slice();
-            fill_random_bytes(seed1[row_idx], row);
+            fill_random_bytes_from_seed(&seed1[row_idx], row);
         }
-        println!("t1: {} by {}", t1_raw[0].len() * 8, t1_raw.len());
-
-        let t0: BitMatrix = t0_raw
-            .iter()
-            .map(|v | {
-                BitVec::from_vec(v.clone())
-            })
-            .collect();
-        /*
-        let t0: BitMatrix = seed0
-            .iter()
-            .map(|&s| {
-                random_bytes(s, matrix_width)
-            })
-            .collect();
-        let t = t0.transpose();
-        println!("t: {} by {}", t.dims().1, t.dims().0);
-         */
-
-        /*
-        let t1: BitMatrix = seed1
-            .iter()
-            .map(|&s| {
-                random_bytes(s, matrix_width)
-            })
-            .collect();
-        */
 
         // TODO: Get rid of the choices bool array and just use this all the time instead
         let padded_choices = [choices, &bonus].concat();
@@ -361,105 +446,67 @@ impl ObliviousReceiver for Receiver {
             }
             */
         }
-        println!("x^T: {} by {}", x_transposed[0].len() * 8, x_transposed.len());
-
-        // TEMPORARY: Code to check that construct x_transposed correctly!
-        /*
-        let x: BitMatrix = padded_choices
-            .iter()
-            .map(|b| {
-                if !*b {
-                    vec![0x00u8; K / 8]
-                } else {
-                    vec![0xFFu8; K / 8]
-                }
-            })
-            .map(BitVec::from_vec)
-            .collect();
-        let x = x.transpose();
-        assert_compare_matrix(&x, &x_transposed, matrix_transposed_width, matrix_transposed_height);
-        */
 
         let mut u_raw = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
             let u_row = u_raw[row_idx].as_mut_slice();
 
-            let x_row = x_transposed[row_idx].as_slice();
+            // TODO: This can be done more efficiently
             let t0_row = t0_raw[row_idx].as_slice();
             let t1_row = t1_raw[row_idx].as_slice();
+            xor(u_row, t0_row, t1_row);
 
-            // TODO: This can be done more efficiently
-            xor(u_row, x_row, t0_row);
-            xor_inplace(u_row, t1_row);
+            let x_row = x_transposed[row_idx].as_slice();
+            xor_inplace(u_row, x_row);
         }
-        println!("u: {} by {}", u_raw[0].len() * 8, u_raw.len());
-
-        // TEMPORARY: Code to check that construct x_transposed correctly!
-        /*
-        let u: BitMatrix = izip!(x, t0, t1)
-            .map(|(x, t0, t1)| {
-                let mut u = x;
-                u ^= &t0;
-                u ^= &t1;
-                u
-            })
-            .collect();
-        assert_compare_matrix(&u, &u_raw, matrix_transposed_width, matrix_transposed_height);
-        */
-
-        let u = bincode::serialize(&u_raw)?;
-        s.send(u)?;
+        s.send(bincode::serialize(&u_raw)?)?;
 
         // -- Check correlation --
-        let k_blocks = K / 8;
-        let chi : BitMatrix = (0..l).map(|_| {
-            let v = (0..k_blocks).map(|_| random.gen::<Block>()).collect();
-            BitVec::from_vec(v)
-        }).collect();
-        s.send(bincode::serialize(&chi)?)?;
+        let mut chi_raw = vec![vec![0u8; matrix_width]; matrix_height];
+        for row_idx in 0..matrix_height {
+            let row = chi_raw[row_idx].as_mut_slice();
+            random.fill_bytes(row);
+        }
+        s.send(bincode::serialize(&chi_raw)?)?;
 
-        let vector_len = chi[0].len();
-        let mut x_sum = Polynomial::new(vector_len);
-        let mut t_sum = Polynomial::new(vector_len);
-        for (x, t, chi) in izip!(padded_choices, &t, &chi) {
-            let t = Polynomial::from_bitvec(t);
-            let chi = Polynomial::from_bitvec(chi);
-            if x {
-                x_sum.add_assign(chi)
+        let mut x_sum = vec![0u8; matrix_width];
+        let mut t_sum = vec![0u8; matrix_width];
+        for row_idx in 0..matrix_height {
+            let chi_row = chi_raw[row_idx].as_slice();
+            if padded_choices[row_idx] {
+                xor_inplace(x_sum.as_mut_slice(), chi_row);
             }
 
-            // t_sum.add_assign(&t.mul(chi));
-            t_sum.mul_add_assign(t, chi);
-
-            // polynomial_zero_bytes(&mut t_acc);
+            let t_row = t_raw[row_idx].as_slice();
+            polynomial_mul_acc(t_sum.as_mut_slice(), t_row, chi_row);
         }
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
 
 
         // -- Randomize --
-        let v: Vec<Vec<u8>> = t
-            .into_iter()
-            .enumerate()
-            .map(|(j, t)| hash!(j.to_be_bytes(), t.as_raw_slice()).to_vec())
-            .collect();
+        let mut v_raw = vec![vec![0u8; 32]; matrix_height];
+        for row_idx in 0..matrix_height {
+            let row = v_raw[row_idx].as_mut_slice();
+            let hash = hash!(row_idx.to_be_bytes(), t_raw[row_idx].as_slice());
+            xor_inplace(row, &hash);
+        }
 
         // -- DeROT --
-        use aes_gcm::aead::{Aead, NewAead};
-        use aes_gcm::{Aes256Gcm, Key, Nonce};
-        let (_, r) = channel;
         let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
         let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let y = izip!(v, choices, d0, d1)
-            .map(|(v, c, d0, d1)| {
-                let nonce = Nonce::from_slice(b"unique nonce");
-                let cipher = Aes256Gcm::new(Key::from_slice(&v));
-                let d = if *c { d1 } else { d0 };
-                let c = cipher.decrypt(nonce, d.as_slice()).unwrap();
-                c // TODO: Proper error handling.
-            })
-            .collect();
-        Ok(y)
+        let mut y: Vec<Vec<u8>> = Vec::with_capacity(choices.len());
+        for i in 0..choices.len() {
+            let nonce = Nonce::from_slice(b"unique nonce");
+            let cipher = Aes256Gcm::new(Key::from_slice(v_raw[i].as_slice()));
+            // TODO: This we can probably optimize
+            let d = if choices[i] { d1[i].as_slice() } else { d0[i].as_slice() };
+
+            let c = cipher.decrypt(nonce, d).unwrap();
+            y.push(c);
+        }
+
+        return Ok(y);
     }
 }
 

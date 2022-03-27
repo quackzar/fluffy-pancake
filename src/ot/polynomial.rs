@@ -1,11 +1,10 @@
 use crate::ot::bitmatrix::*;
 use bitvec::prelude::*;
 use serde::{Serialize, Deserialize};
-use std::ops::{Add, Mul, AddAssign, MulAssign};
 
 #[repr(transparent)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Polynomial (BitVec<Block>);
+pub struct Polynomial (pub BitVec<Block>);
 
 impl Polynomial {
     #[inline]
@@ -20,35 +19,14 @@ impl Polynomial {
 
     #[inline]
     pub fn add_assign(&mut self, other: &Self) {
-        self.0 ^= &other.0;
-
-    }
-
-    #[inline]
-    pub fn add(&self, other: &Self) -> Self {
-        let mut res = self.0.clone();
-        res ^= &other.0;
-        Self(res)
-
-    }
-
-    #[inline]
-    pub fn mul_assign(&mut self, other: &Self) {
-        let mut res = self.0.clone();
-        polynomial_mul_bytes(&mut res, &self.0, &other.0);
-        self.0 = res;
-    }
-
-    #[inline]
-    pub fn mul(&self, other: &Self) -> Self {
-        let mut res = self.0.clone();
-        polynomial_mul_bytes(&mut res, &self.0, &other.0);
-        Polynomial(res)
+        polynomial_acc_bytes(self.0.as_mut(), &other.0);
     }
 
     #[inline]
     pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
-        polynomial_mul_acc_bytes(&mut self.0, &a.0, &b.0);
+        unsafe {
+            polynomial_mul_acc_fast(self.0.as_mut(), &a.0, &b.0);
+        }
     }
 }
 
@@ -323,15 +301,15 @@ pub unsafe fn polynomial_gf128_mul_lower(result: &mut BitVec<Block>, left: &BitV
     let b = _mm_lddqu_si128(right_bytes);
 
     let c = _mm_clmulepi64_si128(a, b, 0x00);
-    let d = _mm_clmulepi64_si128(a, b, 0x11);
+    //let d = _mm_clmulepi64_si128(a, b, 0x11);
     let e = _mm_clmulepi64_si128(a, b, 0x01);
     let f = _mm_clmulepi64_si128(a, b, 0x10);
 
     let ef = _mm_xor_si128(e, f);
     let lower = _mm_slli_si128(ef, 64 / 8);
-    let upper = _mm_srli_si128(ef, 64 / 8);
+    //let upper = _mm_srli_si128(ef, 64 / 8);
 
-    let left = _mm_xor_si128(d, upper);
+    //let left = _mm_xor_si128(d, upper);
     let right = _mm_xor_si128(c, lower);
 
     _mm_store_si128(result_bytes, right);
@@ -369,6 +347,31 @@ pub unsafe fn polynomial_gf128_mul_reduce(result: &mut BitVec<Block>, left: &Bit
     let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
     let right_bytes = right.as_raw_slice().as_ptr() as *const __m128i;
     let result_bytes = result.as_raw_mut_slice().as_mut_ptr() as *mut __m128i;
+
+    let a = _mm_lddqu_si128(left_bytes);
+    let b = _mm_lddqu_si128(right_bytes);
+
+    let c = _mm_clmulepi64_si128(a, b, 0x00);
+    let d = _mm_clmulepi64_si128(a, b, 0x11);
+    let e = _mm_clmulepi64_si128(a, b, 0x01);
+    let f = _mm_clmulepi64_si128(a, b, 0x10);
+
+    let ef = _mm_xor_si128(e, f);
+    let lower = _mm_slli_si128(ef, 64 / 8);
+    let upper = _mm_srli_si128(ef, 64 / 8);
+
+    let left = _mm_xor_si128(d, upper);
+    let right = _mm_xor_si128(c, lower);
+
+    let reduced = polynomial_gf128_reduce(left, right);
+    _mm_store_si128(result_bytes, reduced);
+}
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn polynomial_gf128_mul_reduce_slices(result: &mut [u8], left: &[u8], right: &[u8]) {
+    use std::arch::x86_64::*;
+    let left_bytes = left.as_ptr() as *const __m128i;
+    let right_bytes = right.as_ptr() as *const __m128i;
+    let result_bytes = result.as_mut_ptr() as *mut __m128i;
 
     let a = _mm_lddqu_si128(left_bytes);
     let b = _mm_lddqu_si128(right_bytes);
