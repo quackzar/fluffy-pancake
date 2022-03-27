@@ -299,41 +299,26 @@ impl ObliviousSender for Sender {
             return Err(Box::new(OTError::PolychromaticInput()));
         }
 
-        // BUG(frm): Everything is good up until here!
-
         // -- Randomize --
         // TODO: Should we put msg.len() in a variable?
-        let mut v0_raw = vec![vec![0u8; 32]; msg.len()];
-        let mut v1_raw = vec![vec![0u8; 32]; msg.len()];
-        for row_idx in 0..msg.len() {
-            let row0 = v0_raw[row_idx].as_mut_slice();
-            let row1 = v1_raw[row_idx].as_mut_slice();
-
-            let hash = hash!(row_idx.to_be_bytes(), q_raw[row_idx].as_slice());
-            xor_inplace(row0, &hash);
-
-            // TODO: Can we move this out?
-            let mut q_delta = vec![0u8; matrix_width];
-            xor(q_delta.as_mut_slice(), q_raw[row_idx].as_slice(), delta);
-            let hash = hash!(row_idx.to_be_bytes(), q_delta);
-            xor_inplace(row1, &hash);
-        }
-
-        // TODO: We can probably do this in the same loop that computes v0 and v1
         let mut d0_raw = Vec::with_capacity(msg.len());
         let mut d1_raw = Vec::with_capacity(msg.len());
+        let nonce = Nonce::from_slice(b"unique nonce");
         for row_idx in 0..msg.len() {
-            let nonce = Nonce::from_slice(b"unique nonce");
+            let v0 = hash!(row_idx.to_be_bytes(), q_raw[row_idx].as_slice());
+
+            // TODO: Can we do this in a better way?
+            let mut q_delta = vec![0u8; matrix_width];
+            xor(q_delta.as_mut_slice(), q_raw[row_idx].as_slice(), delta);
+            let v1 = hash!(row_idx.to_be_bytes(), q_delta);
+
             let m0 = msg.0[row_idx][0].as_slice();
+            let cipher = Aes256Gcm::new(Key::from_slice(v0.as_slice()));
+            d0_raw.push(cipher.encrypt(nonce, m0).unwrap());
+
             let m1 = msg.0[row_idx][1].as_slice();
-
-            let cipher = Aes256Gcm::new(Key::from_slice(v0_raw[row_idx].as_slice()));
-            let c0 = cipher.encrypt(nonce, m0).unwrap();
-            d0_raw.push(c0);
-
-            let cipher = Aes256Gcm::new(Key::from_slice(v1_raw[row_idx].as_slice()));
-            let c1 = cipher.encrypt(nonce, m1).unwrap();
-            d1_raw.push(c1);
+            let cipher = Aes256Gcm::new(Key::from_slice(v1.as_slice()));
+            d1_raw.push(cipher.encrypt(nonce, m1).unwrap());
         }
 
         s.send(bincode::serialize(&d0_raw)?)?;
