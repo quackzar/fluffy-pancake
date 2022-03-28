@@ -14,26 +14,61 @@ use bitvec::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // PERF: Change to u128 or u64
-pub type Block = u8;
+pub type Block = u64;
 pub const BLOCK_SIZE: usize = mem::size_of::<Block>() * 8;
 
 #[repr(transparent)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BitVector (
     pub BitVec<Block, Lsb0>,
 );
 
 impl BitVector {
+    pub fn zeros(size : usize) -> Self {
+        Self::from_bytes(vec![0x00u8; size / 8])
+    }
+
+    pub fn ones(size : usize) -> Self {
+        Self::from_bytes(vec![0xFFu8; size / 8])
+    }
+
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     pub fn from_vec(vec: Vec<Block>) -> Self {
         Self(BitVec::from_vec(vec))
     }
 
+    pub fn from_bytes(vec: Vec<u8>) -> Self {
+        unsafe { // TODO: Fallback if alignment fails.
+            let (head, body, tail) = vec.align_to::<Block>();
+            debug_assert!(tail.is_empty());
+            debug_assert!(head.is_empty());
+            Self::from_vec(body.to_vec())
+        }
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_raw_slice()
+        unsafe {
+            let (head, body, tail) = self.0.as_raw_slice().align_to::<u8>();
+            debug_assert!(tail.is_empty());
+            debug_assert!(head.is_empty());
+            body
+        }
+    }
+
+    pub fn as_mut_bytes(&mut self) -> &mut [u8] {
+        unsafe {
+            let (head, body, tail) = self.0.as_raw_mut_slice().align_to_mut::<u8>();
+            debug_assert!(tail.is_empty());
+            debug_assert!(head.is_empty());
+            body
+        }
     }
 }
 
@@ -78,6 +113,19 @@ impl BitXorAssign for BitVector {
         self.0 ^= rhs.0;
     }
 }
+
+impl BitXorAssign<&Self> for BitVector {
+    #[inline]
+    fn bitxor_assign(&mut self, rhs: &Self) {
+        debug_assert_eq!(self.0.len(), rhs.0.len(), "BitVector lengths must be equal");
+        let lhs = self.0.as_raw_mut_slice();
+        let rhs = rhs.0.as_raw_slice();
+        for i in 0..lhs.len() {
+            lhs[i] ^= rhs[i];
+        }
+    }
+}
+
 
 impl BitAndAssign for BitVector {
     #[inline]

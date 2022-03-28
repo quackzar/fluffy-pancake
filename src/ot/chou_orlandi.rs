@@ -28,6 +28,7 @@ impl ObliviousSender for OTSender {
     fn exchange(&self, msg: &Message, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
         let pb = TransactionProperties {
             msg_size: msg.len(),
+            protocol: "Chou-Orlandi".to_string(),
         };
         validate_properties(&pb, ch)?;
         let (s, r) = ch;
@@ -62,6 +63,7 @@ impl ObliviousReceiver for OTReceiver {
     fn exchange(&self, choices: &[bool], ch: &Channel<Vec<u8>>) -> Result<Payload, Error> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
+            protocol: "Chou-Orlandi".to_string(),
         };
         validate_properties(&pb, ch)?;
         let (s, r) = ch;

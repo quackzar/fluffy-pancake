@@ -7,9 +7,10 @@ pub type Error = Box<dyn std::error::Error>;
 /// Pair of plaintexts
 pub type PlaintextPair = [Vec<u8>; 2];
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TransactionProperties {
     pub msg_size: usize,
+    pub protocol: String,
 }
 
 pub(crate) fn validate_properties(
@@ -20,7 +21,7 @@ pub(crate) fn validate_properties(
     let pb2 = r.recv()?;
     let pb2 = bincode::deserialize(&pb2)?;
     if pb2 != *pb {
-        Err(Box::new(OTError::BadProperties(*pb, pb2)))
+        Err(Box::new(OTError::BadProperties(pb.clone(), pb2)))
     } else {
         Ok(())
     }
