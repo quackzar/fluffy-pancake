@@ -1,4 +1,5 @@
 use std::mem;
+use std::ops::IndexMut;
 use std::ops::Range;
 use std::ops::RangeFrom;
 use std::ops::RangeFull;
@@ -10,17 +11,15 @@ use std::ops::BitAndAssign;
 use std::ops::Index;
 
 // BitMatrix and BitVector
-use bitvec::prelude::*;
 use serde::{Deserialize, Serialize};
 
-// PERF: Change to u128 or u64
-pub type Block = u64;
+pub type Block = u8;
 pub const BLOCK_SIZE: usize = mem::size_of::<Block>() * 8;
 
 #[repr(transparent)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BitVector (
-    pub BitVec<Block, Lsb0>,
+    Vec<Block>
 );
 
 impl BitVector {
@@ -33,7 +32,7 @@ impl BitVector {
     }
 
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.0.len() * BLOCK_SIZE
     }
 
     pub fn is_empty(&self) -> bool {
@@ -41,7 +40,7 @@ impl BitVector {
     }
 
     pub fn from_vec(vec: Vec<Block>) -> Self {
-        Self(BitVec::from_vec(vec))
+        Self(vec)
     }
 
     pub fn from_bytes(vec: Vec<u8>) -> Self {
@@ -55,7 +54,7 @@ impl BitVector {
 
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
-            let (head, body, tail) = self.0.as_raw_slice().align_to::<u8>();
+            let (head, body, tail) = self.0.align_to::<u8>();
             debug_assert!(tail.is_empty());
             debug_assert!(head.is_empty());
             body
@@ -64,19 +63,15 @@ impl BitVector {
 
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
         unsafe {
-            let (head, body, tail) = self.0.as_raw_mut_slice().align_to_mut::<u8>();
+            let (head, body, tail) = self.0.align_to_mut::<u8>();
             debug_assert!(tail.is_empty());
             debug_assert!(head.is_empty());
             body
         }
     }
-}
 
-impl Index<usize> for BitVector {
-    type Output = bool;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+    pub fn as_slice(&self) -> &[Block] {
+        &self.0
     }
 }
 
@@ -85,7 +80,7 @@ impl BitXor for BitVector {
 
     #[inline]
     fn bitxor(self, rhs: Self) -> Self::Output {
-        BitVector(self.0 ^ rhs.0)
+        Self::Output::from_vec(self.0.iter().zip(rhs.0.iter()).map(|(l, r)| l ^ r).collect())
     }
 }
 
@@ -94,7 +89,7 @@ impl BitXor for &BitVector {
 
     #[inline]
     fn bitxor(self, rhs: Self) -> Self::Output {
-        BitVector(self.0.clone() ^ rhs.0.clone())
+        Self::Output::from_vec(self.0.iter().zip(rhs.0.iter()).map(|(l, r)| l ^ r).collect())
     }
 }
 
@@ -103,14 +98,16 @@ impl BitAnd for BitVector {
 
     #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
-        BitVector(self.0 & rhs.0)
+        Self::Output::from_vec(self.0.iter().zip(rhs.0.iter()).map(|(l, r)| l & r).collect())
     }
 }
 
 impl BitXorAssign for BitVector {
     #[inline]
     fn bitxor_assign(&mut self, rhs: Self) {
-        self.0 ^= rhs.0;
+        for (l, r) in self.0.iter_mut().zip(rhs.0.iter()) {
+            *l ^= *r;
+        }
     }
 }
 
@@ -118,8 +115,8 @@ impl BitXorAssign<&Self> for BitVector {
     #[inline]
     fn bitxor_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.0.len(), rhs.0.len(), "BitVector lengths must be equal");
-        let lhs = self.0.as_raw_mut_slice();
-        let rhs = rhs.0.as_raw_slice();
+        let lhs = &mut self.0;
+        let rhs = &rhs.0;
         for i in 0..lhs.len() {
             lhs[i] ^= rhs[i];
         }
@@ -130,7 +127,9 @@ impl BitXorAssign<&Self> for BitVector {
 impl BitAndAssign for BitVector {
     #[inline]
     fn bitand_assign(&mut self, rhs: Self) {
-        self.0 &= rhs.0;
+        for (l, r) in self.0.iter_mut().zip(rhs.0.iter()) {
+            *l &= *r;
+        }
     }
 }
 
@@ -153,15 +152,24 @@ impl BitMatrix {
     // // https://stackoverflow.com/questions/31742483/how-would-you-transpose-a-binary-matrix
     pub fn transpose(&self) -> BitMatrix {
         let (rows, cols) = self.dims();
-        let mut new_rows = Vec::with_capacity(cols);
-        for col in 0..cols {
-            let mut new_row = BitVec::with_capacity(rows);
-            for row in 0..rows {
-                new_row.push(self.rows[row][col]);
+        let mut raw : Vec<Vec<Block>> = vec![vec![0; rows/BLOCK_SIZE]; cols];
+        let source = self.rows.as_slice();
+        for row_idx in 0..rows {
+            for col_idx in 0..cols/BLOCK_SIZE {
+                let source_byte = source[row_idx].as_slice()[col_idx];
+                for b in 0..BLOCK_SIZE {
+                    let source_bit = (source_byte >> b) & 1;
+
+                    let target_row = col_idx * BLOCK_SIZE + b;
+                    let target_col = row_idx / BLOCK_SIZE;
+                    let target_shift = row_idx % BLOCK_SIZE;
+
+                    raw[target_row][target_col] |= source_bit << target_shift;
+                }
             }
-            new_rows.push(BitVector(new_row));
         }
-        BitMatrix::new(new_rows)
+        let raw : Vec<BitVector> = unsafe { mem::transmute(raw) };
+        BitMatrix{ rows: raw }
     }
 }
 

@@ -83,7 +83,8 @@ impl ObliviousSender for Sender {
 
         let mut q = Vec::with_capacity(K);
         for i in 0..K {
-            if delta.0[i] {
+            let delta = u8_vec_to_bool_vec(delta.as_bytes());
+            if delta[i] {
                 q.push(u[i].clone() ^ t[i].clone());
             } else {
                 q.push(t[i].clone());
@@ -274,10 +275,8 @@ impl ObliviousReceiver for Receiver {
         let mut x_sum = Polynomial::new();
         let mut t_sum = Polynomial::new();
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
-            dbg!(x_sum.0.len());
             let t = <&Polynomial>::from(t);
             let chi = <&Polynomial>::from(chi);
-            dbg!(chi.0.len());
             if x {
                 x_sum += chi
             }

@@ -1,4 +1,4 @@
-use crate::ot::bitmatrix::*;
+use crate::{ot::bitmatrix::*, util::u8_vec_to_bool_vec};
 use bitvec::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -19,11 +19,6 @@ impl Polynomial {
     #[inline]
     pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
         polynomial_mul_acc_bytes(&mut self.0, &a.0, &b.0);
-    }
-
-    #[inline]
-    pub fn zeroize(&mut self) {
-        self.0.0.fill(false);
     }
 }
 
@@ -94,15 +89,16 @@ impl MulAssign for Polynomial {
 impl Display for Polynomial {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let len = self.0.len();
+        let vec = u8_vec_to_bool_vec(self.0.as_bytes());
         let mut last = 0;
         for i in 0..len {
-            if self.0[len - i - 1] {
+            if vec[len - i - 1] {
                 last = i;
             }
         }
 
         for i in 0..len {
-            if self.0[len - i - 1] {
+            if vec[len - i - 1] {
                 if i == 0 {
                     write!(f, "1")?;
                 } else if i == 1 {
