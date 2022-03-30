@@ -33,7 +33,7 @@ fn bench_fpake(c: &mut Criterion) {
     c.bench_function("fPAKE 128bit", |b| b.iter(|| fpake(b"passwordpassword")));
 }
 
-fn fpake_one_of_many_bit(password: &'static [u8]) {
+fn fpake_one_of_many_bit(_password: &'static [u8]) {
     let passwords = [
         b"01234567".to_vec(),
         b"12345678".to_vec(),
