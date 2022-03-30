@@ -124,7 +124,7 @@ pub type CiphertextPair = [Vec<u8>; 2];
 pub struct EncryptedPayload(pub Vec<CiphertextPair>);
 
 // === Sender ====
-pub struct Sender {
+struct Sender {
     secrets: Vec<Scalar>,
     publics: Public,
     messages: Message,
@@ -194,12 +194,12 @@ impl Sender {
 
 pub struct Init;
 
-pub struct RetrievingPayload {
+struct RetrievingPayload {
     keys: Vec<Vec<u8>>,
     publics: Public,
 }
 
-pub struct Receiver<S> {
+struct Receiver<S> {
     state: S,
     secrets: Vec<Scalar>,
     choices: Vec<bool>,
