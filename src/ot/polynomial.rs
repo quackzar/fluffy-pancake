@@ -234,6 +234,11 @@ pub fn polynomial_mul_acc_bytes_alt(
 }
 
 #[cfg(target_arch = "x86_64")]
+use {
+    std::arch::x86_64::*
+};
+
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     use std::arch::x86_64::*;
     let x2 = _mm_extract_epi64(x32, 0) as u64;
