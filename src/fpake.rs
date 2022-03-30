@@ -185,7 +185,7 @@ impl OneOfManyKey {
         threshold: u16,
         ch: &Channel<Vec<u8>>,
     ) -> Result<OneOfManyKey, Error> {
-        let (s,r) = ch;
+        let (s,_r) = ch;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
 
@@ -246,7 +246,7 @@ impl OneOfManyKey {
         index: u16,
         ch: &Channel<Vec<u8>>,
     ) -> Result<OneOfManyKey, Error> {
-        let (s,r) = ch;
+        let (_s,r) = ch;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
 
@@ -297,7 +297,7 @@ impl OneOfManyKey {
         threshold: u16,
         ch: &Channel<Vec<u8>>,
     ) -> Result<OneOfManyKey, Error> {
-        let (s,r) = ch;
+        let (s,_r) = ch;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
 

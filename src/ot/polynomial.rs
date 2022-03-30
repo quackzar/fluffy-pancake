@@ -488,7 +488,7 @@ mod tests {
             let c = unsafe { polynomial_mul_acc_fast(&a, &b) };
             let r1 = Polynomial::from(c);
 
-            let mut c = BitVec::<Block>::from_slice(&[0x00; 16]);
+            let _c = BitVec::<Block>::from_slice(&[0x00; 16]);
             let c = polynomial_mul_bytes(&a, &b);
             let r2 = Polynomial::from(c);
 

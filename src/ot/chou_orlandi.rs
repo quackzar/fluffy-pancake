@@ -3,6 +3,7 @@
 #![allow(unused_imports)]
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
+use bincode::deserialize;
 use curve25519_dalek::constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
 use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
 use curve25519_dalek::montgomery::MontgomeryPoint;
@@ -10,6 +11,7 @@ use curve25519_dalek::scalar::Scalar;
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
+use serde::de::Visitor;
 
 use crate::hash;
 use crate::util::*;
@@ -102,20 +104,64 @@ impl ObliviousReceiver for OTReceiver {
 #[derive(Debug, Clone)]
 pub struct Public(Vec<CompressedEdwardsY>);
 
+
 impl Serialize for Public {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer {
-        todo!()
+        let mut bytes = Vec::new();
+        for p in &self.0 {
+            bytes.extend_from_slice(p.as_bytes());
+        }
+        serializer.serialize_bytes(&bytes)
     }
 }
 
+struct PublicVisitor;
+
+impl<'de> Visitor<'de> for PublicVisitor {
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let mut vec = Vec::with_capacity(v.len() / 32);
+        for i in 0..v.len() / 32 {
+            let p = CompressedEdwardsY::from_slice(&v[i * 32..(i + 1) * 32]);
+            vec.push(p);
+        }
+        Ok(Public(vec))
+    }
+
+    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_bytes(v)
+    }
+
+    type Value = Public;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a very special map")
+
+    }
+
+}
 
 impl<'de> Deserialize<'de> for Public {
+    fn deserialize_in_place<D>(deserializer: D, place: &mut Self) -> Result<(), D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Default implementation just delegates to `deserialize` impl.
+        *place = Deserialize::deserialize(deserializer)?;
+        Ok(())
+    }
+
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de> {
-        todo!()
+        deserializer.deserialize_bytes(PublicVisitor)
     }
 }
 
@@ -447,5 +493,18 @@ mod tests {
         let plaintext = cipher.decrypt(nonce, ciphertext.as_ref()).unwrap();
         let plaintext = std::str::from_utf8(&plaintext).unwrap();
         assert_eq!(plaintext, "Hello!");
+    }
+
+    #[test]
+    fn test_public_serialize() {
+        let public = Public(
+            (0..8).map(|i| CompressedEdwardsY::from_slice(&[i; 32])).collect()
+        );
+        let serialized = bincode::serialize(&public).unwrap();
+        let deserialized : Public = bincode::deserialize(&serialized).unwrap();
+        for (p0,p1) in public.0.iter().zip(deserialized.0.iter()) {
+            assert_eq!(p0, p1);
+        }
+
     }
 }

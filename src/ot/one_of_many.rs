@@ -70,7 +70,7 @@ impl ManyOTSender {
 
         let message = Message::new2(messages.as_slice());
         self.interal_sender.exchange(&message, ch)?;
-        let (s,r) = ch;
+        let (s,_r) = ch;
         s.send(bincode::serialize(&y)?)?;
         Ok(())
     }
@@ -108,7 +108,7 @@ impl ManyOTReceiver {
             keys.push(key);
         }
 
-        let (s,r) = ch;
+        let (_s,r) = ch;
         let y : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
         // reconstruct x from choice and keys

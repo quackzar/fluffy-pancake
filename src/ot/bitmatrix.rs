@@ -1,5 +1,5 @@
 use std::mem;
-use std::ops::IndexMut;
+
 use std::ops::Range;
 use std::ops::RangeFrom;
 use std::ops::RangeFull;
