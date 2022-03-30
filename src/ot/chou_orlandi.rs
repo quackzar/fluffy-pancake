@@ -19,6 +19,7 @@ use sha2::{Digest, Sha256};
 use rayon::prelude::*;
 
 use crate::ot::common::*;
+use crate::common::*;
 
 // Channel Impl.
 pub struct OTSender;
@@ -100,6 +101,23 @@ impl ObliviousReceiver for OTReceiver {
 
 #[derive(Debug, Clone)]
 pub struct Public(Vec<CompressedEdwardsY>);
+
+impl Serialize for Public {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        todo!()
+    }
+}
+
+
+impl<'de> Deserialize<'de> for Public {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> {
+        todo!()
+    }
+}
 
 pub type CiphertextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone, Serialize, Deserialize)]

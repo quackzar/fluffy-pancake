@@ -1,7 +1,7 @@
 use rand::Rng;
 use crate::hash;
 
-use super::common::{Channel, Error};
+use crate::common::*;
 
 #[derive(Debug)]
 enum CoinFlipError {

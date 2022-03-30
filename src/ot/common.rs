@@ -1,8 +1,6 @@
 use ductile::{ChannelReceiver, ChannelSender};
 use serde::{Deserialize, Serialize};
-pub type Channel<S> = (ChannelSender<S>, ChannelReceiver<S>);
-
-pub type Error = Box<dyn std::error::Error>;
+use crate::common::*;
 
 /// Pair of plaintexts
 pub type PlaintextPair = [Vec<u8>; 2];
