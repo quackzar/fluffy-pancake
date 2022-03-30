@@ -23,26 +23,32 @@ pub struct BitVector (
 );
 
 impl BitVector {
+    #[inline]
     pub fn zeros(size : usize) -> Self {
         Self::from_bytes(vec![0x00u8; size / 8])
     }
 
+    #[inline]
     pub fn ones(size : usize) -> Self {
         Self::from_bytes(vec![0xFFu8; size / 8])
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.0.len() * BLOCK_SIZE
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    #[inline]
     pub fn from_vec(vec: Vec<Block>) -> Self {
         Self(vec)
     }
 
+    #[inline]
     pub fn from_bytes(vec: Vec<u8>) -> Self {
         unsafe { // TODO: Fallback if alignment fails.
             let (head, body, tail) = vec.align_to::<Block>();
@@ -52,6 +58,7 @@ impl BitVector {
         }
     }
 
+    #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
             let (head, body, tail) = self.0.align_to::<u8>();
@@ -61,6 +68,7 @@ impl BitVector {
         }
     }
 
+    #[inline]
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
         unsafe {
             let (head, body, tail) = self.0.align_to_mut::<u8>();
@@ -70,6 +78,7 @@ impl BitVector {
         }
     }
 
+    #[inline]
     pub fn as_slice(&self) -> &[Block] {
         &self.0
     }
@@ -140,10 +149,12 @@ pub struct BitMatrix {
 }
 
 impl BitMatrix {
+    #[inline]
     pub fn new(rows: Vec<BitVector>) -> BitMatrix {
         BitMatrix { rows }
     }
 
+    #[inline]
     pub fn dims(&self) -> (usize, usize) {
         (self.rows.len(), self.rows[0].len())
     }
@@ -187,6 +198,7 @@ impl IntoIterator for BitMatrix {
     type Item = BitVector;
     type IntoIter = std::vec::IntoIter<BitVector>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.rows.into_iter()
     }
@@ -196,6 +208,7 @@ impl<'a> IntoIterator for &'a BitMatrix {
     type Item = &'a BitVector;
     type IntoIter = std::slice::Iter<'a, BitVector>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.rows.iter()
     }
@@ -204,6 +217,7 @@ impl<'a> IntoIterator for &'a BitMatrix {
 impl Index<usize> for BitMatrix {
     type Output = BitVector;
 
+    #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         &self.rows[index]
     }
@@ -213,6 +227,7 @@ use std::ops::RangeTo;
 impl Index<RangeTo<usize>> for BitMatrix {
     type Output = [BitVector];
 
+    #[inline]
     fn index(&self, index: RangeTo<usize>) -> &Self::Output {
         &self.rows[index]
     }
@@ -221,6 +236,7 @@ impl Index<RangeTo<usize>> for BitMatrix {
 impl Index<Range<usize>> for BitMatrix {
     type Output = [BitVector];
 
+    #[inline]
     fn index(&self, index: Range<usize>) -> &Self::Output {
         &self.rows[index]
     }
@@ -229,6 +245,7 @@ impl Index<Range<usize>> for BitMatrix {
 impl Index<RangeInclusive<usize>> for BitMatrix {
     type Output = [BitVector];
 
+    #[inline]
     fn index(&self, index: RangeInclusive<usize>) -> &Self::Output {
         &self.rows[index]
     }
@@ -237,6 +254,7 @@ impl Index<RangeInclusive<usize>> for BitMatrix {
 impl Index<RangeFrom<usize>> for BitMatrix {
     type Output = [BitVector];
 
+    #[inline]
     fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
         &self.rows[index]
     }
@@ -245,6 +263,7 @@ impl Index<RangeFrom<usize>> for BitMatrix {
 impl Index<RangeFull> for BitMatrix {
     type Output = [BitVector];
 
+    #[inline]
     fn index(&self, _index: RangeFull) -> &Self::Output {
         &self.rows[..]
     }
