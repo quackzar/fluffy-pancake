@@ -148,26 +148,6 @@ impl HalfKey {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct OneOfManyKey(WireBytes);
 
-#[derive(Serialize, Deserialize)]
-pub enum OneOfManyEvent {
-    // Server garbles, client evaluates
-    GCCircuit(GarbledCircuit),
-
-    OTKeyChallenge(Public),
-    OTKeyResponse(Public),
-    OTKeyPayload(EncryptedPayload),
-
-    OTChallenge(Public, Vec<Vec<u8>>),
-    OTResponse(Public),
-    OTPayload(EncryptedPayload),
-
-    // Server evaluates, client garbles
-    GCCircuitWithInput(GarbledCircuit, Vec<Wire>),
-
-    OTChallenges(Vec<Public>),
-    OTResponses(Vec<Public>),
-    OTPayloads(Vec<EncryptedPayload>),
-}
 
 fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
     let mut wires = Vec::with_capacity(bytes.len() / LENGTH);

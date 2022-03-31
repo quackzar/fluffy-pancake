@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+// #![warn(clippy::pedantic)]
 
 pub mod circuit;
 pub mod fpake;

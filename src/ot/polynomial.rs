@@ -292,9 +292,9 @@ pub unsafe fn polynomial_gf128_mul_lower(
 
 #[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_mul_ocelot(
-    result: &mut BitVec<Block>,
-    left: &BitVec<Block>,
-    right: &BitVec<Block>,
+    result: &mut BitVector,
+    left: &BitVector,
+    right: &BitVector,
 ) {
     use std::arch::x86_64::*;
     let left_bytes = left.as_raw_slice().as_ptr() as *const __m128i;
