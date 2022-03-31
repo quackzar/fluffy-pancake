@@ -37,6 +37,7 @@ fn one_of_many_local(n: u32, domain: u32, messages : Vec<Vec<u8>>) {
 }
 
 fn bench_1_of_n_ot(c: &mut Criterion) {
+    // Local
     for i in 1..=16u32 {
         let n = 1 << i;
         let domain = log2(n);
@@ -52,6 +53,9 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
             })
         });
     }
+
+    // TODO: LAN
+    // TODO: WAN
 }
 
 criterion_group!(benches, bench_1_of_n_ot,);

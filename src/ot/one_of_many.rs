@@ -24,7 +24,7 @@ fn fk(key: &[u8], choice: u32) -> Vec<u8> {
     }
 
     // Fill in the chunks
-    for i in 0..chunks {
+    for _ in 0..chunks {
         let mut hasher = Sha256::new();
         hasher.update(&result);
         let intermediate = hasher.finalize().to_vec();

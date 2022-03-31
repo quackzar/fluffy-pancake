@@ -33,6 +33,7 @@ fn bench_fpake(c: &mut Criterion) {
     c.bench_function("fPAKE 128bit", |b| b.iter(|| fpake(b"passwordpassword")));
 }
 
+/*
 fn fpake_one_of_many_bit(_password: &'static [u8]) {
     let passwords = [
         b"01234567".to_vec(),
@@ -45,7 +46,7 @@ fn fpake_one_of_many_bit(_password: &'static [u8]) {
         b"78901234".to_vec(),
     ];
     let passwords_2 = passwords.clone();
-    let number_of_passwords = passwords.len() as u16;
+    let number_of_passwords = passwords.len() as u32;
     let index = 1;
     let password = passwords[index as usize].clone();
     let password_2 = password.clone();
@@ -89,7 +90,7 @@ fn fpake_one_of_many_128bit() {
         b"7890123478901234".to_vec(),
     ];
     let passwords_2 = passwords.clone();
-    let number_of_passwords = passwords.len() as u16;
+    let number_of_passwords = passwords.len() as u32;
     let index = 1;
     let password = passwords[index as usize].clone();
     let password_2 = password.clone();
@@ -133,7 +134,7 @@ fn fpake_one_of_many_2048bit() {
         b"7890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234".to_vec(),
     ];
     let passwords_2 = passwords.clone();
-    let number_of_passwords = passwords.len() as u16;
+    let number_of_passwords = passwords.len() as u32;
     let index = 1;
     let password = passwords[index as usize].clone();
     let password_2 = password.clone();
@@ -297,7 +298,7 @@ fn fpake_one_of_many_2048bit_128passwords() {
         b"7890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234789012347890123478901234".to_vec(),
     ];
     let passwords_2 = passwords.clone();
-    let number_of_passwords = passwords.len() as u16;
+    let number_of_passwords = passwords.len() as u32;
     let index = 1;
     let password = passwords[index as usize].clone();
     let password_2 = password.clone();
@@ -329,7 +330,7 @@ fn fpake_one_of_many_2048bit_128passwords() {
     let _k2 = h2.join().unwrap();
 }
 
-fn bench_fpake_one_of_many(c: &mut Criterion) {
+fn bench_fpake_one_of_many_(c: &mut Criterion) {
     c.bench_function("fPAKE One of Many 128bit (8 passwords)", |b| {
         b.iter(fpake_one_of_many_128bit)
     });
@@ -339,6 +340,48 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
     c.bench_function("fPAKE One of Many 2048bit (128 passwords)", |b| {
         b.iter(fpake_one_of_many_2048bit_128passwords)
     });
+}
+*/
+
+fn bench_fpake_one_of_many(c: &mut Criterion) {
+    for i in 1..=16u32 {
+        let number_of_passwords = (1 << i) as u32;
+
+        c.bench_function(&format!("fPAKE One of Many 2048-bit ({} passwords)", number_of_passwords), |b| b.iter(|| {
+            let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
+            let passwords_2 = passwords.clone();
+            let index = 1;
+            let password = passwords[index as usize].clone();
+            let password_2 = password.clone();
+            let threshold = 0;
+
+            // Do the thing
+            let (s1, r1) = new_local_channel();
+            let (s2, r2) = new_local_channel();
+            let ch1 = (s2, r1);
+            let ch2 = (s1, r2);
+
+            let h1 = thread::spawn(move || {
+                // Party 1
+                let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
+                let k2 =
+                    OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &ch1)
+                        .unwrap();
+                k1.combine(k2);
+            });
+
+            let h2 = thread::spawn(move || {
+                // Party 1
+                let k1 =
+                    OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+                let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
+                k1.combine(k2);
+            });
+
+            let _k1 = h1.join().unwrap();
+            let _k2 = h2.join().unwrap();
+        }));
+    }
 }
 
 criterion_group!(benches, bench_fpake, bench_fpake_one_of_many);
