@@ -86,7 +86,7 @@ impl ObliviousSender for Sender {
         for i in 0..K {
             let delta = u8_vec_to_bool_vec(delta.as_bytes());
             if delta[i] {
-                q.push(u[i].clone() ^ t[i].clone());
+                q.push(&u[i] ^ &t[i]);
             } else {
                 q.push(t[i].clone());
             }
@@ -107,26 +107,12 @@ impl ObliviousSender for Sender {
             .collect();
         let mut q_sum = Polynomial::new();
         for (q, chi) in izip!(&q, &chi) {
-            // We would like to work in the finite field F_(2^k) in order to achieve this we will
-            // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
-            // represented directly as strings of bits and the sum of two of these polynomials will
-            // be the xor of these bitstrings (as dictated by the operations on the underlying field
-            // to which the coefficients belong). The product of two elements will be the standard
-            // polynomial products modulo x^k.
             let q = <&Polynomial>::from(q);
             let chi = <&Polynomial>::from(chi);
 
-            // q_sum.add_assign(&q.mul(chi));
             q_sum.mul_add_assign(q, chi);
-
-            // TODO: Depending on the performance of the bitvector it might be faster to add a check
-            //       here, so we avoid doing unnecessary work the last iteration. (This depends
-            //       greatly on the underlying implementation and the performance of the branch
-            //       predictor)
-            // polynomial_zero_bytes(&mut q_acc);
         }
 
-        // TODO: *Maybe* doesn't work
         {
             let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
             let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
