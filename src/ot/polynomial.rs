@@ -268,7 +268,7 @@ pub unsafe fn polynomial_gf128_mul_lower(
     let lower = _mm_slli_si128(ef, 64 / 8);
     let upper = _mm_srli_si128(ef, 64 / 8);
 
-    let left = _mm_xor_si128(d, upper);
+    let _left = _mm_xor_si128(d, upper);
     let right = _mm_xor_si128(c, lower);
 
     _mm_store_si128(result_bytes, right);
