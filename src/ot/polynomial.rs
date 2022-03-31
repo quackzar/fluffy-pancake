@@ -207,6 +207,86 @@ fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, right: &
     }
 }
 
+// https://github.com/RustCrypto/universal-hashes/blob/master/polyval/src/backend/soft64.rs
+fn polynonial_mul_acc_generic_fast(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+    fn bmul64(x: u64, y: u64) -> u64 {
+        use std::num::Wrapping;
+        let x0 = Wrapping(x & 0x1111_1111_1111_1111);
+        let x1 = Wrapping(x & 0x2222_2222_2222_2222);
+        let x2 = Wrapping(x & 0x4444_4444_4444_4444);
+        let x3 = Wrapping(x & 0x8888_8888_8888_8888);
+        let y0 = Wrapping(y & 0x1111_1111_1111_1111);
+        let y1 = Wrapping(y & 0x2222_2222_2222_2222);
+        let y2 = Wrapping(y & 0x4444_4444_4444_4444);
+        let y3 = Wrapping(y & 0x8888_8888_8888_8888);
+
+        let mut z0 = ((x0 * y0) ^ (x1 * y3) ^ (x2 * y2) ^ (x3 * y1)).0;
+        let mut z1 = ((x0 * y1) ^ (x1 * y0) ^ (x2 * y3) ^ (x3 * y2)).0;
+        let mut z2 = ((x0 * y2) ^ (x1 * y1) ^ (x2 * y0) ^ (x3 * y3)).0;
+        let mut z3 = ((x0 * y3) ^ (x1 * y2) ^ (x2 * y1) ^ (x3 * y0)).0;
+        z0 &= 0x1111_1111_1111_1111;
+        z1 &= 0x2222_2222_2222_2222;
+        z2 &= 0x4444_4444_4444_4444;
+        z3 &= 0x8888_8888_8888_8888;
+
+        z0 | z1 | z2 | z3
+    }
+
+    /// Bit-reverse a `u64` in constant time
+    fn rev64(mut x: u64) -> u64 {
+        x = ((x & 0x5555_5555_5555_5555) << 1) | ((x >> 1) & 0x5555_5555_5555_5555);
+        x = ((x & 0x3333_3333_3333_3333) << 2) | ((x >> 2) & 0x3333_3333_3333_3333);
+        x = ((x & 0x0f0f_0f0f_0f0f_0f0f) << 4) | ((x >> 4) & 0x0f0f_0f0f_0f0f_0f0f);
+        x = ((x & 0x00ff_00ff_00ff_00ff) << 8) | ((x >> 8) & 0x00ff_00ff_00ff_00ff);
+        x = ((x & 0xffff_0000_ffff) << 16) | ((x >> 16) & 0xffff_0000_ffff);
+        (x << 32) | (x >> 32)
+    }
+
+    let left = left.as_slice();
+    let right = right.as_slice();
+
+    let h0 = left[0];
+    let h1 = left[1];
+    let h0r = rev64(h0);
+    let h1r = rev64(h1);
+    let h2 = h0 ^ h1;
+    let h2r = h0r ^ h1r;
+
+    let y0 = right[0];
+    let y1 = right[1];
+    let y0r = rev64(y0);
+    let y1r = rev64(y1);
+    let y2 = y0 ^ y1;
+    let y2r = y0r ^ y1r;
+    let z0 = bmul64(y0, h0);
+    let z1 = bmul64(y1, h1);
+
+    let mut z2 = bmul64(y2, h2);
+    let mut z0h = bmul64(y0r, h0r);
+    let mut z1h = bmul64(y1r, h1r);
+    let mut z2h = bmul64(y2r, h2r);
+
+    z2 ^= z0 ^ z1;
+    z2h ^= z0h ^ z1h;
+    z0h = rev64(z0h) >> 1;
+    z1h = rev64(z1h) >> 1;
+    z2h = rev64(z2h) >> 1;
+
+    let v0 = z0;
+    let mut v1 = z0h ^ z2;
+    let mut v2 = z1 ^ z2h;
+    let mut v3 = z1h;
+
+    v2 ^= v0 ^ (v0 >> 1) ^ (v0 >> 2) ^ (v0 >> 7);
+    v1 ^= (v0 << 63) ^ (v0 << 62) ^ (v0 << 57);
+    v3 ^= v1 ^ (v1 >> 1) ^ (v1 >> 2) ^ (v1 >> 7);
+    v2 ^= (v1 << 63) ^ (v1 << 62) ^ (v1 << 57);
+
+    result.as_mut_slice()[0] ^= v2;
+    result.as_mut_slice()[1] ^= v3;
+}
+
+
 #[inline]
 #[cfg(target_arch = "x86_64")]
 fn polynomial_mul_acc(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
@@ -283,58 +363,54 @@ fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
 pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == 128);
     debug_assert!(right.len() == 128);
-    use std::arch::aarch64::*;
+    use core::{arch::aarch64::*, mem};
+
+    // shamelessly stolen from
+    // https://github.com/RustCrypto/universal-hashes/blob/master/polyval/src/backend/pmull.rs
+    // but that was just stolen from
+    // https://github.com/noloader/AES-Intrinsics/blob/master/clmul-arm.c
+    // so we are back to start.
     #[inline(always)]
-    unsafe fn pmull_low(a : poly64x2_t, b : poly64x2_t) -> poly64x2_t {
-        let c = vmull_p64(vgetq_lane_p64(a, 0),
-            vgetq_lane_p64(b, 0));
-    vreinterpretq_p64_p128(c)
+    unsafe fn pmull<const A_LANE: i32, const B_LANE: i32>(a: uint8x16_t, b: uint8x16_t) -> uint8x16_t {
+        mem::transmute(vmull_p64(
+            vgetq_lane_u64(vreinterpretq_u64_u8(a), A_LANE),
+            vgetq_lane_u64(vreinterpretq_u64_u8(b), B_LANE),
+        ))
     }
-    #[inline(always)]
-    unsafe fn pmull_high(a : poly64x2_t, b : poly64x2_t) -> poly64x2_t {
-        let c = vmull_high_p64(a, b);
-        vreinterpretq_p64_p128(c)
-    }
+    const MASK: u128 = 1 << 127 | 1 << 126 | 1 << 121 | 1;
+
     unsafe {
         let left = left.as_bytes().as_ptr() as *const u8;
         let right = right.as_bytes().as_ptr() as *const u8;
         let result = destination.as_mut_bytes().as_mut_ptr() as *mut u128;
 
-        // https://github.com/noloader/AES-Intrinsics/blob/master/clmul-arm.c
-        
-        // load them in and flip them?
-        let a = vreinterpretq_p64_p8(vrbitq_p8(vld1q_p8(left)));
-        let b = vreinterpretq_p64_p8(vrbitq_p8(vld1q_p8(right)));
+        let h = vld1q_u8(left);
+        let y = vld1q_u8(right);
 
         // polynomial multiply
-        let z = vdupq_n_p64(0);
-        let r0 = pmull_low(a, b);
-        let r1 = pmull_high(a, b);
-        let t0 = vextq_p64(a, b, 1);
-        let t1 = pmull_low(a, t0);
-        let t0 = pmull_high(a, t0);
-        let t0 = vaddq_p64(t0, t1);
-        let t1 = vextq_p64(z, t0, 1);
-        let r0 = vaddq_p64(r0, t1);
-        let t1 = vextq_p64(t0, z, 1);
-        let r1 = vaddq_p64(r1, t1);
+        let z = vdupq_n_u8(0);
+        let r0 = pmull::<0, 0>(h, y);
+        let r1 = pmull::<1, 1>(h, y);
+        let t0 = pmull::<0, 1>(h, y);
+        let t1 = pmull::<1, 0>(h, y);
+        let t0 = veorq_u8(t0, t1);
+        let t1 = vextq_u8(z, t0, 8);
+        let r0 = veorq_u8(r0, t1);
+        let t1 = vextq_u8(t0, z, 8);
+        let r1 = veorq_u8(r1, t1);
 
-        // reduction
-        let p = vreinterpretq_p64_u64(vdupq_n_u64(0x0000_0000_0000_0087));
-        let t0 = pmull_high(r1, p);
-        let t1 = vextq_p64(t0, z, 1);
-        let r1 = vaddq_p64(r1, t1);
-        let t1 = vextq_p64(z, t0, 1);
-        let r0 = vaddq_p64(r0, t1);
-        let t0 = pmull_low(r1, p);
-        let c = vaddq_p64(r0, t0);
+        // polynomial reduction
+        let p = mem::transmute(MASK);
+        let t0 = pmull::<0, 1>(r0, p);
+        let t1 = vextq_u8(t0, t0, 8);
+        let r0 = veorq_u8(r0, t1);
+        let t1 = pmull::<1, 1>(r0, p);
+        let r0 = veorq_u8(r0, t1);
 
-        // idk
-        let c = vreinterpretq_p8_p64(c);
-        let c = vrbitq_p8(c);
-
-        let c = vreinterpretq_p128_p8(c);
+        let c = veorq_u8(r0, r1);
+        let c = vreinterpretq_p128_u8(c);
         *result ^= c;
+
     }
 }
 
@@ -458,5 +534,29 @@ mod tests {
             assert_eq!(r1, r2);
         }
     }
+
+    #[test]
+    fn test_generic_fast_poly() {
+        use super::*;
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaChaRng;
+        let mut rng = ChaChaRng::from_seed([0; 32]);
+        for _ in 0..100 {
+            let a = rng.gen::<[u8; 16]>();
+            let b = rng.gen::<[u8; 16]>();
+            let a = BitVector::from_bytes(&a);
+            let b = BitVector::from_bytes(&b);
+            let mut c1 = BitVector::from_bytes(&[0x00; 16]);
+            polynonial_mul_acc_generic_fast(&mut c1, &a, &b);
+            let r1 = Polynomial::from(c1);
+
+            let mut c2 = BitVector::from_bytes(&[0x00; 16]);
+            polynomial_mul_acc(&mut c2, &a, &b);
+            let r2 = Polynomial::from(c2);
+
+            assert_eq!(r1, r2);
+        }
+    }
+
 
 }

@@ -85,6 +85,11 @@ impl BitVector {
     pub fn as_slice(&self) -> &[Block] {
         &self.0
     }
+
+    #[inline]
+    pub fn as_mut_slice(&mut self) -> &mut [Block] {
+        &mut self.0
+    }
 }
 
 impl BitXor for BitVector {
