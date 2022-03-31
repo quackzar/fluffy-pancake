@@ -10,17 +10,32 @@ use sha2::{Digest, Sha256};
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
 fn fk(key: &[u8], choice: u32) -> Vec<u8> {
+    let chunks = key.len() / 32;
+    let excess = key.len() % 32;
+    let mut result = Vec::with_capacity(key.len());
+
+    // Fill in the excess first
     let mut hasher = Sha256::new();
     hasher.update(choice.to_be_bytes());
     hasher.update(key);
-    let result = hasher.finalize().to_vec();
-
-    let mut output = Vec::with_capacity(key.len());
-    for i in 0..key.len() {
-        output.push(result[i % result.len()]);
+    let intermediate = hasher.finalize().to_vec();
+    for i in 0..excess {
+        result.push(intermediate[i]);
     }
 
-    output
+    // Fill in the chunks
+    for i in 0..chunks {
+        let mut hasher = Sha256::new();
+        hasher.update(&result);
+        let intermediate = hasher.finalize().to_vec();
+
+        for j in 0..32 {
+            result.push(intermediate[j]);
+        }
+    }
+
+    debug_assert!(key.len() == result.len());
+    return result;
 }
 
 pub struct ManyOTSender {
