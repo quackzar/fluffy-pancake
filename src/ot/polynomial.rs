@@ -261,22 +261,38 @@ fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
 }
 
 // https://stackoverflow.com/questions/38553881/convert-mm-clmulepi64-si128-to-vmull-high-p64
-#[allow(clippy::missing_safety_doc)]
 #[cfg(target_arch = "aarch64")]
-pub unsafe fn polynomial_mul_acc_arm64(left: &BitVector, right: &BitVector) -> BitVector {
+pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == 128);
     debug_assert!(right.len() == 128);
     use std::arch::aarch64::*;
-    let left = left.as_bytes().as_ptr() as *const u64;
-    let right = right.as_bytes().as_ptr() as *const u64;
+    unsafe {
+        let left = left.as_bytes().as_ptr() as *const u64;
+        let right = right.as_bytes().as_ptr() as *const u64;
+        let result = destination.as_mut_bytes().as_mut_ptr() as *mut u128;
 
-    let a = vmull_p64(*left, *right); // first 'low' 64 bits
-    let left = vld1q_p64(left);
-    let right = vld1q_p64(right);
-    let b = vmull_high_p64(left, right); // second 'high' 64 bits
-    let c = (b & 0xFFFFFFFF00000000u128) ^ (a & 0x00000000FFFFFFFFu128); // combine
-    let res: [Block; 128 / BLOCK_SIZE] = std::mem::transmute(c);
-    BitVector::from_vec(res.to_vec())
+        // let a = vmull_p64(*left, *right); // first 'low' 64 bits
+        // let left = vld1q_p64(left);
+        // let right = vld1q_p64(right);
+        // let b = vmull_high_p64(left, right); // second 'high' 64 bits
+        //
+        let a = vld1q_p64(left);
+        let b = vld1q_p64(right);
+        let c = vmull_p64(vgetq_lane_p64(a, 0), vgetq_lane_p64(b, 0));
+        let d = vmull_p64(vgetq_lane_p64(a, 1), vgetq_lane_p64(b, 1));
+        let e = vmull_p64(vgetq_lane_p64(a, 1), vgetq_lane_p64(b, 0));
+        let f = vmull_p64(vgetq_lane_p64(a, 0), vgetq_lane_p64(b, 1));
+
+        let ef = e ^ f;
+        let lower = ef << (64 / 8);
+        let upper = ef >> (64 / 8);
+
+        let left = d ^ upper;
+        let right = c ^ lower;
+        let xor = left ^ right;
+        
+        *result ^= xor;
+    }
 }
 
 #[cfg(test)]
@@ -292,13 +308,13 @@ mod tests {
             let b = thread_rng().gen::<[u8; 16]>();
             let a = BitVector::from_bytes(&a);
             let b = BitVector::from_bytes(&b);
-            // let mut c = BitVec::<Block>::from_slice(&[0x00; 16]);
-            let c = unsafe { polynomial_mul_acc_arm64(&a, &b) };
-            let r1 = Polynomial::from(c);
+            let mut c1 = BitVector::from_bytes(&[0x00; 16]);
+            polynomial_mul_acc_arm64(&mut c1, &a, &b);
+            let r1 = Polynomial::from(c1);
 
-            let _c = BitVector::from_bytes(&[0x00; 16]);
-            let c = polynomial_mul(&a, &b);
-            let r2 = Polynomial::from(c);
+            let mut c2 = BitVector::from_bytes(&[0x00; 16]);
+            polynomial_mul_acc(&mut c2, &a, &b);
+            let r2 = Polynomial::from(c2);
 
             assert_eq!(r1, r2);
         }
