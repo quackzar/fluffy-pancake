@@ -37,12 +37,12 @@ fn one_of_many_local(n: u32, domain: u32, messages : Vec<Vec<u8>>) {
 }
 
 fn bench_1_of_n_ot(c: &mut Criterion) {
-    for i in 1..16u32 {
+    for i in 1..=16u32 {
         let n = 1 << i;
         let domain = log2(n);
 
         let mut messages = Vec::with_capacity(n as usize);
-        for i in 0..n {
+        for _ in 0..n {
             messages.push(i.to_be_bytes().to_vec());
         }
 
