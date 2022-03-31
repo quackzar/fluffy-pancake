@@ -1,3 +1,4 @@
+use crate::common::{Error, Channel};
 // Library for fast OT.
 // use curve25519_dalek::edwards;
 use crate::ot::common::*;
@@ -22,133 +23,113 @@ fn fk(key: &[u8], choice: u16) -> Vec<u8> {
     output
 }
 
-// How to 1-to-n:
-// 1. Initiate
-// 2. Challenge respond
-// 3. Choose
-// 4. Finish
 
-// Bob: Initiate 1-to-n OT (initiated by the sender, Bob):
-// - Prepares keys and uses these to generate the required y values sent to Alice
-// - Creates challenges for Alice
-pub fn one_to_n_challenge_create(
-    domain: u16,
-    messages: &[Vec<u8>],
-) -> (Sender, Public, Vec<Vec<u8>>) {
-    let byte_length = messages[0].len();
+pub struct ManyOTSender {
+    pub interal_sender : OTSender,
+}
 
-    // 1. B: Prepare random keys
-    let l = messages.len();
-    debug_assert!(l == (1 << domain));
+impl ManyOTSender {
+    pub fn exchange(&self, messages : &[Vec<u8>], domain: u16, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
+        let byte_length = messages[0].len();
 
-    let mut keys: Vec<[Vec<u8>; 2]> = Vec::with_capacity(l);
-    for _i in 0..l {
-        let mut left = vec![0u8; byte_length];
-        let mut right = vec![0u8; byte_length];
+        // 1. B: Prepare random keys
+        let l = messages.len();
+        debug_assert!(l == (1 << domain));
 
-        random_bytes(&mut left);
-        random_bytes(&mut right);
+        let mut keys: Vec<[Vec<u8>; 2]> = Vec::with_capacity(l);
+        for _i in 0..l {
+            let mut left = vec![0u8; byte_length];
+            let mut right = vec![0u8; byte_length];
 
-        keys.push([left, right]);
-    }
+            random_bytes(&mut left);
+            random_bytes(&mut right);
 
-    let domain_max = 1 << domain; // 2^domain
-    let mut y = Vec::with_capacity(domain_max);
-    for i in 0..domain_max {
-        let mut value = messages[i].to_vec();
-        for j in 0..domain {
-            let bit = (i & (1 << j)) >> j;
-            let hash = fk(&keys[j as usize][bit as usize], i as u16);
-            value = xor_bytes(&value, &hash);
+            keys.push([left, right]);
         }
 
-        y.push(value.to_vec());
-    }
+        let domain_max = 1 << domain; // 2^domain
+        let mut y = Vec::with_capacity(domain_max);
+        for i in 0..domain_max {
+            let mut value = messages[i].to_vec();
+            for j in 0..domain {
+                let bit = (i & (1 << j)) >> j;
+                let hash = fk(&keys[j as usize][bit as usize], i as u16);
+                value = xor_bytes(&value, &hash);
+            }
 
-    // 2. Initiate 1-out-of-2 OTs by sending challenges
-    let mut messages = Vec::with_capacity(l);
-    for i in 0..l {
-        let m0 = keys[i as usize][0].to_vec();
-        let m1 = keys[i as usize][1].to_vec();
-        messages.push([m0, m1]);
-    }
-
-    let message = Message::new2(messages.as_slice());
-    let sender = Sender::new(&message);
-    let challenge = sender.public();
-
-    (sender, challenge, y)
-}
-
-// Alice: Respond to challenge from Bob
-// - Setup receivers
-// - Create responses for Bob
-pub fn one_to_n_challenge_respond(
-    domain: u16,
-    choice: u16,
-    challenge: &Public,
-) -> (Receiver<RetrievingPayload>, Public) {
-    let l = 1 << domain;
-
-    let mut choices: Vec<bool> = Vec::with_capacity(l);
-    for i in 0..l {
-        let bit = (choice & (1 << i)) >> i;
-        choices.push(bit == 1);
-    }
-    let receiver = Receiver::new(choices.as_slice());
-    let receiver = receiver.accept(challenge);
-    let response = receiver.public();
-
-    (receiver, response)
-}
-
-// Bob: Create payloads for Alice
-pub fn one_to_n_create_payloads(sender: &Sender, response: &Public) -> EncryptedPayload {
-    sender.accept(response)
-}
-
-// Alice: Chose a value
-pub fn one_to_n_choose(
-    domain: u16,
-    choice: u16,
-    receiver: &Receiver<RetrievingPayload>,
-    payload: &EncryptedPayload,
-    y: &Vec<Vec<u8>>,
-) -> Vec<u8> {
-    let l = 1 << domain;
-
-    // Convert payloads to keys
-    let mut keys: Vec<Vec<u8>> = Vec::with_capacity(l);
-    let messages = receiver.receive(payload);
-    for i in 0..l {
-        let message = &messages[i];
-        debug_assert_eq!(message.len() % LENGTH, 0);
-
-        let mut key = Vec::with_capacity(message.len());
-        for j in 0..message.len() {
-            key.push(message[j]);
+            y.push(value.to_vec());
         }
 
-        keys.push(key);
-    }
+        // 2. Initiate 1-out-of-2 OTs by sending challenges
+        let mut messages = Vec::with_capacity(l);
+        for i in 0..l {
+            let m0 = keys[i as usize][0].to_vec();
+            let m1 = keys[i as usize][1].to_vec();
+            messages.push([m0, m1]);
+        }
 
-    // Reconstruct X from keys and choice
-    let mut x = y[choice as usize].to_vec();
-    for i in 0..domain {
-        let hash = fk(&keys[i as usize], choice);
-        x = xor_bytes(&x, &hash);
+        let message = Message::new2(messages.as_slice());
+        self.interal_sender.exchange(&message, ch)?;
+        let (s,_r) = ch;
+        s.send(bincode::serialize(&y)?)?;
+        Ok(())
     }
+}
 
-    x
+pub struct ManyOTReceiver {
+    pub interal_receiver : OTReceiver,
+}
+
+
+impl ManyOTReceiver {
+    pub fn exchange(&self, choice : u16, domain: u16, ch: &Channel<Vec<u8>>) -> Result<Vec<u8>, Error> {
+        let l = 1 << domain;
+
+        // construct choices
+        let mut choices: Vec<bool> = Vec::with_capacity(l);
+        for i in 0..l {
+            let bit = (choice & (1 << i)) >> i;
+            choices.push(bit == 1);
+        }
+
+        let messages = self.interal_receiver.exchange(&choices, ch)?;
+
+        // convert payload to keys
+        let mut keys: Vec<Vec<u8>> = Vec::with_capacity(l);
+        for i in 0..l {
+            let message = &messages[i];
+            debug_assert_eq!(message.len() % LENGTH, 0);
+
+            let mut key = Vec::with_capacity(message.len());
+            for j in 0..message.len() {
+                key.push(message[j]);
+            }
+
+            keys.push(key);
+        }
+
+        let (_s,r) = ch;
+        let y : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+
+        // reconstruct x from choice and keys
+        let mut x = y[choice as usize].to_vec();
+        for i in 0..domain {
+            let hash = fk(&keys[i as usize], choice);
+            x = xor_bytes(&x, &hash);
+        }
+
+        Ok(x)
+
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::{log2, LENGTH};
+    use crate::{util::{log2, LENGTH}};
 
     #[test]
-    fn test_1_to_n() {
+    fn test_channel_1_to_n() {
         let n = 8u8;
         let domain = log2(n) as u16;
         let mut messages = Vec::with_capacity(n as usize);
@@ -157,19 +138,37 @@ mod tests {
         }
         let choice = 4;
 
-        // Initiate the OT by creating and responding to challenges
-        let (sender, challenge, y) = one_to_n_challenge_create(domain, &messages);
-        let (receiver, response) = one_to_n_challenge_respond(domain, choice, &challenge);
+        let (s1, r1) = ductile::new_local_channel();
+        let (s2, r2) = ductile::new_local_channel();
+        let ch1 = (s1, r2);
+        let ch2 = (s2, r1);
 
-        // Bob: Creates payloads for Alice
-        let payload = one_to_n_create_payloads(&sender, &response);
+        let orig_msg = messages.clone();
+        use std::thread;
+        let h1 = thread::Builder::new()
+            .name("Sender".to_string())
+            .spawn(move || {
+                let sender = ManyOTSender {
+                    interal_sender: crate::ot::chou_orlandi::OTSender,
+                };
+                sender.exchange(&messages, domain, &ch1).unwrap();
+            });
 
-        // Alice: Choose a value
-        let output = one_to_n_choose(domain, choice, &receiver, &payload, &y);
+        let h2 = thread::Builder::new()
+            .name("Receiver".to_string())
+            .spawn(move || {
+                let receiver = ManyOTReceiver {
+                    interal_receiver: crate::ot::chou_orlandi::OTReceiver,
+                };
+                receiver.exchange(choice, domain, &ch2).unwrap()
+            });
 
-        // Check that we actually got the thing we wanted
+        h1.unwrap().join().unwrap();
+        let output = h2.unwrap().join().unwrap();
+
         for i in 0..LENGTH {
-            assert_eq!(messages[choice as usize][i], output[i]);
+            assert_eq!(orig_msg[choice as usize][i], output[i]);
         }
+
     }
 }

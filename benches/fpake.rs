@@ -1,24 +1,26 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use crossbeam_channel::unbounded;
+use ductile::new_local_channel;
 use magic_pake::fpake::*;
 use std::thread;
 
 fn fpake(password: &'static [u8]) {
     let threshold = 0;
 
-    let (s1, r1) = unbounded();
-    let (s2, r2) = unbounded();
+    let (s1, r1) = new_local_channel();
+    let (s2, r2) = new_local_channel();
+    let ch1 = (s2, r1);
+    let ch2 = (s1, r2);
     let h1 = thread::spawn(move || {
         // Party 1
-        let k1 = HalfKey::garbler(password, threshold, &s2, &r1);
-        let k2 = HalfKey::evaluator(password, &s2, &r1);
+        let k1 = HalfKey::garbler(password, threshold, &ch1).unwrap();
+        let k2 = HalfKey::evaluator(password, &ch1).unwrap();
         k1.combine(k2)
     });
 
     let h2 = thread::spawn(move || {
         // Party 2
-        let k2 = HalfKey::evaluator(password, &s1, &r2);
-        let k1 = HalfKey::garbler(password, threshold, &s1, &r2);
+        let k2 = HalfKey::evaluator(password, &ch2).unwrap();
+        let k1 = HalfKey::garbler(password, threshold, &ch2).unwrap();
         k1.combine(k2)
     });
 
@@ -31,7 +33,7 @@ fn bench_fpake(c: &mut Criterion) {
     c.bench_function("fPAKE 128bit", |b| b.iter(|| fpake(b"passwordpassword")));
 }
 
-fn fpake_one_of_many_64bit() {
+fn fpake_one_of_many_bit(_password: &'static [u8]) {
     let passwords = [
         b"01234567".to_vec(),
         b"12345678".to_vec(),
@@ -50,26 +52,27 @@ fn fpake_one_of_many_64bit() {
     let threshold = 0;
 
     // Do the thing
-    let (s1, r1) = unbounded();
-    let (s2, r2) = unbounded();
+    let (s1, r1) = new_local_channel();
+    let (s2, r2) = new_local_channel();
+    let ch1 = (s2, r1);
+    let ch2 = (s1, r2);
     let h1 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
+        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
         let k2 = OneOfManyKey::garbler_client(
             &password,
             index,
             number_of_passwords,
             threshold,
-            &s2,
-            &r1,
-        );
+            &ch1,
+        ).unwrap();
         k1.combine(k2);
     });
 
     let h2 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &s1, &r2);
-        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &s1, &r2);
+        let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
         k1.combine(k2);
     });
 
@@ -96,26 +99,27 @@ fn fpake_one_of_many_128bit() {
     let threshold = 0;
 
     // Do the thing
-    let (s1, r1) = unbounded();
-    let (s2, r2) = unbounded();
+    let (s1, r1) = new_local_channel();
+    let (s2, r2) = new_local_channel();
+    let ch1 = (s2, r1);
+    let ch2 = (s1, r2);
     let h1 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
+        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
         let k2 = OneOfManyKey::garbler_client(
             &password,
             index,
             number_of_passwords,
             threshold,
-            &s2,
-            &r1,
-        );
+            &ch1,
+        ).unwrap();
         k1.combine(k2);
     });
 
     let h2 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &s1, &r2);
-        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &s1, &r2);
+        let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
         k1.combine(k2);
     });
 
@@ -142,26 +146,27 @@ fn fpake_one_of_many_2048bit() {
     let threshold = 0;
 
     // Do the thing
-    let (s1, r1) = unbounded();
-    let (s2, r2) = unbounded();
+    let (s1, r1) = new_local_channel();
+    let (s2, r2) = new_local_channel();
+    let ch1 = (s2, r1);
+    let ch2 = (s1, r2);
     let h1 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
+        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
         let k2 = OneOfManyKey::garbler_client(
             &password,
             index,
             number_of_passwords,
             threshold,
-            &s2,
-            &r1,
-        );
+            &ch1
+        ).unwrap();
         k1.combine(k2);
     });
 
     let h2 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &s1, &r2);
-        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &s1, &r2);
+        let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
         k1.combine(k2);
     });
 
@@ -308,26 +313,27 @@ fn fpake_one_of_many_2048bit_128passwords() {
     let threshold = 0;
 
     // Do the thing
-    let (s1, r1) = unbounded();
-    let (s2, r2) = unbounded();
+    let (s1, r1) = new_local_channel();
+    let (s2, r2) = new_local_channel();
+    let ch1 = (s2, r1);
+    let ch2 = (s1, r2);
     let h1 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &s2, &r1);
+        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
         let k2 = OneOfManyKey::garbler_client(
             &password,
             index,
             number_of_passwords,
             threshold,
-            &s2,
-            &r1,
-        );
+            &ch1
+        ).unwrap();
         k1.combine(k2);
     });
 
     let h2 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &s1, &r2);
-        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &s1, &r2);
+        let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
         k1.combine(k2);
     });
 
@@ -336,9 +342,6 @@ fn fpake_one_of_many_2048bit_128passwords() {
 }
 
 fn bench_fpake_one_of_many(c: &mut Criterion) {
-    c.bench_function("fPAKE One of Many 64bit (8 passwords)", |b| {
-        b.iter(fpake_one_of_many_64bit)
-    });
     c.bench_function("fPAKE One of Many 128bit (8 passwords)", |b| {
         b.iter(fpake_one_of_many_128bit)
     });

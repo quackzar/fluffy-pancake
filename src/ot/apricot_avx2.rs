@@ -1,6 +1,7 @@
 use crate::util::*;
 use crate::ot::common::*;
 use crate::ot::bitmatrix::*;
+use crate::common::*;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use bitvec::prelude::*;
@@ -22,21 +23,6 @@ pub struct Receiver {
 
 // -------------------------------------------------------------------------------------------------
 // TEMPORARY: Helper functions
-fn assert_compare_matrix(bitmatrix: &BitMatrix, raw: &Vec<Vec<u8>>, width: usize, height: usize) {
-    for row_idx in 0..height {
-        let raw_row = &raw[row_idx];
-        for col_idx in 0..width {
-            let raw_byte = raw_row[col_idx];
-            for b in 0..8 {
-                let raw_bit = (raw_byte >> b) & 1 > 0;
-                let col_bit_index = col_idx * 8 + b;
-                let bitmatrix_bit = bitmatrix[row_idx][col_bit_index];
-
-                debug_assert_eq!(bitmatrix_bit, raw_bit);
-            }
-        }
-    }
-}
 
 fn print_matrix(matrix: &Vec<Vec<u8>>) {
     let width = matrix[0].len();
@@ -107,17 +93,6 @@ fn array<const N: usize>(vector: &Vec<u8>) -> [u8; N] {
 
 // -------------------------------------------------------------------------------------------------
 // RNG
-#[inline]
-fn random_bytes(seed: [u8; 32], count: usize) -> BitVec<Block> {
-    let mut vector = vec![0u8; count];
-    let bytes = vector.as_mut_slice();
-
-    let mut random = ChaCha20Rng::from_seed(seed);
-    random.fill_bytes(bytes);
-
-    return BitVec::from_vec(vector);
-}
-
 #[inline]
 fn fill_random_bytes_from_seed(seed: &[u8; 32], bytes: &mut [u8]) {
     // TODO: Is it better to not have it be a reference?
@@ -221,7 +196,7 @@ impl ObliviousSender for Sender {
         debug_assert!(msg.len() % BLOCK_SIZE == 0, "Message length must be multiple of {BLOCK_SIZE} bytes");
 
         // TODO: What the hell are these?
-        let transaction_properties = TransactionProperties { msg_size: msg.len() };
+        let transaction_properties = TransactionProperties { msg_size: msg.len(), protocol: "Apricot AVX2".to_string() };
         validate_properties(&transaction_properties, channel)?;
 
         // "Constants" and things we need throughout
@@ -334,7 +309,7 @@ impl ObliviousReceiver for Receiver {
         debug_assert!(choices.len() % BLOCK_SIZE == 0, "Choices length must be multiple of {BLOCK_SIZE} bytes");
 
         // TODO: What the hell are these?
-        let transaction_properties = TransactionProperties { msg_size: choices.len() };
+        let transaction_properties = TransactionProperties { msg_size: choices.len(), protocol: "Apricot AVX2".to_string() };
         validate_properties(&transaction_properties, channel)?;
 
         // "Constants" and things we need throughout

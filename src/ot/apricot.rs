@@ -6,14 +6,14 @@ use crate::util::*;
 
 use crate::ot::bitmatrix::*;
 use crate::ot::common::*;
+use crate::common::*;
 use crate::ot::polynomial::*;
-use bitvec::prelude::*;
 use itertools::izip;
 
 /// The computational security paramter (k)
 const COMP_SEC: usize = 128;
 /// The statistical security paramter (s)
-const STAT_SEC: usize = 128;
+const STAT_SEC: usize = 64;
 
 pub struct Sender {
     pub bootstrap: Box<dyn ObliviousReceiver>,
@@ -35,6 +35,7 @@ impl ObliviousSender for Sender {
         );
         let pb = TransactionProperties {
             msg_size: msg.len(),
+            protocol: "Apricot".to_string(),
         };
         validate_properties(&pb, channel)?;
 
@@ -56,25 +57,25 @@ impl ObliviousSender for Sender {
         let mut rng = ChaCha20Rng::from_entropy();
 
         // INITIALIZATION
-        let delta: [u8; K / 8] = rng.gen();
+        let delta: [Block; K / BLOCK_SIZE] = rng.gen();
+        let delta = BitVector::from_vec(delta.to_vec());
 
         // do OT.
         let payload = self
             .bootstrap
-            .exchange(&u8_vec_to_bool_vec(&delta), channel)?;
+            .exchange(&u8_vec_to_bool_vec(delta.as_bytes()), channel)?;
         let mut seed = [[0u8; 32]; K];
         for (i, p) in payload.iter().enumerate() {
             seed[i].copy_from_slice(p);
         }
 
-        let delta: BitVec<Block> = BitVec::from_vec(delta.to_vec());
         // EXTENSION
         let t: BitMatrix = seed
             .iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
-                BitVec::from_vec(v)
+                BitVector::from_vec(v)
             })
             .collect();
 
@@ -83,6 +84,7 @@ impl ObliviousSender for Sender {
 
         let mut q = Vec::with_capacity(K);
         for i in 0..K {
+            let delta = u8_vec_to_bool_vec(delta.as_bytes());
             if delta[i] {
                 q.push(u[i].clone() ^ t[i].clone());
             } else {
@@ -97,14 +99,13 @@ impl ObliviousSender for Sender {
         // -- Check correlation --
         let seed = coinflip_receiver::<32>(channel)?;
         let mut prg = ChaCha20Rng::from_seed(seed);
-        let k_blocks = K / 8;
         let chi: BitMatrix = (0..l)
             .map(|_| {
-                let v = (0..k_blocks).map(|_| prg.gen::<Block>()).collect();
-                BitVec::from_vec(v)
+                let v : [Block; K/BLOCK_SIZE] = prg.gen();
+                BitVector::from_vec(v.to_vec())
             })
             .collect();
-        let mut q_sum = Polynomial::new(chi[0].len());
+        let mut q_sum = Polynomial::new();
         for (q, chi) in izip!(&q, &chi) {
             // We would like to work in the finite field F_(2^k) in order to achieve this we will
             // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
@@ -142,9 +143,9 @@ impl ObliviousSender for Sender {
             .iter()
             .enumerate()
             .map(|(j, q)| {
-                let v0 = hash!(j.to_be_bytes(), q.as_raw_slice()).to_vec();
-                let q = q.clone() ^ &delta;
-                let v1 = hash!(j.to_be_bytes(), q.as_raw_slice()).to_vec();
+                let v0 = hash!(j.to_be_bytes(), q.as_bytes()).to_vec();
+                let q = q ^ &delta;
+                let v1 = hash!(j.to_be_bytes(), q.as_bytes()).to_vec();
                 (v0, v1)
             })
             .unzip();
@@ -183,6 +184,7 @@ impl ObliviousReceiver for Receiver {
 
         let pb = TransactionProperties {
             msg_size: choices.len(),
+            protocol: "Apricot".to_string(),
         };
         validate_properties(&pb, channel)?;
         assert!(
@@ -218,12 +220,11 @@ impl ObliviousReceiver for Receiver {
             .iter()
             .map(|b| {
                 if !*b {
-                    vec![0x00u8; K / 8]
+                    BitVector::zeros(K)
                 } else {
-                    vec![0xFFu8; K / 8]
+                    BitVector::ones(K)
                 }
             })
-            .map(BitVec::from_vec)
             .collect();
         let x = x.transpose();
 
@@ -232,7 +233,7 @@ impl ObliviousReceiver for Receiver {
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
-                BitVec::from_vec(v)
+                BitVector::from_vec(v)
             })
             .collect();
 
@@ -241,7 +242,7 @@ impl ObliviousReceiver for Receiver {
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
-                BitVec::from_vec(v)
+                BitVector::from_vec(v)
             })
             .collect();
 
@@ -250,8 +251,8 @@ impl ObliviousReceiver for Receiver {
         let u: BitMatrix = izip!(x, t0, t1)
             .map(|(x, t0, t1)| {
                 let mut u = x;
-                u ^= &t0;
-                u ^= &t1;
+                u ^= t0;
+                u ^= t1;
                 u
             })
             .collect();
@@ -265,17 +266,15 @@ impl ObliviousReceiver for Receiver {
         // -- Check correlation --
         let seed = coinflip_sender::<32>(channel)?;
         let mut prg = ChaCha20Rng::from_seed(seed);
-        let k_blocks = K / 8;
         let chi: BitMatrix = (0..l)
             .map(|_| {
-                let v = (0..k_blocks).map(|_| prg.gen::<Block>()).collect();
-                BitVec::from_vec(v)
+                let v : [Block; K/BLOCK_SIZE] = prg.gen();
+                BitVector::from_vec(v.to_vec())
             })
             .collect();
 
-        let vector_len = chi[0].len();
-        let mut x_sum = Polynomial::new(vector_len);
-        let mut t_sum = Polynomial::new(vector_len);
+        let mut x_sum = Polynomial::new();
+        let mut t_sum = Polynomial::new();
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
             let t = <&Polynomial>::from(t);
             let chi = <&Polynomial>::from(chi);
@@ -295,7 +294,7 @@ impl ObliviousReceiver for Receiver {
         let v: Vec<Vec<u8>> = t
             .into_iter()
             .enumerate()
-            .map(|(j, t)| hash!(j.to_be_bytes(), t.as_raw_slice()).to_vec())
+            .map(|(j, t)| hash!(j.to_be_bytes(), t.as_bytes()).to_vec())
             .collect();
 
         // -- DeROT --
@@ -336,7 +335,7 @@ mod tests {
                 let sender = Sender {
                     bootstrap: Box::new(OTReceiver),
                 };
-                let msg = Message::new(&[b"Hello"; 8 << 2], &[b"World"; 8 << 2]);
+                let msg = Message::new(&[b"Hello"; 8 << 4], &[b"World"; 8 << 4]);
                 sender.exchange(&msg, &ch1).unwrap();
             });
 
@@ -346,7 +345,7 @@ mod tests {
                 let receiver = Receiver {
                     bootstrap: Box::new(OTSender),
                 };
-                let choices = [true; 8 << 2];
+                let choices = [true; 8 << 4];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
                 assert_eq!(msg[0], b"World");
             });

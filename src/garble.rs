@@ -285,6 +285,7 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
     (gc, encode_key, decode_key)
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct GarbledCircuit {
     pub circuit: Circuit,
     f: ProjMap,
