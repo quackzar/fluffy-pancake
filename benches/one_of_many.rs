@@ -1,12 +1,11 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use magic_pake::ot::one_of_many::*;
 
-
 fn log2(x: u16) -> u16 {
     ((std::mem::size_of::<u16>() * 8) as u32 - (x - 1).leading_zeros()) as u16
 }
 
-fn one_of_many(n: u16, domain: u16, messages : Vec<Vec<u8>>) {
+fn one_of_many(n: u16, domain: u16, messages: Vec<Vec<u8>>) {
     let choice = 4;
 
     let (s1, r1) = ductile::new_local_channel();
@@ -36,7 +35,6 @@ fn one_of_many(n: u16, domain: u16, messages : Vec<Vec<u8>>) {
     h1.unwrap().join().unwrap();
     h2.unwrap().join().unwrap();
 }
-
 
 fn bench_1_of_n_ot(c: &mut Criterion) {
     let n = 8u16;

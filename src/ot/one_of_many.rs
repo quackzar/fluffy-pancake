@@ -1,4 +1,4 @@
-use crate::common::{Error, Channel};
+use crate::common::{Channel, Error};
 // Library for fast OT.
 // use curve25519_dalek::edwards;
 use crate::ot::common::*;
@@ -23,13 +23,17 @@ fn fk(key: &[u8], choice: u16) -> Vec<u8> {
     output
 }
 
-
 pub struct ManyOTSender {
-    pub interal_sender : OTSender,
+    pub interal_sender: OTSender,
 }
 
 impl ManyOTSender {
-    pub fn exchange(&self, messages : &[Vec<u8>], domain: u16, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
+    pub fn exchange(
+        &self,
+        messages: &[Vec<u8>],
+        domain: u16,
+        ch: &Channel<Vec<u8>>,
+    ) -> Result<(), Error> {
         let byte_length = messages[0].len();
 
         // 1. B: Prepare random keys
@@ -70,19 +74,23 @@ impl ManyOTSender {
 
         let message = Message::new2(messages.as_slice());
         self.interal_sender.exchange(&message, ch)?;
-        let (s,_r) = ch;
+        let (s, _r) = ch;
         s.send(bincode::serialize(&y)?)?;
         Ok(())
     }
 }
 
 pub struct ManyOTReceiver {
-    pub interal_receiver : OTReceiver,
+    pub interal_receiver: OTReceiver,
 }
 
-
 impl ManyOTReceiver {
-    pub fn exchange(&self, choice : u16, domain: u16, ch: &Channel<Vec<u8>>) -> Result<Vec<u8>, Error> {
+    pub fn exchange(
+        &self,
+        choice: u16,
+        domain: u16,
+        ch: &Channel<Vec<u8>>,
+    ) -> Result<Vec<u8>, Error> {
         let l = 1 << domain;
 
         // construct choices
@@ -108,8 +116,8 @@ impl ManyOTReceiver {
             keys.push(key);
         }
 
-        let (_s,r) = ch;
-        let y : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let (_s, r) = ch;
+        let y: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
         // reconstruct x from choice and keys
         let mut x = y[choice as usize].to_vec();
@@ -119,14 +127,13 @@ impl ManyOTReceiver {
         }
 
         Ok(x)
-
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{util::{log2, LENGTH}};
+    use crate::util::{log2, LENGTH};
 
     #[test]
     fn test_channel_1_to_n() {
@@ -169,6 +176,5 @@ mod tests {
         for i in 0..LENGTH {
             assert_eq!(orig_msg[choice as usize][i], output[i]);
         }
-
     }
 }

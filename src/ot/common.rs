@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::common::*;
+use serde::{Deserialize, Serialize};
 
 /// Pair of plaintexts
 pub type PlaintextPair = [Vec<u8>; 2];
