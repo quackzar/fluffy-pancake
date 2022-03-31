@@ -5,7 +5,6 @@ use crate::ot::common::*;
 use crate::util::*;
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
-use bitvec::prelude::*;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 

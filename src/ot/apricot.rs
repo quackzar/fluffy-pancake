@@ -38,14 +38,10 @@ impl ObliviousSender for Sender {
             protocol: "Apricot".to_string(),
         };
         validate_properties(&pb, channel)?;
-
         let l = msg.len(); // 8 bits stored in a byte.
-
-        // The parameter kappa.
-        const K: usize = COMP_SEC;
+        const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
-
-        let l = l + K + S;
+        let l = l + K + S; // refit with security padding
 
         // COTe
         use rand::Rng;
@@ -91,9 +87,8 @@ impl ObliviousSender for Sender {
                 q.push(t[i].clone());
             }
         }
-        let q = BitMatrix::new(q);
 
-        // Sender outputs `q_j`
+        let q = BitMatrix::new(q);
         let q = q.transpose();
 
         // -- Check correlation --
@@ -129,9 +124,9 @@ impl ObliviousSender for Sender {
             .iter()
             .enumerate()
             .map(|(j, q)| {
-                let v0 = hash!(j.to_be_bytes(), q.as_bytes()).to_vec();
+                let v0 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
                 let q = q ^ &delta;
-                let v1 = hash!(j.to_be_bytes(), q.as_bytes()).to_vec();
+                let v1 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
                 (v0, v1)
             })
             .unzip();
@@ -232,9 +227,8 @@ impl ObliviousReceiver for Receiver {
             })
             .collect();
 
-        let t = t0.transpose(); // saving this for later
 
-        let u: BitMatrix = izip!(x, t0, t1)
+        let u: BitMatrix = izip!(x, &t0, &t1)
             .map(|(x, t0, t1)| {
                 let mut u = x;
                 u ^= t0;
@@ -246,6 +240,8 @@ impl ObliviousReceiver for Receiver {
         let (s, _) = channel;
         let u = bincode::serialize(&u)?;
         s.send(u)?;
+
+        let t = t0.transpose();
 
         // Receiver outputs `t_j`
 
@@ -268,11 +264,9 @@ impl ObliviousReceiver for Receiver {
                 x_sum += chi
             }
 
-            // t_sum.add_assign(&t.mul(chi));
             t_sum.mul_add_assign(t, chi);
-
-            // polynomial_zero_bytes(&mut t_acc);
         }
+
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
 
@@ -280,7 +274,7 @@ impl ObliviousReceiver for Receiver {
         let v: Vec<Vec<u8>> = t
             .into_iter()
             .enumerate()
-            .map(|(j, t)| hash!(j.to_be_bytes(), t.as_bytes()).to_vec())
+            .map(|(j, t)| hash!(j.to_le_bytes(), t.as_bytes()).to_vec())
             .collect();
 
         // -- DeROT --
