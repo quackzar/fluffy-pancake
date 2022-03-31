@@ -1,7 +1,5 @@
 use crate::circuit::*;
 use crate::garble::*;
-use crate::ot::chou_orlandi::EncryptedPayload;
-use crate::ot::chou_orlandi::Public;
 use crate::ot::chou_orlandi::{OTReceiver, OTSender};
 use crate::ot::common::*;
 use crate::ot::common::Message as MessagePair;
@@ -69,8 +67,6 @@ pub struct HalfKey(WireBytes);
 pub struct Key(WireBytes);
 
 use crate::util;
-use serde::Deserialize;
-use serde::Serialize;
 
 
 impl HalfKey {

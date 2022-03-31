@@ -25,12 +25,12 @@ pub struct BitVector (
 impl BitVector {
     #[inline]
     pub fn zeros(size : usize) -> Self {
-        Self::from_bytes(vec![0x00u8; size / 8])
+        Self::from_bytes(&vec![0x00u8; size / 8])
     }
 
     #[inline]
     pub fn ones(size : usize) -> Self {
-        Self::from_bytes(vec![0xFFu8; size / 8])
+        Self::from_bytes(&vec![0xFFu8; size / 8])
     }
 
     #[inline]
@@ -48,8 +48,9 @@ impl BitVector {
         Self(vec)
     }
 
+
     #[inline]
-    pub fn from_bytes(vec: Vec<u8>) -> Self {
+    pub fn from_bytes(vec: &[u8]) -> Self {
         unsafe { // TODO: Fallback if alignment fails.
             let (head, body, tail) = vec.align_to::<Block>();
             debug_assert!(tail.is_empty());
@@ -57,6 +58,7 @@ impl BitVector {
             Self::from_vec(body.to_vec())
         }
     }
+
 
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
