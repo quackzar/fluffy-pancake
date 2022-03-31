@@ -1,14 +1,14 @@
 use std::mem;
 
+use std::ops::BitAnd;
+use std::ops::BitAndAssign;
+use std::ops::BitXor;
+use std::ops::BitXorAssign;
+use std::ops::Index;
 use std::ops::Range;
 use std::ops::RangeFrom;
 use std::ops::RangeFull;
 use std::ops::RangeInclusive;
-use std::ops::BitXor;
-use std::ops::BitAnd;
-use std::ops::BitXorAssign;
-use std::ops::BitAndAssign;
-use std::ops::Index;
 
 // BitMatrix and BitVector
 use serde::{Deserialize, Serialize};
@@ -18,18 +18,16 @@ pub const BLOCK_SIZE: usize = mem::size_of::<Block>() * 8;
 
 #[repr(transparent)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BitVector (
-    Vec<Block>
-);
+pub struct BitVector(Vec<Block>);
 
 impl BitVector {
     #[inline]
-    pub fn zeros(size : usize) -> Self {
+    pub fn zeros(size: usize) -> Self {
         Self::from_bytes(&vec![0x00u8; size / 8])
     }
 
     #[inline]
-    pub fn ones(size : usize) -> Self {
+    pub fn ones(size: usize) -> Self {
         Self::from_bytes(&vec![0xFFu8; size / 8])
     }
 
@@ -48,17 +46,16 @@ impl BitVector {
         Self(vec)
     }
 
-
     #[inline]
     pub fn from_bytes(vec: &[u8]) -> Self {
-        unsafe { // TODO: Fallback if alignment fails.
+        unsafe {
+            // TODO: Fallback if alignment fails.
             let (head, body, tail) = vec.align_to::<Block>();
             debug_assert!(tail.is_empty());
             debug_assert!(head.is_empty());
             Self::from_vec(body.to_vec())
         }
     }
-
 
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
@@ -91,7 +88,13 @@ impl BitXor for BitVector {
 
     #[inline]
     fn bitxor(self, rhs: Self) -> Self::Output {
-        Self::Output::from_vec(self.0.iter().zip(rhs.0.iter()).map(|(l, r)| l ^ r).collect())
+        Self::Output::from_vec(
+            self.0
+                .iter()
+                .zip(rhs.0.iter())
+                .map(|(l, r)| l ^ r)
+                .collect(),
+        )
     }
 }
 
@@ -100,7 +103,13 @@ impl BitXor for &BitVector {
 
     #[inline]
     fn bitxor(self, rhs: Self) -> Self::Output {
-        Self::Output::from_vec(self.0.iter().zip(rhs.0.iter()).map(|(l, r)| l ^ r).collect())
+        Self::Output::from_vec(
+            self.0
+                .iter()
+                .zip(rhs.0.iter())
+                .map(|(l, r)| l ^ r)
+                .collect(),
+        )
     }
 }
 
@@ -109,7 +118,13 @@ impl BitAnd for BitVector {
 
     #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
-        Self::Output::from_vec(self.0.iter().zip(rhs.0.iter()).map(|(l, r)| l & r).collect())
+        Self::Output::from_vec(
+            self.0
+                .iter()
+                .zip(rhs.0.iter())
+                .map(|(l, r)| l & r)
+                .collect(),
+        )
     }
 }
 
@@ -133,7 +148,6 @@ impl BitXorAssign<&Self> for BitVector {
         }
     }
 }
-
 
 impl BitAndAssign for BitVector {
     #[inline]
@@ -165,10 +179,10 @@ impl BitMatrix {
     // // https://stackoverflow.com/questions/31742483/how-would-you-transpose-a-binary-matrix
     pub fn transpose(&self) -> BitMatrix {
         let (rows, cols) = self.dims();
-        let mut raw : Vec<Vec<Block>> = vec![vec![0; rows/BLOCK_SIZE]; cols];
+        let mut raw: Vec<Vec<Block>> = vec![vec![0; rows / BLOCK_SIZE]; cols];
         let source = self.rows.as_slice();
         for row_idx in 0..rows {
-            for col_idx in 0..cols/BLOCK_SIZE {
+            for col_idx in 0..cols / BLOCK_SIZE {
                 let source_byte = source[row_idx].as_slice()[col_idx];
                 for b in 0..BLOCK_SIZE {
                     let source_bit = (source_byte >> b) & 1;
@@ -181,8 +195,8 @@ impl BitMatrix {
                 }
             }
         }
-        let raw : Vec<BitVector> = unsafe { mem::transmute(raw) };
-        BitMatrix{ rows: raw }
+        let raw: Vec<BitVector> = unsafe { mem::transmute(raw) };
+        BitMatrix { rows: raw }
     }
 }
 

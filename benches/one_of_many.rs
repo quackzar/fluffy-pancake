@@ -1,7 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use magic_pake::ot::one_of_many::*;
 
-
 fn log2(x: u32) -> u32 {
     ((std::mem::size_of::<u32>() * 8) as u32 - (x - 1).leading_zeros()) as u32
 }
@@ -36,7 +35,6 @@ fn one_of_many_local(n: u32, domain: u32, messages : Vec<Vec<u8>>) {
     h1.unwrap().join().unwrap();
     h2.unwrap().join().unwrap();
 }
-
 
 fn bench_1_of_n_ot(c: &mut Criterion) {
     for i in 1..16u32 {

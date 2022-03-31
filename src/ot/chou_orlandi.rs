@@ -20,8 +20,8 @@ use sha2::{Digest, Sha256};
 
 use rayon::prelude::*;
 
-use crate::ot::common::*;
 use crate::common::*;
+use crate::ot::common::*;
 
 // Channel Impl.
 pub struct OTSender;
@@ -104,11 +104,11 @@ impl ObliviousReceiver for OTReceiver {
 #[derive(Debug, Clone)]
 pub struct Public(Vec<CompressedEdwardsY>);
 
-
 impl Serialize for Public {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         let mut bytes = Vec::new();
         for p in &self.0 {
             bytes.extend_from_slice(p.as_bytes());
@@ -143,9 +143,7 @@ impl<'de> Visitor<'de> for PublicVisitor {
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("a very special map")
-
     }
-
 }
 
 impl<'de> Deserialize<'de> for Public {
@@ -160,7 +158,8 @@ impl<'de> Deserialize<'de> for Public {
 
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         deserializer.deserialize_bytes(PublicVisitor)
     }
 }
@@ -498,13 +497,14 @@ mod tests {
     #[test]
     fn test_public_serialize() {
         let public = Public(
-            (0..8).map(|i| CompressedEdwardsY::from_slice(&[i; 32])).collect()
+            (0..8)
+                .map(|i| CompressedEdwardsY::from_slice(&[i; 32]))
+                .collect(),
         );
         let serialized = bincode::serialize(&public).unwrap();
-        let deserialized : Public = bincode::deserialize(&serialized).unwrap();
-        for (p0,p1) in public.0.iter().zip(deserialized.0.iter()) {
+        let deserialized: Public = bincode::deserialize(&serialized).unwrap();
+        for (p0, p1) in public.0.iter().zip(deserialized.0.iter()) {
             assert_eq!(p0, p1);
         }
-
     }
 }

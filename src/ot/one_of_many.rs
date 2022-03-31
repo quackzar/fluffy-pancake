@@ -1,4 +1,4 @@
-use crate::common::{Error, Channel};
+use crate::common::{Channel, Error};
 // Library for fast OT.
 // use curve25519_dalek::edwards;
 use crate::ot::common::*;
@@ -23,9 +23,8 @@ fn fk(key: &[u8], choice: u32) -> Vec<u8> {
     output
 }
 
-
 pub struct ManyOTSender {
-    pub interal_sender : OTSender,
+    pub interal_sender: OTSender,
 }
 
 impl ManyOTSender {
@@ -70,16 +69,15 @@ impl ManyOTSender {
 
         let message = Message::new2(messages.as_slice());
         self.interal_sender.exchange(&message, ch)?;
-        let (s,_r) = ch;
+        let (s, _r) = ch;
         s.send(bincode::serialize(&y)?)?;
         Ok(())
     }
 }
 
 pub struct ManyOTReceiver {
-    pub interal_receiver : OTReceiver,
+    pub interal_receiver: OTReceiver,
 }
-
 
 impl ManyOTReceiver {
     pub fn exchange(&self, choice : u32, domain: u32, ch: &Channel<Vec<u8>>) -> Result<Vec<u8>, Error> {
@@ -108,8 +106,8 @@ impl ManyOTReceiver {
             keys.push(key);
         }
 
-        let (_s,r) = ch;
-        let y : Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let (_s, r) = ch;
+        let y: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
         // reconstruct x from choice and keys
         let mut x = y[choice as usize].to_vec();
@@ -119,14 +117,13 @@ impl ManyOTReceiver {
         }
 
         Ok(x)
-
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{util::{log2, LENGTH}};
+    use crate::util::{log2, LENGTH};
 
     #[test]
     fn test_channel_1_to_n() {
@@ -169,6 +166,5 @@ mod tests {
         for i in 0..LENGTH {
             assert_eq!(orig_msg[choice as usize][i], output[i]);
         }
-
     }
 }

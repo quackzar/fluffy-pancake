@@ -4,9 +4,9 @@ use crate::ot::coinflip::coinflip_receiver;
 use crate::ot::coinflip::coinflip_sender;
 use crate::util::*;
 
+use crate::common::*;
 use crate::ot::bitmatrix::*;
 use crate::ot::common::*;
-use crate::common::*;
 use crate::ot::polynomial::*;
 use itertools::izip;
 
@@ -101,7 +101,7 @@ impl ObliviousSender for Sender {
         let mut prg = ChaCha20Rng::from_seed(seed);
         let chi: BitMatrix = (0..l)
             .map(|_| {
-                let v : [Block; K/BLOCK_SIZE] = prg.gen();
+                let v: [Block; K / BLOCK_SIZE] = prg.gen();
                 BitVector::from_vec(v.to_vec())
             })
             .collect();
@@ -268,7 +268,7 @@ impl ObliviousReceiver for Receiver {
         let mut prg = ChaCha20Rng::from_seed(seed);
         let chi: BitMatrix = (0..l)
             .map(|_| {
-                let v : [Block; K/BLOCK_SIZE] = prg.gen();
+                let v: [Block; K / BLOCK_SIZE] = prg.gen();
                 BitVector::from_vec(v.to_vec())
             })
             .collect();

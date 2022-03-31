@@ -44,8 +44,6 @@ impl Default for Polynomial {
     }
 }
 
-
-
 impl Add for Polynomial {
     type Output = Self;
 
@@ -116,10 +114,7 @@ impl Display for Polynomial {
 }
 
 // NOTE: This is dependent on the size of the block being 8 bit.
-pub fn polynomial_mul_bytes(
-    left: &BitVector,
-    right: &BitVector,
-) -> BitVector {
+pub fn polynomial_mul_bytes(left: &BitVector, right: &BitVector) -> BitVector {
     debug_assert!(left.len() == right.len());
 
     let size = left.len();
@@ -153,11 +148,7 @@ pub fn polynomial_mul_bytes(
     BitVector::from_bytes(&intermediate_bytes[..size_bytes])
 }
 
-pub fn polynomial_mul_acc_bytes(
-    result: &mut BitVector,
-    left: &BitVector,
-    right: &BitVector,
-) {
+pub fn polynomial_mul_acc_bytes(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -195,11 +186,7 @@ pub fn polynomial_mul_acc_bytes(
     }
 }
 
-pub fn polynomial_mul_acc_bytes_alt(
-    result: &mut BitVector,
-    left: &BitVector,
-    right: &BitVector,
-) {
+pub fn polynomial_mul_acc_bytes_alt(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -233,9 +220,7 @@ pub fn polynomial_mul_acc_bytes_alt(
 }
 
 #[cfg(target_arch = "x86_64")]
-use {
-    std::arch::x86_64::*
-};
+use std::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
@@ -257,7 +242,7 @@ pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     let h = _mm_xor_si128(h, f);
     let h = _mm_xor_si128(h, g);
 
-    return _mm_xor_si128(h, x10);
+    _mm_xor_si128(h, x10)
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -283,7 +268,7 @@ pub unsafe fn polynomial_gf128_mul_lower(
     let lower = _mm_slli_si128(ef, 64 / 8);
     let upper = _mm_srli_si128(ef, 64 / 8);
 
-    let left = _mm_xor_si128(d, upper);
+    let _left = _mm_xor_si128(d, upper);
     let right = _mm_xor_si128(c, lower);
 
     _mm_store_si128(result_bytes, right);
@@ -350,11 +335,7 @@ pub unsafe fn polynomial_gf128_mul_reduce(
 }
 
 #[cfg(target_arch = "x86_64")]
-pub unsafe fn polynomial_mul_acc_fast(
-    result: &mut BitVector,
-    left: &BitVector,
-    right: &BitVector,
-) {
+pub unsafe fn polynomial_mul_acc_fast(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     use std::arch::x86_64::*;
     let left_bytes = left.as_bytes().as_ptr() as *const __m128i;
     let right_bytes = right.as_bytes().as_ptr() as *const __m128i;
@@ -382,10 +363,7 @@ pub unsafe fn polynomial_mul_acc_fast(
 // https://stackoverflow.com/questions/38553881/convert-mm-clmulepi64-si128-to-vmull-high-p64
 #[allow(clippy::missing_safety_doc)]
 #[cfg(target_arch = "aarch64")]
-pub unsafe fn polynomial_mul_acc_fast(
-    left: &BitVector,
-    right: &BitVector,
-) -> BitVector {
+pub unsafe fn polynomial_mul_acc_fast(left: &BitVector, right: &BitVector) -> BitVector {
     debug_assert!(left.len() == 128);
     debug_assert!(right.len() == 128);
     use std::arch::aarch64::*;

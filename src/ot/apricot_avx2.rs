@@ -1,12 +1,12 @@
-use crate::util::*;
-use crate::ot::common::*;
-use crate::ot::bitmatrix::*;
 use crate::common::*;
-use rand::{Rng, RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
-use bitvec::prelude::*;
+
+use crate::ot::common::*;
+use crate::util::*;
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
+use bitvec::prelude::*;
+use rand::{Rng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 const K: usize = 128;
 const S: usize = 128;
@@ -83,7 +83,7 @@ unsafe fn bool_vec(bytes: &[u8]) -> Vec<bool> {
         }
     }
 
-    return bits;
+    bits
 }
 
 #[inline]
@@ -155,7 +155,7 @@ fn eq(left: &[u8], right: &[u8]) -> bool {
         }
     }
 
-    return true;
+    true
 }
 
 #[inline]
@@ -189,14 +189,22 @@ fn polynomial_mul_acc(destination: &mut [u8], left: &[u8], right: &[u8]) {
 // -------------------------------------------------------------------------------------------------
 // Polynomials
 
-
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        debug_assert!(msg.len() >= BLOCK_SIZE, "Message must be longer than {BLOCK_SIZE} bytes");
-        debug_assert!(msg.len() % BLOCK_SIZE == 0, "Message length must be multiple of {BLOCK_SIZE} bytes");
+        debug_assert!(
+            msg.len() >= BLOCK_SIZE,
+            "Message must be longer than {BLOCK_SIZE} bytes"
+        );
+        debug_assert!(
+            msg.len() % BLOCK_SIZE == 0,
+            "Message length must be multiple of {BLOCK_SIZE} bytes"
+        );
 
         // TODO: What the hell are these?
-        let transaction_properties = TransactionProperties { msg_size: msg.len(), protocol: "Apricot AVX2".to_string() };
+        let transaction_properties = TransactionProperties {
+            msg_size: msg.len(),
+            protocol: "Apricot AVX2".to_string(),
+        };
         validate_properties(&transaction_properties, channel)?;
 
         // "Constants" and things we need throughout
@@ -232,7 +240,7 @@ impl ObliviousSender for Sender {
         let mut q_orig = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
             let row = q_orig[row_idx].as_mut_slice();
-            let d = (delta[row_idx / 8] >> row_idx % 8) & 1;
+            let d = (delta[row_idx / 8] >> (row_idx % 8)) & 1;
             if d == 1 {
                 xor_inplace(row, u_raw[row_idx].as_slice());
             }
@@ -299,17 +307,26 @@ impl ObliviousSender for Sender {
         s.send(bincode::serialize(&d0_raw)?)?;
         s.send(bincode::serialize(&d1_raw)?)?;
 
-        return Ok(());
+        Ok(())
     }
 }
 
 impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
-        debug_assert!(choices.len() >= BLOCK_SIZE, "Choices must be longer than {BLOCK_SIZE} bytes");
-        debug_assert!(choices.len() % BLOCK_SIZE == 0, "Choices length must be multiple of {BLOCK_SIZE} bytes");
+        debug_assert!(
+            choices.len() >= BLOCK_SIZE,
+            "Choices must be longer than {BLOCK_SIZE} bytes"
+        );
+        debug_assert!(
+            choices.len() % BLOCK_SIZE == 0,
+            "Choices length must be multiple of {BLOCK_SIZE} bytes"
+        );
 
         // TODO: What the hell are these?
-        let transaction_properties = TransactionProperties { msg_size: choices.len(), protocol: "Apricot AVX2".to_string() };
+        let transaction_properties = TransactionProperties {
+            msg_size: choices.len(),
+            protocol: "Apricot AVX2".to_string(),
+        };
         validate_properties(&transaction_properties, channel)?;
 
         // "Constants" and things we need throughout
@@ -439,7 +456,6 @@ impl ObliviousReceiver for Receiver {
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
 
-
         // -- Randomize --
         let mut v_raw = vec![vec![0u8; 32]; matrix_height];
         for row_idx in 0..matrix_height {
@@ -456,13 +472,17 @@ impl ObliviousReceiver for Receiver {
             let nonce = Nonce::from_slice(b"unique nonce");
             let cipher = Aes256Gcm::new(Key::from_slice(v_raw[i].as_slice()));
             // TODO: This we can probably optimize
-            let d = if choices[i] { d1[i].as_slice() } else { d0[i].as_slice() };
+            let d = if choices[i] {
+                d1[i].as_slice()
+            } else {
+                d0[i].as_slice()
+            };
 
             let c = cipher.decrypt(nonce, d).unwrap();
             y.push(c);
         }
 
-        return Ok(y);
+        Ok(y)
     }
 }
 
