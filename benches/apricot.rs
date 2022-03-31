@@ -39,19 +39,25 @@ fn run_ot(msg: &Message, choices: &[bool]) {
 }
 
 fn bench(c: &mut Criterion) {
-    const N: usize = 1048 * 8;
-    let name: String = format!("Apricot with {}", N);
-    let circuit = build_circuit(N / 2, 0);
-    let (_, enc, _) = garble::garble(&circuit);
-    let enc = BinaryEncodingKey::from(enc);
-    let enc: Vec<_> = enc
-        .zipped()
-        .iter()
-        .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
-        .collect();
-    let choices = vec![false; N];
-    let msg = Message::new2(&enc);
-    c.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
+    // Local
+    for i in 8..=16 {
+        let n = 1 << i;
+        let name: String = format!("Local Apricot OT, {} messages", n);
+        let circuit = build_circuit(n / 2, 0);
+        let (_, enc, _) = garble::garble(&circuit);
+        let enc = BinaryEncodingKey::from(enc);
+        let enc: Vec<_> = enc
+            .zipped()
+            .iter()
+            .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+            .collect();
+        let choices = vec![false; n];
+        let msg = Message::new2(&enc);
+        c.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
+    }
+
+    // TODO: LAN
+    // TODO: WAN
 }
 
 criterion_group!(benches, bench,);
