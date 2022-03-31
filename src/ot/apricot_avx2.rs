@@ -1,10 +1,10 @@
 use crate::common::*;
 
+use crate::ot::coinflip::{coinflip_receiver, coinflip_sender};
 use crate::ot::common::*;
 use crate::util::*;
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
-use bitvec::prelude::*;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -264,7 +264,14 @@ impl ObliviousSender for Sender {
         }
 
         // -- Check correlation --
-        let chi: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let seed = coinflip_receiver::<32>(channel)?;
+        let mut prg = ChaCha20Rng::from_seed(seed);
+        let chi: Vec<Vec<u8>> = (0..l)
+            .map(|_| {
+                let v: [u8; K / 8] = prg.gen();
+                v.to_vec()
+            })
+            .collect();
 
         let mut q_sum = vec![0u8; matrix_width];
         for row_idx in 0..matrix_height {
@@ -435,12 +442,14 @@ impl ObliviousReceiver for Receiver {
         s.send(bincode::serialize(&u_raw)?)?;
 
         // -- Check correlation --
-        let mut chi_raw = vec![vec![0u8; matrix_width]; matrix_height];
-        for row_idx in 0..matrix_height {
-            let row = chi_raw[row_idx].as_mut_slice();
-            random.fill_bytes(row);
-        }
-        s.send(bincode::serialize(&chi_raw)?)?;
+        let seed = coinflip_sender::<32>(channel)?;
+        let mut prg = ChaCha20Rng::from_seed(seed);
+        let chi_raw: Vec<Vec<u8>> = (0..l)
+            .map(|_| {
+                let v: [u8; K / 8] = prg.gen();
+                v.to_vec()
+            })
+            .collect();
 
         let mut x_sum = vec![0u8; matrix_width];
         let mut t_sum = vec![0u8; matrix_width];

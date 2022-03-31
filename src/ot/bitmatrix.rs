@@ -10,6 +10,10 @@ use std::ops::RangeFrom;
 use std::ops::RangeFull;
 use std::ops::RangeInclusive;
 
+use rayon::prelude::*;
+
+use rayon::iter::FromParallelIterator;
+use rayon::prelude::IntoParallelIterator;
 // BitMatrix and BitVector
 use serde::{Deserialize, Serialize};
 
@@ -177,6 +181,7 @@ impl BitMatrix {
 
     // PERF: Work on bytes instead of booleans. See below.
     // // https://stackoverflow.com/questions/31742483/how-would-you-transpose-a-binary-matrix
+    #[inline]
     pub fn transpose(&self) -> BitMatrix {
         let (rows, cols) = self.dims();
         let mut raw: Vec<Vec<Block>> = vec![vec![0; rows / BLOCK_SIZE]; cols];
@@ -210,6 +215,13 @@ impl FromIterator<BitVector> for BitMatrix {
     }
 }
 
+impl FromParallelIterator<BitVector> for BitMatrix {
+    fn from_par_iter<I: IntoParallelIterator<Item = BitVector>>(par_iter: I) -> Self {
+        let rows : Vec<BitVector> = par_iter.into_par_iter().collect();
+        BitMatrix::new(rows)
+    }
+}
+
 impl IntoIterator for BitMatrix {
     type Item = BitVector;
     type IntoIter = std::vec::IntoIter<BitVector>;
@@ -238,6 +250,17 @@ impl Index<usize> for BitMatrix {
         &self.rows[index]
     }
 }
+
+impl IntoParallelIterator for BitMatrix {
+    type Item = BitVector;
+    type Iter = rayon::vec::IntoIter<BitVector>;
+
+    #[inline]
+    fn into_par_iter(self) -> Self::Iter {
+        self.rows.into_par_iter()
+    }
+}
+
 
 use std::ops::RangeTo;
 impl Index<RangeTo<usize>> for BitMatrix {

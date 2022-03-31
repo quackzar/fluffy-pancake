@@ -9,6 +9,7 @@ use crate::ot::bitmatrix::*;
 use crate::ot::common::*;
 use crate::ot::polynomial::*;
 use itertools::izip;
+use rayon::prelude::*;
 
 /// The computational security paramter (k)
 const COMP_SEC: usize = 128;
@@ -38,14 +39,10 @@ impl ObliviousSender for Sender {
             protocol: "Apricot".to_string(),
         };
         validate_properties(&pb, channel)?;
-
         let l = msg.len(); // 8 bits stored in a byte.
-
-        // The parameter kappa.
-        const K: usize = COMP_SEC;
+        const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
-
-        let l = l + K + S;
+        let l = l + K + S; // refit with security padding
 
         // COTe
         use rand::Rng;
@@ -71,7 +68,7 @@ impl ObliviousSender for Sender {
 
         // EXTENSION
         let t: BitMatrix = seed
-            .iter()
+            .par_iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
@@ -82,18 +79,15 @@ impl ObliviousSender for Sender {
         let (_, r) = channel;
         let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
 
-        let mut q = Vec::with_capacity(K);
-        for i in 0..K {
-            let delta = u8_vec_to_bool_vec(delta.as_bytes());
-            if delta[i] {
-                q.push(u[i].clone() ^ t[i].clone());
-            } else {
-                q.push(t[i].clone());
-            }
-        }
-        let q = BitMatrix::new(q);
+        let q : BitMatrix = u8_vec_to_bool_vec(delta.as_bytes()).into_par_iter()
+            .enumerate().map(|(i, d)| {
+                if d {
+                    &u[i] ^ &t[i]
+                } else {
+                    t[i].clone()
+                }
+            }).collect();
 
-        // Sender outputs `q_j`
         let q = q.transpose();
 
         // -- Check correlation --
@@ -107,45 +101,28 @@ impl ObliviousSender for Sender {
             .collect();
         let mut q_sum = Polynomial::new();
         for (q, chi) in izip!(&q, &chi) {
-            // We would like to work in the finite field F_(2^k) in order to achieve this we will
-            // work on polynomials modulo x^k with coefficients in F_2. The coefficients can be
-            // represented directly as strings of bits and the sum of two of these polynomials will
-            // be the xor of these bitstrings (as dictated by the operations on the underlying field
-            // to which the coefficients belong). The product of two elements will be the standard
-            // polynomial products modulo x^k.
             let q = <&Polynomial>::from(q);
             let chi = <&Polynomial>::from(chi);
 
-            // q_sum.add_assign(&q.mul(chi));
             q_sum.mul_add_assign(q, chi);
-
-            // TODO: Depending on the performance of the bitvector it might be faster to add a check
-            //       here, so we avoid doing unnecessary work the last iteration. (This depends
-            //       greatly on the underlying implementation and the performance of the branch
-            //       predictor)
-            // polynomial_zero_bytes(&mut q_acc);
         }
+        let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+        let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+        let delta_ = <&Polynomial>::from(&delta);
+        q_sum.mul_add_assign(&x_sum, delta_);
 
-        // TODO: *Maybe* doesn't work
-        {
-            let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
-            let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
-            let delta = <&Polynomial>::from(&delta);
-            q_sum.mul_add_assign(&x_sum, delta);
-
-            if t_sum != q_sum {
-                return Err(Box::new(OTError::PolychromaticInput()));
-            }
+        if t_sum != q_sum {
+            return Err(Box::new(OTError::PolychromaticInput()));
         }
 
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(j, q)| {
-                let v0 = hash!(j.to_be_bytes(), q.as_bytes()).to_vec();
+                let v0 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
                 let q = q ^ &delta;
-                let v1 = hash!(j.to_be_bytes(), q.as_bytes()).to_vec();
+                let v1 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
                 (v0, v1)
             })
             .unzip();
@@ -229,7 +206,7 @@ impl ObliviousReceiver for Receiver {
         let x = x.transpose();
 
         let t0: BitMatrix = seed0
-            .iter()
+            .par_iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
@@ -238,7 +215,7 @@ impl ObliviousReceiver for Receiver {
             .collect();
 
         let t1: BitMatrix = seed1
-            .iter()
+            .par_iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
@@ -246,9 +223,8 @@ impl ObliviousReceiver for Receiver {
             })
             .collect();
 
-        let t = t0.transpose(); // saving this for later
 
-        let u: BitMatrix = izip!(x, t0, t1)
+        let u: BitMatrix = izip!(x, &t0, &t1)
             .map(|(x, t0, t1)| {
                 let mut u = x;
                 u ^= t0;
@@ -260,6 +236,8 @@ impl ObliviousReceiver for Receiver {
         let (s, _) = channel;
         let u = bincode::serialize(&u)?;
         s.send(u)?;
+
+        let t = t0.transpose();
 
         // Receiver outputs `t_j`
 
@@ -275,6 +253,7 @@ impl ObliviousReceiver for Receiver {
 
         let mut x_sum = Polynomial::new();
         let mut t_sum = Polynomial::new();
+        // PERF: Parallelize.
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
             let t = <&Polynomial>::from(t);
             let chi = <&Polynomial>::from(chi);
@@ -282,19 +261,17 @@ impl ObliviousReceiver for Receiver {
                 x_sum += chi
             }
 
-            // t_sum.add_assign(&t.mul(chi));
             t_sum.mul_add_assign(t, chi);
-
-            // polynomial_zero_bytes(&mut t_acc);
         }
+
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
 
         // -- Randomize --
         let v: Vec<Vec<u8>> = t
-            .into_iter()
+            .into_par_iter()
             .enumerate()
-            .map(|(j, t)| hash!(j.to_be_bytes(), t.as_bytes()).to_vec())
+            .map(|(j, t)| hash!(j.to_le_bytes(), t.as_bytes()).to_vec())
             .collect();
 
         // -- DeROT --

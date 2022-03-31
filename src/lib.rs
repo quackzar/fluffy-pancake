@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 // #![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
 
 extern crate core;
 
