@@ -184,7 +184,7 @@ impl OneOfManyKey {
         key_sender.exchange(&key_message, ch)?;
 
         // 4. Encode all passwords
-        let domain = log2(passwords.len()) as u16;
+        let domain = log2(passwords.len());
         let mut encodings: Vec<Vec<u8>> = Vec::with_capacity(passwords.len());
         let e_theirs = encoding[password_bits..].to_vec(); // encoding for receiver's password'
         let e_theirs: Vec<_> = e_theirs
@@ -219,7 +219,7 @@ impl OneOfManyKey {
     pub fn evaluator_client(
         password: &[u8],
         number_of_password: u16,
-        index: u16,
+        index: u32,
         ch: &Channel<Vec<u8>>,
     ) -> Result<OneOfManyKey, Error> {
         let (_s,r) = ch;
@@ -246,7 +246,7 @@ impl OneOfManyKey {
 
         // 4. Receive and respond to the 1-to-n challenge from the r
         let many_receiver = ManyOTReceiver { interal_receiver: OTReceiver };
-        let domain = log2(number_of_password) as u16;
+        let domain = log2(number_of_password);
         let encodings = many_receiver.exchange(index, domain, ch)?;
         let database_encoding = wires_from_bytes(encodings.as_slice(), Domain::Binary);
 

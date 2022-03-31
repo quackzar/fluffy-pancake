@@ -9,7 +9,7 @@ use crate::{
 use sha2::{Digest, Sha256};
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
-fn fk(key: &[u8], choice: u16) -> Vec<u8> {
+fn fk(key: &[u8], choice: u32) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(choice.to_be_bytes());
     hasher.update(key);
@@ -29,7 +29,7 @@ pub struct ManyOTSender {
 }
 
 impl ManyOTSender {
-    pub fn exchange(&self, messages : &[Vec<u8>], domain: u16, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
+    pub fn exchange(&self, messages : &[Vec<u8>], domain: u32, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
         let byte_length = messages[0].len();
 
         // 1. B: Prepare random keys
@@ -53,7 +53,7 @@ impl ManyOTSender {
             let mut value = messages[i].to_vec();
             for j in 0..domain {
                 let bit = (i & (1 << j)) >> j;
-                let hash = fk(&keys[j as usize][bit as usize], i as u16);
+                let hash = fk(&keys[j as usize][bit as usize], i as u32);
                 value = xor_bytes(&value, &hash);
             }
 
@@ -82,7 +82,7 @@ pub struct ManyOTReceiver {
 
 
 impl ManyOTReceiver {
-    pub fn exchange(&self, choice : u16, domain: u16, ch: &Channel<Vec<u8>>) -> Result<Vec<u8>, Error> {
+    pub fn exchange(&self, choice : u32, domain: u32, ch: &Channel<Vec<u8>>) -> Result<Vec<u8>, Error> {
         let l = 1 << domain;
 
         // construct choices
@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn test_channel_1_to_n() {
         let n = 8u8;
-        let domain = log2(n) as u16;
+        let domain = log2(n) as u32;
         let mut messages = Vec::with_capacity(n as usize);
         for i in 0u8..n {
             messages.push(vec![i; LENGTH]);
