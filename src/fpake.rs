@@ -73,7 +73,7 @@ impl HalfKey {
         password: &[u8],
         threshold: u16,
         ch: &Channel<Vec<u8>>,
-    ) -> Result<HalfKey, Error> {
+    ) -> Result<Self, Error> {
         let password = u8_vec_to_bool_vec(password);
         let n = password.len();
 
@@ -102,10 +102,10 @@ impl HalfKey {
         // send garbled password.
         s.send(bincode::serialize(&enc_password)?)?;
 
-        Ok(HalfKey(d.hashes[0][1]))
+        Ok(Self(d.hashes[0][1]))
     }
 
-    pub fn evaluator(password: &[u8], ch: &Channel<Vec<u8>>) -> Result<HalfKey, Error> {
+    pub fn evaluator(password: &[u8], ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
         let password = u8_vec_to_bool_vec(password);
         let ot = OTReceiver;
         let enc_password = ot.exchange(&password, ch)?;
@@ -128,7 +128,7 @@ impl HalfKey {
         input.extend(their_password);
         input.extend(our_password);
         let output = evaluate(&gc, &input);
-        Ok(HalfKey(hash!(
+        Ok(Self(hash!(
             (gc.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
             &output[0]
@@ -158,7 +158,7 @@ impl OneOfManyKey {
         passwords: &[Vec<u8>],
         threshold: u16,
         ch: &Channel<Vec<u8>>,
-    ) -> Result<OneOfManyKey, Error> {
+    ) -> Result<Self, Error> {
         let (s, _r) = ch;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
@@ -213,7 +213,7 @@ impl OneOfManyKey {
         // At this point the s should have an encoding of both their own version and the servers version of the password.
         //
 
-        Ok(OneOfManyKey(decoding.hashes[0][1]))
+        Ok(Self(decoding.hashes[0][1]))
     }
 
     pub fn evaluator_client(
@@ -221,7 +221,7 @@ impl OneOfManyKey {
         number_of_password: u32,
         index: u32,
         ch: &Channel<Vec<u8>>,
-    ) -> Result<OneOfManyKey, Error> {
+    ) -> Result<Self, Error> {
         let (_s, r) = ch;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
@@ -259,7 +259,7 @@ impl OneOfManyKey {
         input.extend(database_encoding);
         input.extend(input_encoding);
         let output = evaluate(&gc, &input);
-        Ok(OneOfManyKey(hash!(
+        Ok(Self(hash!(
             (gc.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
             &output[0]
@@ -272,7 +272,7 @@ impl OneOfManyKey {
         number_of_passwords: u32,
         threshold: u16,
         ch: &Channel<Vec<u8>>,
-    ) -> Result<OneOfManyKey, Error> {
+    ) -> Result<Self, Error> {
         let (s, _r) = ch;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
@@ -361,13 +361,13 @@ impl OneOfManyKey {
         // At this point the evaluator should have encodings of both inputs and should evaluate the garbled circuit to retrieve their version of they key.
         //
 
-        Ok(OneOfManyKey(decoding.hashes[0][1]))
+        Ok(Self(decoding.hashes[0][1]))
     }
 
     pub fn evaluator_server(
         passwords: &[Vec<u8>],
         ch: &Channel<Vec<u8>>,
-    ) -> Result<OneOfManyKey, Error> {
+    ) -> Result<Self, Error> {
         let (_, r) = ch;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
@@ -416,7 +416,7 @@ impl OneOfManyKey {
         input.extend(database_encoding);
         input.extend(input_encoding);
         let output = evaluate(&gc, &input);
-        Ok(OneOfManyKey(hash!(
+        Ok(Self(hash!(
             (gc.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
             &output[0]

@@ -1,3 +1,6 @@
+#![allow(clippy::suspicious_arithmetic_impl)]
+#![allow(clippy::suspicious_op_assign_impl)]
+
 use crate::{ot::bitmatrix::*, util::u8_vec_to_bool_vec};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -91,7 +94,7 @@ impl Mul for &Polynomial {
 impl MulAssign for Polynomial {
     #[inline]
     fn mul_assign(&mut self, other: Self) {
-        self.0 = polynomial_mul(&mut self.0, &other.0);
+        self.0 = polynomial_mul(&self.0, &other.0);
     }
 }
 
@@ -162,6 +165,11 @@ pub fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
 
 #[cfg(not(target_arch = "x86_64"))]
 fn polynomial_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+    polynomial_mul_acc_generic(result, left, right);
+}
+
+#[inline]
+fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
 
@@ -199,10 +207,15 @@ fn polynomial_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVecto
     }
 }
 
-
-#[cfg(target_arch = "x86_64")]
 #[inline]
+#[cfg(target_arch = "x86_64")]
 fn polynomial_mul_acc(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
+    polynomial_mul_acc_x86(destination, left, right);
+}
+
+#[inline]
+#[cfg(target_arch = "x86_64")]
+fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
     use std::arch::x86_64::*;
     unsafe {
         let left_bytes = left.as_bytes().as_ptr() as *const __m128i;
@@ -249,6 +262,7 @@ fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
         let lower = _mm_slli_si128(ef, 64 / 8);
         let upper = _mm_srli_si128(ef, 64 / 8);
 
+
         let left = _mm_xor_si128(d, upper);
         let right = _mm_xor_si128(c, lower);
         let xor = _mm_xor_si128(left, right);
@@ -260,52 +274,153 @@ fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
     }
 }
 
-// https://stackoverflow.com/questions/38553881/convert-mm-clmulepi64-si128-to-vmull-high-p64
+// #[cfg(target_arch = "aarch64")]
+// pub fn polynomial_mul_acc(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
+//     polynomial_mul_acc_arm64(destination, left, right)
+// }
+
 #[cfg(target_arch = "aarch64")]
 pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == 128);
     debug_assert!(right.len() == 128);
     use std::arch::aarch64::*;
+    #[inline(always)]
+    unsafe fn pmull_low(a : poly64x2_t, b : poly64x2_t) -> poly64x2_t {
+        let c = vmull_p64(vgetq_lane_p64(a, 0),
+            vgetq_lane_p64(b, 0));
+    vreinterpretq_p64_p128(c)
+    }
+    #[inline(always)]
+    unsafe fn pmull_high(a : poly64x2_t, b : poly64x2_t) -> poly64x2_t {
+        let c = vmull_high_p64(a, b);
+        vreinterpretq_p64_p128(c)
+    }
     unsafe {
-        let left = left.as_bytes().as_ptr() as *const u64;
-        let right = right.as_bytes().as_ptr() as *const u64;
+        let left = left.as_bytes().as_ptr() as *const u8;
+        let right = right.as_bytes().as_ptr() as *const u8;
         let result = destination.as_mut_bytes().as_mut_ptr() as *mut u128;
 
-        // let a = vmull_p64(*left, *right); // first 'low' 64 bits
-        // let left = vld1q_p64(left);
-        // let right = vld1q_p64(right);
-        // let b = vmull_high_p64(left, right); // second 'high' 64 bits
-        //
-        let a = vld1q_p64(left);
-        let b = vld1q_p64(right);
-        let c = vmull_p64(vgetq_lane_p64(a, 0), vgetq_lane_p64(b, 0));
-        let d = vmull_p64(vgetq_lane_p64(a, 1), vgetq_lane_p64(b, 1));
-        let e = vmull_p64(vgetq_lane_p64(a, 1), vgetq_lane_p64(b, 0));
-        let f = vmull_p64(vgetq_lane_p64(a, 0), vgetq_lane_p64(b, 1));
-
-        let ef = e ^ f;
-        let lower = ef << (64 / 8);
-        let upper = ef >> (64 / 8);
-
-        let left = d ^ upper;
-        let right = c ^ lower;
-        let xor = left ^ right;
+        // https://github.com/noloader/AES-Intrinsics/blob/master/clmul-arm.c
         
-        *result ^= xor;
+        // load them in and flip them?
+        let a = vreinterpretq_p64_p8(vrbitq_p8(vld1q_p8(left)));
+        let b = vreinterpretq_p64_p8(vrbitq_p8(vld1q_p8(right)));
+
+        // polynomial multiply
+        let z = vdupq_n_p64(0);
+        let r0 = pmull_low(a, b);
+        let r1 = pmull_high(a, b);
+        let t0 = vextq_p64(a, b, 1);
+        let t1 = pmull_low(a, t0);
+        let t0 = pmull_high(a, t0);
+        let t0 = vaddq_p64(t0, t1);
+        let t1 = vextq_p64(z, t0, 1);
+        let r0 = vaddq_p64(r0, t1);
+        let t1 = vextq_p64(t0, z, 1);
+        let r1 = vaddq_p64(r1, t1);
+
+        // reduction
+        let p = vreinterpretq_p64_u64(vdupq_n_u64(0x0000_0000_0000_0087));
+        let t0 = pmull_high(r1, p);
+        let t1 = vextq_p64(t0, z, 1);
+        let r1 = vaddq_p64(r1, t1);
+        let t1 = vextq_p64(z, t0, 1);
+        let r0 = vaddq_p64(r0, t1);
+        let t0 = pmull_low(r1, p);
+        let c = vaddq_p64(r0, t0);
+
+        // idk
+        let c = vreinterpretq_p8_p64(c);
+        let c = vrbitq_p8(c);
+
+        let c = vreinterpretq_p128_p8(c);
+        *result ^= c;
     }
 }
 
+
 #[cfg(test)]
 mod tests {
+
+
+    #[test]
+    fn test_polynomial_mul() {
+        use super::*;
+        let left: BitVector = BitVector::from_bytes(&[
+            0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]); // x + 1
+        let right: BitVector = BitVector::from_bytes(&[
+            0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]); // x^2 + 1
+        let mut result = Polynomial::new();
+
+        polynomial_mul_acc_generic(&mut result.0, &left, &right);
+
+        // Expecting x^3 + x^2 + x + 1
+        let result_bytes = result.0.as_bytes();
+        assert_eq!(0b0000_1111, result_bytes[0]);
+        for i in 1..16 {
+            assert_eq!(0, result_bytes[i]);
+        }
+    }
+
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_polynomial_mul_x86() {
+        use super::*;
+        let left: BitVector = BitVector::from_bytes(&[
+            0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]); // x + 1
+        let right: BitVector = BitVector::from_bytes(&[
+            0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]); // x^2 + 1
+        let mut result = Polynomial::new();
+
+        polynomial_mul_acc_x86(&mut result.0, &left, &right);
+
+        // Expecting x^3 + x^2 + x + 1
+        let result_bytes = result.0.as_bytes();
+        assert_eq!(0b0000_1111, result_bytes[0]);
+        for i in 1..16 {
+            assert_eq!(0, result_bytes[i]);
+        }
+    }
+
+    #[test]
+    #[cfg(target_arch = "aarch64")]
+    fn test_polynomial_mul_aarch64() {
+        use super::*;
+        let left: BitVector = BitVector::from_bytes(&[
+            0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]); // x + 1
+        let right: BitVector = BitVector::from_bytes(&[
+            0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]); // x^2 + 1
+        let mut result = Polynomial::new();
+
+        polynomial_mul_acc_arm64(&mut result.0, &left, &right);
+
+        println!("Result: {:?}", result);
+        // Expecting x^3 + x^2 + x + 1
+        let result_bytes = result.0.as_bytes();
+        assert_eq!(0b0000_1111, result_bytes[0]);
+        for i in 1..16 {
+            assert_eq!(0, result_bytes[i]);
+        }
+    }
+
 
     #[test]
     #[cfg(target_arch = "aarch64")]
     fn test_aarch64_poly() {
         use super::*;
-        use rand::{thread_rng, Rng};
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaChaRng;
+        let mut rng = ChaChaRng::from_seed([0; 32]);
         for _ in 0..100 {
-            let a = thread_rng().gen::<[u8; 16]>();
-            let b = thread_rng().gen::<[u8; 16]>();
+            let a = rng.gen::<[u8; 16]>();
+            let b = rng.gen::<[u8; 16]>();
             let a = BitVector::from_bytes(&a);
             let b = BitVector::from_bytes(&b);
             let mut c1 = BitVector::from_bytes(&[0x00; 16]);
@@ -319,4 +434,29 @@ mod tests {
             assert_eq!(r1, r2);
         }
     }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_x86_poly() {
+        use super::*;
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaChaRng;
+        let mut rng = ChaChaRng::from_seed([0; 32]);
+        for _ in 0..100 {
+            let a = rng.gen::<[u8; 16]>();
+            let b = rng.gen::<[u8; 16]>();
+            let a = BitVector::from_bytes(&a);
+            let b = BitVector::from_bytes(&b);
+            let mut c1 = BitVector::from_bytes(&[0x00; 16]);
+            polynomial_mul_acc_x86(&mut c1, &a, &b);
+            let r1 = Polynomial::from(c1);
+
+            let mut c2 = BitVector::from_bytes(&[0x00; 16]);
+            polynomial_mul_acc(&mut c2, &a, &b);
+            let r2 = Polynomial::from(c2);
+
+            assert_eq!(r1, r2);
+        }
+    }
+
 }
