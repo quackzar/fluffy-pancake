@@ -83,7 +83,7 @@ unsafe fn bool_vec(bytes: &[u8]) -> Vec<bool> {
         }
     }
 
-    return bits;
+    bits
 }
 
 #[inline]
@@ -155,7 +155,7 @@ fn eq(left: &[u8], right: &[u8]) -> bool {
         }
     }
 
-    return true;
+    true
 }
 
 #[inline]
@@ -240,7 +240,7 @@ impl ObliviousSender for Sender {
         let mut q_orig = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
             let row = q_orig[row_idx].as_mut_slice();
-            let d = (delta[row_idx / 8] >> row_idx % 8) & 1;
+            let d = (delta[row_idx / 8] >> (row_idx % 8)) & 1;
             if d == 1 {
                 xor_inplace(row, u_raw[row_idx].as_slice());
             }
@@ -307,7 +307,7 @@ impl ObliviousSender for Sender {
         s.send(bincode::serialize(&d0_raw)?)?;
         s.send(bincode::serialize(&d1_raw)?)?;
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -482,7 +482,7 @@ impl ObliviousReceiver for Receiver {
             y.push(c);
         }
 
-        return Ok(y);
+        Ok(y)
     }
 }
 

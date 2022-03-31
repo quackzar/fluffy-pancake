@@ -242,7 +242,7 @@ pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     let h = _mm_xor_si128(h, f);
     let h = _mm_xor_si128(h, g);
 
-    return _mm_xor_si128(h, x10);
+    _mm_xor_si128(h, x10)
 }
 
 #[cfg(target_arch = "x86_64")]
