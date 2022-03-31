@@ -9,6 +9,7 @@ use crate::ot::bitmatrix::*;
 use crate::ot::common::*;
 use crate::ot::polynomial::*;
 use itertools::izip;
+use rayon::prelude::*;
 
 /// The computational security paramter (k)
 const COMP_SEC: usize = 128;
@@ -67,7 +68,7 @@ impl ObliviousSender for Sender {
 
         // EXTENSION
         let t: BitMatrix = seed
-            .iter()
+            .par_iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
@@ -78,17 +79,15 @@ impl ObliviousSender for Sender {
         let (_, r) = channel;
         let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
 
-        let mut q = Vec::with_capacity(K);
-        for i in 0..K {
-            let delta = u8_vec_to_bool_vec(delta.as_bytes());
-            if delta[i] {
-                q.push(&u[i] ^ &t[i]);
-            } else {
-                q.push(t[i].clone());
-            }
-        }
+        let q : BitMatrix = u8_vec_to_bool_vec(delta.as_bytes()).into_par_iter()
+            .enumerate().map(|(i, d)| {
+                if d {
+                    &u[i] ^ &t[i]
+                } else {
+                    t[i].clone()
+                }
+            }).collect();
 
-        let q = BitMatrix::new(q);
         let q = q.transpose();
 
         // -- Check correlation --
@@ -107,21 +106,18 @@ impl ObliviousSender for Sender {
 
             q_sum.mul_add_assign(q, chi);
         }
+        let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+        let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+        let delta_ = <&Polynomial>::from(&delta);
+        q_sum.mul_add_assign(&x_sum, delta_);
 
-        {
-            let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
-            let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
-            let delta = <&Polynomial>::from(&delta);
-            q_sum.mul_add_assign(&x_sum, delta);
-
-            if t_sum != q_sum {
-                return Err(Box::new(OTError::PolychromaticInput()));
-            }
+        if t_sum != q_sum {
+            return Err(Box::new(OTError::PolychromaticInput()));
         }
 
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(j, q)| {
                 let v0 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
@@ -210,7 +206,7 @@ impl ObliviousReceiver for Receiver {
         let x = x.transpose();
 
         let t0: BitMatrix = seed0
-            .iter()
+            .par_iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
@@ -219,7 +215,7 @@ impl ObliviousReceiver for Receiver {
             .collect();
 
         let t1: BitMatrix = seed1
-            .iter()
+            .par_iter()
             .map(|&s| {
                 let mut prg = ChaCha20Rng::from_seed(s);
                 let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
@@ -257,6 +253,7 @@ impl ObliviousReceiver for Receiver {
 
         let mut x_sum = Polynomial::new();
         let mut t_sum = Polynomial::new();
+        // PERF: Parallelize.
         for (x, t, chi) in izip!(padded_choices, &t, &chi) {
             let t = <&Polynomial>::from(t);
             let chi = <&Polynomial>::from(chi);
@@ -272,7 +269,7 @@ impl ObliviousReceiver for Receiver {
 
         // -- Randomize --
         let v: Vec<Vec<u8>> = t
-            .into_iter()
+            .into_par_iter()
             .enumerate()
             .map(|(j, t)| hash!(j.to_le_bytes(), t.as_bytes()).to_vec())
             .collect();

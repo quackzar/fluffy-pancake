@@ -76,14 +76,38 @@ impl Mul for Polynomial {
 
     #[inline]
     fn mul(self, other: Self) -> Self {
-        Self(polynomial_mul(&self.0, &other.0))
+        let v = if cfg!(target_arch = "x86_64") {
+            polynomial_mul_x86(&self.0, &other.0)
+        } else {
+            polynomial_mul(&self.0, &other.0)
+        };
+        Self(v)
     }
 }
+
+impl Mul for &Polynomial {
+    type Output = Polynomial;
+
+    #[inline]
+    fn mul(self, other: Self) -> Polynomial {
+        let v = if cfg!(target_arch = "x86_64") {
+            polynomial_mul_x86(&self.0, &other.0)
+        } else {
+            polynomial_mul(&self.0, &other.0)
+        };
+        Polynomial(v)
+    }
+}
+
 
 impl MulAssign for Polynomial {
     #[inline]
     fn mul_assign(&mut self, other: Self) {
-        self.0 = polynomial_mul(&self.0, &other.0)
+        if cfg!(target_arch = "x86_64") {
+            self.0 = polynomial_mul_x86(&mut self.0, &other.0);
+        } else {
+            self.0 = polynomial_mul(&mut self.0, &other.0);
+        }
     }
 }
 
@@ -219,6 +243,37 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
     }
 }
 
+// #[cfg(target_arch = "x86_64")]
+#[inline]
+fn polynomial_mul_x86(left: &BitVector, right: &BitVector) -> BitVector {
+    use std::arch::x86_64::*;
+    unsafe {
+        let left_bytes = left.as_bytes().as_ptr() as *const __m128i;
+        let right_bytes = right.as_bytes().as_ptr() as *const __m128i;
+
+        let a = _mm_lddqu_si128(left_bytes);
+        let b = _mm_lddqu_si128(right_bytes);
+
+        let c = _mm_clmulepi64_si128(a, b, 0x00);
+        let d = _mm_clmulepi64_si128(a, b, 0x11);
+        let e = _mm_clmulepi64_si128(a, b, 0x01);
+        let f = _mm_clmulepi64_si128(a, b, 0x10);
+
+        let ef = _mm_xor_si128(e, f);
+        let lower = _mm_slli_si128(ef, 64 / 8);
+        let upper = _mm_srli_si128(ef, 64 / 8);
+
+        let left = _mm_xor_si128(d, upper);
+        let right = _mm_xor_si128(c, lower);
+        let xor = _mm_xor_si128(left, right);
+
+        let mut res = BitVector::zeros(128);
+        let result_bytes = res.as_mut_bytes().as_mut_ptr() as *mut __m128i;
+        *result_bytes = xor;
+        res
+    }
+}
+
 // https://stackoverflow.com/questions/38553881/convert-mm-clmulepi64-si128-to-vmull-high-p64
 #[allow(clippy::missing_safety_doc)]
 #[cfg(target_arch = "aarch64")]
@@ -240,11 +295,11 @@ pub unsafe fn polynomial_mul_acc_arm64(left: &BitVector, right: &BitVector) -> B
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     #[cfg(target_arch = "aarch64")]
     fn test_aarch64_poly() {
+        use super::*;
         use rand::{thread_rng, Rng};
         for _ in 0..100 {
             let a = thread_rng().gen::<[u8; 16]>();
