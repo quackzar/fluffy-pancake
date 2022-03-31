@@ -45,10 +45,6 @@ name = "apricot"
 harness = false
 
 [[bench]]
-name = "apricot_avx2"
-harness = false
-
-[[bench]]
 name = "one_of_many"
 harness = false
 

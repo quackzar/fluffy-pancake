@@ -61,7 +61,7 @@ fn fpake_one_of_many_bit(_password: &'static [u8]) {
         // Party 1
         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
         let k2 =
-            OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &ch1)
+            OneOfManyKey::garbler_client(&password, index, number_of_passwords.into(), threshold, &ch1)
                 .unwrap();
         k1.combine(k2);
     });
@@ -69,7 +69,7 @@ fn fpake_one_of_many_bit(_password: &'static [u8]) {
     let h2 = thread::spawn(move || {
         // Party 1
         let k1 =
-            OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+            OneOfManyKey::evaluator_client(&password_2, number_of_passwords.into(), index, &ch2).unwrap();
         let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
         k1.combine(k2);
     });
@@ -105,7 +105,7 @@ fn fpake_one_of_many_128bit() {
         // Party 1
         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
         let k2 =
-            OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &ch1)
+            OneOfManyKey::garbler_client(&password, index, number_of_passwords.into(), threshold, &ch1)
                 .unwrap();
         k1.combine(k2);
     });
@@ -113,7 +113,7 @@ fn fpake_one_of_many_128bit() {
     let h2 = thread::spawn(move || {
         // Party 1
         let k1 =
-            OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+            OneOfManyKey::evaluator_client(&password_2, number_of_passwords.into(), index, &ch2).unwrap();
         let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
         k1.combine(k2);
     });
@@ -149,7 +149,7 @@ fn fpake_one_of_many_2048bit() {
         // Party 1
         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
         let k2 =
-            OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &ch1)
+            OneOfManyKey::garbler_client(&password, index, number_of_passwords.into(), threshold, &ch1)
                 .unwrap();
         k1.combine(k2);
     });
@@ -157,7 +157,7 @@ fn fpake_one_of_many_2048bit() {
     let h2 = thread::spawn(move || {
         // Party 1
         let k1 =
-            OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+            OneOfManyKey::evaluator_client(&password_2, number_of_passwords.into(), index, &ch2).unwrap();
         let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
         k1.combine(k2);
     });
@@ -313,7 +313,7 @@ fn fpake_one_of_many_2048bit_128passwords() {
         // Party 1
         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
         let k2 =
-            OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &ch1)
+            OneOfManyKey::garbler_client(&password, index, number_of_passwords.into(), threshold, &ch1)
                 .unwrap();
         k1.combine(k2);
     });
@@ -321,7 +321,7 @@ fn fpake_one_of_many_2048bit_128passwords() {
     let h2 = thread::spawn(move || {
         // Party 1
         let k1 =
-            OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+            OneOfManyKey::evaluator_client(&password_2, number_of_passwords.into(), index, &ch2).unwrap();
         let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
         k1.combine(k2);
     });

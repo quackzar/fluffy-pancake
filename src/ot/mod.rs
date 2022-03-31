@@ -1,5 +1,4 @@
 pub mod apricot;
-pub mod apricot_avx2;
 pub mod bitmatrix;
 pub mod chou_orlandi;
 mod coinflip;

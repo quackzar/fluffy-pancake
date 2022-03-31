@@ -17,11 +17,7 @@ impl Polynomial {
 
     #[inline]
     pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
-        if cfg!(target_arch = "x86_64") {
-            polynomial_mul_acc_x86(&mut self.0, &a.0, &b.0);
-        } else {
-            polynomial_mul_acc(&mut self.0, &a.0, &b.0);
-        }
+        polynomial_mul_acc(&mut self.0, &a.0, &b.0);
     }
 }
 
@@ -76,11 +72,7 @@ impl Mul for Polynomial {
 
     #[inline]
     fn mul(self, other: Self) -> Self {
-        let v = if cfg!(target_arch = "x86_64") {
-            polynomial_mul_x86(&self.0, &other.0)
-        } else {
-            polynomial_mul(&self.0, &other.0)
-        };
+        let v = polynomial_mul(&self.0, &other.0);
         Self(v)
     }
 }
@@ -90,11 +82,7 @@ impl Mul for &Polynomial {
 
     #[inline]
     fn mul(self, other: Self) -> Polynomial {
-        let v = if cfg!(target_arch = "x86_64") {
-            polynomial_mul_x86(&self.0, &other.0)
-        } else {
-            polynomial_mul(&self.0, &other.0)
-        };
+        let v = polynomial_mul(&self.0, &other.0);
         Polynomial(v)
     }
 }
@@ -103,11 +91,7 @@ impl Mul for &Polynomial {
 impl MulAssign for Polynomial {
     #[inline]
     fn mul_assign(&mut self, other: Self) {
-        if cfg!(target_arch = "x86_64") {
-            self.0 = polynomial_mul_x86(&mut self.0, &other.0);
-        } else {
-            self.0 = polynomial_mul(&mut self.0, &other.0);
-        }
+        self.0 = polynomial_mul(&mut self.0, &other.0);
     }
 }
 
@@ -141,7 +125,8 @@ impl Display for Polynomial {
     }
 }
 
-fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
+#[cfg(not(target_arch = "x86_64"))]
+pub fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
     debug_assert!(left.len() == right.len());
 
     let size = left.len();
@@ -175,6 +160,7 @@ fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
     BitVector::from_bytes(&intermediate_bytes[..size_bytes])
 }
 
+#[cfg(not(target_arch = "x86_64"))]
 fn polynomial_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == right.len());
     debug_assert!(left.len() == result.len());
@@ -214,9 +200,9 @@ fn polynomial_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVecto
 }
 
 
-// #[cfg(target_arch = "x86_64")]
+#[cfg(target_arch = "x86_64")]
 #[inline]
-fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
+fn polynomial_mul_acc(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
     use std::arch::x86_64::*;
     unsafe {
         let left_bytes = left.as_bytes().as_ptr() as *const __m128i;
@@ -243,9 +229,9 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
     }
 }
 
-// #[cfg(target_arch = "x86_64")]
+#[cfg(target_arch = "x86_64")]
 #[inline]
-fn polynomial_mul_x86(left: &BitVector, right: &BitVector) -> BitVector {
+fn polynomial_mul(left: &BitVector, right: &BitVector) -> BitVector {
     use std::arch::x86_64::*;
     unsafe {
         let left_bytes = left.as_bytes().as_ptr() as *const __m128i;

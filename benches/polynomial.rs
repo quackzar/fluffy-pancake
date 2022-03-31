@@ -13,7 +13,7 @@ fn bench(c: &mut Criterion) {
 
     // polynomial_mul
     c.bench_function("polynomial_mul_bytes", |b| {
-        b.iter(|| polynomial_mul_bytes(&left, &right))
+        b.iter(|| polynomial_mul(&left, &right))
     });
 
     // TODO: Redo the others 'sanely'.
