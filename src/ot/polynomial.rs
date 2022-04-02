@@ -208,7 +208,7 @@ fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, right: &
 }
 
 // https://github.com/RustCrypto/universal-hashes/blob/master/polyval/src/backend/soft64.rs
-fn polynonial_mul_acc_generic_fast(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+fn polynomial_mul_acc_generic_fast(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     fn bmul64(x: u64, y: u64) -> u64 {
         use std::num::Wrapping;
         let x0 = Wrapping(x & 0x1111_1111_1111_1111);
@@ -293,6 +293,34 @@ fn polynomial_mul_acc(destination: &mut BitVector, left: &BitVector, right: &Bit
     polynomial_mul_acc_x86(destination, left, right);
 }
 
+#[cfg(target_arch = "x86_64")]
+use {
+    std::arch::x86_64::*
+};
+
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
+    use std::arch::x86_64::*;
+    let x2 = _mm_extract_epi64(x32, 0) as u64;
+    let x3 = _mm_extract_epi64(x32, 1) as u64;
+
+    let a = x3 >> 63;
+    let b = x3 >> 62;
+    let c = x3 >> 57;
+    let d = x2 ^ a ^ b ^ c;
+
+    let x3d = _mm_set_epi64x(x3 as i64, d as i64);
+    let e = _mm_slli_si128(x3d, 1);
+    let f = _mm_slli_si128(x3d, 2);
+    let g = _mm_slli_si128(x3d, 7);
+
+    let h = _mm_xor_si128(x3d, e);
+    let h = _mm_xor_si128(h, f);
+    let h = _mm_xor_si128(h, g);
+
+    return _mm_xor_si128(h, x10);
+}
+
 #[inline]
 #[cfg(target_arch = "x86_64")]
 fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
@@ -316,9 +344,10 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
 
         let left = _mm_xor_si128(d, upper);
         let right = _mm_xor_si128(c, lower);
-        let xor = _mm_xor_si128(left, right);
 
-        *result_bytes = _mm_xor_si128(*result_bytes, xor);
+        let reduced = polynomial_gf128_reduce(left, right);
+
+        *result_bytes = _mm_xor_si128(*result_bytes, reduced);
     }
 }
 
@@ -504,7 +533,7 @@ mod tests {
             let r1 = Polynomial::from(c1);
 
             let mut c2 = BitVector::from_bytes(&[0x00; 16]);
-            polynomial_mul_acc(&mut c2, &a, &b);
+            polynomial_mul_acc_generic_fast(&mut c2, &a, &b);
             let r2 = Polynomial::from(c2);
 
             assert_eq!(r1, r2);
@@ -528,7 +557,7 @@ mod tests {
             let r1 = Polynomial::from(c1);
 
             let mut c2 = BitVector::from_bytes(&[0x00; 16]);
-            polynomial_mul_acc(&mut c2, &a, &b);
+            polynomial_mul_acc_generic_fast(&mut c2, &a, &b);
             let r2 = Polynomial::from(c2);
 
             assert_eq!(r1, r2);
@@ -547,11 +576,11 @@ mod tests {
             let a = BitVector::from_bytes(&a);
             let b = BitVector::from_bytes(&b);
             let mut c1 = BitVector::from_bytes(&[0x00; 16]);
-            polynonial_mul_acc_generic_fast(&mut c1, &a, &b);
+            polynomial_mul_acc_generic_fast(&mut c1, &a, &b);
             let r1 = Polynomial::from(c1);
 
             let mut c2 = BitVector::from_bytes(&[0x00; 16]);
-            polynomial_mul_acc(&mut c2, &a, &b);
+            polynomial_mul_acc_generic(&mut c2, &a, &b);
             let r2 = Polynomial::from(c2);
 
             assert_eq!(r1, r2);
