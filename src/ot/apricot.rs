@@ -24,6 +24,46 @@ pub struct Receiver {
     pub bootstrap: Box<dyn ObliviousSender>,
 }
 
+impl Sender {
+
+    pub fn new(bootstrap: Box<dyn ObliviousReceiver>) -> Self {
+        Self { bootstrap }
+    }
+
+    fn cote(&self, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        todo!()
+    }
+
+    fn correlation_check(&self, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        todo!()
+    }
+
+    fn de_rot(&self, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        todo!()
+    }
+}
+
+
+impl Receiver {
+
+    pub fn new(bootstrap: Box<dyn ObliviousSender>) -> Self {
+        Self { bootstrap }
+    }
+
+    fn cote(&self, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        todo!()
+    }
+
+    fn correlation_check(&self, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        todo!()
+    }
+
+    fn de_rot(&self, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        todo!()
+    }
+}
+
+
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         assert!(

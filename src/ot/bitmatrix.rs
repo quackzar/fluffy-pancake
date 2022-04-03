@@ -90,6 +90,7 @@ impl BitVector {
     pub fn as_mut_slice(&mut self) -> &mut [Block] {
         &mut self.0
     }
+
 }
 
 impl BitXor for BitVector {
@@ -175,8 +176,8 @@ pub struct BitMatrix {
 
 impl BitMatrix {
     #[inline]
-    pub fn new(rows: Vec<BitVector>) -> BitMatrix {
-        BitMatrix { rows }
+    pub fn new(rows: Vec<BitVector>) -> Self {
+        Self { rows }
     }
 
     #[inline]
@@ -206,9 +207,11 @@ impl BitMatrix {
             }
         }
         let raw: Vec<BitVector> = unsafe { mem::transmute(raw) };
-        BitMatrix { rows: raw }
+        Self { rows: raw }
     }
 }
+
+
 
 impl FromIterator<BitVector> for BitMatrix {
     fn from_iter<I: IntoIterator<Item = BitVector>>(iter: I) -> Self {
@@ -216,14 +219,14 @@ impl FromIterator<BitVector> for BitMatrix {
         for row in iter {
             rows.push(row);
         }
-        BitMatrix::new(rows)
+        Self::new(rows)
     }
 }
 
 impl FromParallelIterator<BitVector> for BitMatrix {
     fn from_par_iter<I: IntoParallelIterator<Item = BitVector>>(par_iter: I) -> Self {
         let rows : Vec<BitVector> = par_iter.into_par_iter().collect();
-        BitMatrix::new(rows)
+        Self::new(rows)
     }
 }
 
