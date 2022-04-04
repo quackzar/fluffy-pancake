@@ -17,8 +17,7 @@ impl Polynomial {
 
     #[inline]
     pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
-        // polynomial_mul_acc(&mut self.0, &a.0, &b.0);
-        todo!();
+        gf128_mul_acc(&mut self.0, &a.0, &b.0);
     }
 }
 
@@ -100,6 +99,23 @@ impl MulAssign for Polynomial {
 }
 
 
+#[cfg(target_arch = "x86_64")]
+fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+    polynomial_mul_acc_x86(result, left, right);
+}
+
+
+#[cfg(target_arch = "aarch64")]
+fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+    polynomial_mul_acc_arm64(result, left, right);
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+    polynomial_mul_acc_generic(result, left, right);
+}
+
+
 const fn gf128_reduce(x32: u128, x10: u128) -> u128 {
     let x2 = x32 as u64;
     let x3 = (x32 >> 64) as u64;
@@ -109,12 +125,13 @@ const fn gf128_reduce(x32: u128, x10: u128) -> u128 {
     let c = x3 >> 57;
     let d = x2 ^ a ^ b ^ c;
 
-    let x3d = ((x3 as u128) << 64) | (d as u128);
+    let x3d = ((x3 as u128) << 64) | (d as u128); // maybe here?
     let e = x3d << 1;
     let f = x3d << 2;
     let g = x3d << 7;
 
     let h = x3d ^ e ^ f ^ g;
+
     h ^ x10
 }
 
@@ -122,8 +139,6 @@ const fn gf128_reduce(x32: u128, x10: u128) -> u128 {
 fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == 128);
     debug_assert!(right.len() == 128);
-    dbg!("generic");
-    dbg!(left, right);
 
     #[inline]
     unsafe fn clmul<const A: isize, const B: isize>(a : *const u64, b  : *const u64) -> u128 {
@@ -148,7 +163,6 @@ fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, right: &
         let d = clmul::<1, 1>(a, b);
         let e = clmul::<0, 1>(a, b);
         let f = clmul::<1, 0>(a, b);
-        dbg!(*a, *b, c, d, e, f);
 
         let ef = e ^ f;
         let lower = ef << 64;
@@ -156,9 +170,7 @@ fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, right: &
         let left = d ^ upper;
         let right = c ^ lower;
 
-        dbg!(ef, lower, upper, left, right);
         let res = gf128_reduce(left, right);
-        dbg!(res);
 
         let acc = result.as_mut_bytes().as_mut_ptr() as *mut u128;
         *acc ^= res;
@@ -177,6 +189,15 @@ use {
     std::arch::x86_64::*
 };
 
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn m128i_to_u128(a: __m128i) -> u128 {
+    let a0 = _mm_extract_epi64(a, 0) as u64;
+    let a1 = _mm_extract_epi64(a, 1) as u64;
+    let a = ((a1 as u128) << 64) | (a0 as u128);
+    a
+}
+
 #[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     use std::arch::x86_64::*;
@@ -188,10 +209,10 @@ pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     let c = x3 >> 57;
     let d = x2 ^ a ^ b ^ c;
 
-    let x3d = _mm_set_epi64x(x3 as i64, d as i64);
-    let e = _mm_slli_si128(x3d, 1);
-    let f = _mm_slli_si128(x3d, 2);
-    let g = _mm_slli_si128(x3d, 7);
+    let x3d = _mm_set_epi64x(x3 as i64, d as i64); // maybe here?
+    let e = _mm_slli_epi64(x3d, 1);
+    let f = _mm_slli_epi64(x3d, 2);
+    let g = _mm_slli_epi64(x3d, 7);
 
     let h = _mm_xor_si128(x3d, e);
     let h = _mm_xor_si128(h, f);
@@ -208,7 +229,7 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
     unsafe {
         let left_bytes = left.as_bytes().as_ptr() as *const __m128i;
         let right_bytes = right.as_bytes().as_ptr() as *const __m128i;
-        let result_bytes = destination.as_mut_bytes().as_mut_ptr() as *mut __m128i;
+        let result_bytes = destination.as_mut_bytes().as_mut_ptr() as *mut u128;
 
         let a = _mm_lddqu_si128(left_bytes);
         let b = _mm_lddqu_si128(right_bytes);
@@ -221,15 +242,15 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
         let ef = _mm_xor_si128(e, f);
         let lower = _mm_slli_si128(ef, 64 / 8);
         let upper = _mm_srli_si128(ef, 64 / 8); // should this be in the lower or upper register?
-        dbg!(a, b, c, d, e, f, ef, lower, upper);
 
         let left = _mm_xor_si128(d, upper);
         let right = _mm_xor_si128(c, lower);
-        dbg!(left, right);
+        
 
-        let reduced = polynomial_gf128_reduce(left, right);
-
-        *result_bytes = _mm_xor_si128(*result_bytes, reduced);
+        // let reduced = polynomial_gf128_reduce(left, right);
+        // *result_bytes = _mm_xor_si128(*result_bytes, reduced);
+        let reduced = gf128_reduce(m128i_to_u128(left), m128i_to_u128(right));
+        *result_bytes ^= reduced
     }
 }
 
@@ -237,7 +258,6 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
 
 #[cfg(target_arch = "aarch64")]
 pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
-    dbg!("arm64");
     debug_assert!(left.len() == 128);
     debug_assert!(right.len() == 128);
     use core::arch::aarch64::*;
@@ -251,7 +271,6 @@ pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, r
     }
 
     unsafe {
-        dbg!(left, right);
         let left = left.as_bytes().as_ptr() as *const u64;
         let right = right.as_bytes().as_ptr() as *const u64;
         let result = destination.as_mut_bytes().as_mut_ptr() as *mut u128;
@@ -266,14 +285,12 @@ pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, r
         let d = pmull::<1, 1>(a, b);
         let e = pmull::<0, 1>(a, b);
         let f = pmull::<1, 0>(a, b);
-        dbg!(a, b, c, d, e, f);
 
         let ef = vaddq_p128(e, f);
         let lower = vextq_p64(z, vreinterpretq_p64_p128(ef), 1);
         let upper = vextq_p64(vreinterpretq_p64_p128(ef), z, 1);
         let left = vaddq_p128(d, vreinterpretq_p128_p64(upper));
         let right = vaddq_p128(c, vreinterpretq_p128_p64(lower));
-        dbg!(ef, lower, upper, left, right);
 
         let reduced = gf128_reduce(left, right);
         *result ^= reduced;
