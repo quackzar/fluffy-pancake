@@ -100,23 +100,23 @@ impl MulAssign for Polynomial {
 
 
 #[cfg(target_arch = "x86_64")]
-fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+pub fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     polynomial_mul_acc_x86(result, left, right);
 }
 
 
 #[cfg(target_arch = "aarch64")]
-fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+pub fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     polynomial_mul_acc_arm64(result, left, right);
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+pub fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     polynomial_mul_acc_generic(result, left, right);
 }
 
 
-const fn gf128_reduce(x32: u128, x10: u128) -> u128 {
+pub const fn gf128_reduce(x32: u128, x10: u128) -> u128 {
     let x2 = x32 as u64;
     let x3 = (x32 >> 64) as u64;
 
@@ -136,7 +136,7 @@ const fn gf128_reduce(x32: u128, x10: u128) -> u128 {
 }
 
 // https://github.com/RustCrypto/universal-hashes/blob/master/polyval/src/backend/soft64.rs
-fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, right: &BitVector) {
+pub fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     debug_assert!(left.len() == 128);
     debug_assert!(right.len() == 128);
 
