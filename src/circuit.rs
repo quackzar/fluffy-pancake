@@ -35,7 +35,7 @@ pub enum GateKind {
 }
 
 impl Gate {
-    pub fn output_domain(&self) -> u16 {
+    pub const fn output_domain(&self) -> u16 {
         match self.kind {
             GateKind::Add | GateKind::Mul(_) => self.domain,
             GateKind::Proj(proj) => match proj {
@@ -55,7 +55,7 @@ pub enum ProjKind {
 
 impl ProjKind {
     #[inline]
-    pub fn project(&self, x: u16) -> u16 {
+    pub const fn project(&self, x: u16) -> u16 {
         use ProjKind::*;
         match *self {
             Map(m) => x % m,
@@ -64,7 +64,7 @@ impl ProjKind {
     }
 
     #[inline]
-    pub fn domain(&self) -> u16 {
+    pub const fn domain(&self) -> u16 {
         use ProjKind::*;
         match *self {
             Map(m) => m,

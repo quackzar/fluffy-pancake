@@ -148,6 +148,7 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
     wires
 }
 
+
 // Bob / server is Garbler
 impl OneOfManyKey {
     pub fn garbler_server(
@@ -407,9 +408,7 @@ impl OneOfManyKey {
         //
 
         // 6. Evaluate the circuit
-        let mut input = Vec::<Wire>::new();
-        input.extend(database_encoding);
-        input.extend(input_encoding);
+        let input = [database_encoding, input_encoding].concat();
         let output = evaluate(&gc, &input);
         Ok(Self(hash!(
             (gc.circuit.num_wires - 1).to_be_bytes(),

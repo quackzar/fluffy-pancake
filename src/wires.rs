@@ -22,7 +22,7 @@ pub enum Domain {
 }
 
 impl Domain {
-    fn num(self) -> u16 {
+    const fn num(self) -> u16 {
         match self {
             Domain::Binary => 2,
             Domain::U8(m) => m as u16,
@@ -111,7 +111,7 @@ impl iter::Sum for Wire {
 }
 
 impl Wire {
-    pub(crate) fn empty() -> Self {
+    pub(crate) const fn empty() -> Self {
         Self {
             domain: Domain::Binary,
             values: [0; LENGTH],
@@ -157,8 +157,8 @@ impl Wire {
     {
         debug_assert_eq!(self.domain, other.domain, "Domain not matching");
         let mut values = [0u8; LENGTH];
-        for i in 0..values.len() {
-            values[i] = op(self.values[i], other.values[i]);
+        for (i,v) in values.iter_mut().enumerate() {
+            *v = op(self.values[i], other.values[i]);
         }
         let domain = self.domain;
         Self { domain, values }
@@ -195,16 +195,16 @@ impl Wire {
                 values = rand::random();
             }
             Domain::U8(m) => {
-                for i in 0..values.len() {
-                    values[i] = rand::thread_rng().gen_range(0..m);
+                for v in values.iter_mut() {
+                    *v = rand::thread_rng().gen_range(0..m);
                 }
             }
             Domain::U16(m) => {
-                let mut v: [u16; LENGTH / 2] = bytemuck::cast(values);
-                for i in 0..v.len() {
-                    v[i] = rand::thread_rng().gen_range(0..m);
+                let mut val: [u16; LENGTH / 2] = bytemuck::cast(values);
+                for v in val.iter_mut() {
+                    *v = rand::thread_rng().gen_range(0..m);
                 }
-                values = bytemuck::cast(v);
+                values = bytemuck::cast(val);
             }
         }
         Self { values, domain }
@@ -242,7 +242,7 @@ impl Wire {
     }
 
     #[inline]
-    pub fn domain(&self) -> u16 {
+    pub const fn domain(&self) -> u16 {
         self.domain.num()
     }
 
@@ -255,7 +255,7 @@ impl Wire {
         }
     }
 
-    pub fn to_bytes(&self) -> WireBytes {
+    pub const fn to_bytes(&self) -> WireBytes {
         self.values
     }
 }

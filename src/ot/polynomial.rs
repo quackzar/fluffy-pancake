@@ -1,7 +1,7 @@
 #![allow(clippy::suspicious_arithmetic_impl)]
 #![allow(clippy::suspicious_op_assign_impl)]
 
-use crate::{ot::bitmatrix::*};
+use crate::ot::bitmatrix::*;
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, AddAssign, Mul, MulAssign};
 
@@ -314,6 +314,8 @@ pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, r
 
 #[cfg(test)]
 mod tests {
+
+    #![allow(clippy::needless_range_loop)]
 
     #[test]
     fn test_polynomial_mul() {

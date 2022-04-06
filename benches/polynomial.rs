@@ -15,6 +15,7 @@ fn gf128_stupid(result: &mut BitVector, left: &BitVector, right: &BitVector) {
 
     let mut intermediate_bytes = [0u8; 128];
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0..size_bytes {
         for j in 0..size_bytes {
             for ib in 0..8 {
