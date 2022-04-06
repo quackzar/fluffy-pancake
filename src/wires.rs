@@ -32,19 +32,19 @@ impl Domain {
         }
     }
 
-    fn new(m: u16) -> Domain {
+    fn new(m: u16) -> Self {
         const U8_MAX: u16 = u8::max_value() as u16;
         const U16_MAX: u16 = u16::max_value();
         if m == 0 {
-            Domain::U16MAX
+            Self::U16MAX
         } else if m == 2 {
-            Domain::Binary
+            Self::Binary
         } else if m < U8_MAX {
-            Domain::U8(m as u8)
+            Self::U8(m as u8)
         } else if m == U8_MAX + 1 {
-            Domain::U8MAX
+            Self::U8MAX
         } else if m < U16_MAX {
-            Domain::U16(m)
+            Self::U16(m)
         } else {
             panic!("Bad Domain: {}", m);
         }
@@ -106,19 +106,19 @@ impl ops::Mul<u16> for &Wire {
 impl iter::Sum for Wire {
     fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Self {
         let init = iter.next().unwrap();
-        iter.fold(init, |acc: Wire, w: Wire| &acc + &w)
+        iter.fold(init, |acc: Self, w: Self| &acc + &w)
     }
 }
 
 impl Wire {
-    pub(crate) fn empty() -> Wire {
-        Wire {
+    pub(crate) fn empty() -> Self {
+        Self {
             domain: Domain::Binary,
             values: [0; LENGTH],
         }
     }
 
-    fn map<F>(&self, op: F) -> Wire
+    fn map<F>(&self, op: F) -> Self
     where
         F: Fn(u8) -> u8,
     {
@@ -128,10 +128,10 @@ impl Wire {
         for i in 0..values.len() {
             values[i] = op(input[i]);
         }
-        Wire { domain, values }
+        Self { domain, values }
     }
 
-    fn map_as_u16<F>(&self, op: F) -> Wire
+    fn map_as_u16<F>(&self, op: F) -> Self
     where
         F: Fn(u16) -> u16,
     {
@@ -148,10 +148,10 @@ impl Wire {
             output
         );
         let values = bytemuck::cast(output);
-        Wire { domain, values }
+        Self { domain, values }
     }
 
-    fn map_with<F>(&self, other: &Wire, op: F) -> Wire
+    fn map_with<F>(&self, other: &Self, op: F) -> Self
     where
         F: Fn(u8, u8) -> u8,
     {
@@ -161,10 +161,10 @@ impl Wire {
             values[i] = op(self.values[i], other.values[i]);
         }
         let domain = self.domain;
-        Wire { domain, values }
+        Self { domain, values }
     }
 
-    fn map_with_as_u16<F>(&self, other: &Wire, op: F) -> Wire
+    fn map_with_as_u16<F>(&self, other: &Self, op: F) -> Self
     where
         F: Fn(u16, u16) -> u16,
     {
@@ -184,10 +184,10 @@ impl Wire {
         );
         let values = bytemuck::cast(output);
         let domain = self.domain;
-        Wire { domain, values }
+        Self { domain, values }
     }
 
-    pub fn new(domain: u16) -> Wire {
+    pub fn new(domain: u16) -> Self {
         let domain = Domain::new(domain);
         let mut values = [0u8; LENGTH];
         match domain {
@@ -207,11 +207,11 @@ impl Wire {
                 values = bytemuck::cast(v);
             }
         }
-        Wire { values, domain }
+        Self { values, domain }
     }
 
-    pub fn delta(domain: u16) -> Wire {
-        let mut wire = Wire::new(domain);
+    pub fn delta(domain: u16) -> Self {
+        let mut wire = Self::new(domain);
         match wire.domain {
             Domain::Binary => {
                 // endianness?
@@ -246,8 +246,8 @@ impl Wire {
         self.domain.num()
     }
 
-    pub fn from_bytes(values: WireBytes, domain: Domain) -> Wire {
-        let wire = Wire { domain, values };
+    pub fn from_bytes(values: WireBytes, domain: Domain) -> Self {
+        let wire = Self { domain, values };
         match domain {
             Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,
             Domain::U8(m) => wire.map(|x| x % m),

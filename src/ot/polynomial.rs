@@ -1,7 +1,7 @@
 #![allow(clippy::suspicious_arithmetic_impl)]
 #![allow(clippy::suspicious_op_assign_impl)]
 
-use crate::{ot::bitmatrix::*, util::u8_vec_to_bool_vec};
+use crate::{ot::bitmatrix::*};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, AddAssign, Mul, MulAssign};
 
@@ -71,7 +71,7 @@ impl Mul for Polynomial {
     type Output = Self;
 
     #[inline]
-    fn mul(self, other: Self) -> Self {
+    fn mul(self, _other: Self) -> Self {
         todo!()
         // let v = polynomial_mul(&self.0, &other.0);
         // Self(v)
@@ -82,7 +82,7 @@ impl Mul for &Polynomial {
     type Output = Polynomial;
 
     #[inline]
-    fn mul(self, other: Self) -> Polynomial {
+    fn mul(self, _other: Self) -> Polynomial {
         todo!()
         // let v = polynomial_mul(&self.0, &other.0);
         // Polynomial(v)
@@ -91,7 +91,7 @@ impl Mul for &Polynomial {
 
 impl MulAssign for Polynomial {
     #[inline]
-    fn mul_assign(&mut self, other: Self) {
+    fn mul_assign(&mut self, _other: Self) {
         todo!()
         // self.0 = polynomial_mul(&self.0, &other.0);
     }

@@ -85,7 +85,7 @@ macro_rules! hash {
         $hasher.update($e);
     }};
 }
-pub(crate) use hash;
+pub use hash;
 
 pub fn xor(a: WireBytes, b: WireBytes) -> WireBytes {
     let mut result = [0u8; LENGTH];

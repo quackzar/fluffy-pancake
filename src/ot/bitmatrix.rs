@@ -187,7 +187,7 @@ impl BitMatrix {
     // PERF: Work on bytes instead of booleans. See below.
     // // https://stackoverflow.com/questions/31742483/how-would-you-transpose-a-binary-matrix
     #[inline]
-    pub fn transpose(&self) -> BitMatrix {
+    pub fn transpose(&self) -> Self {
         let (rows, cols) = self.dims();
         let mut raw: Vec<Vec<Block>> = vec![vec![0; rows / BLOCK_SIZE]; cols];
         let source = self.rows.as_slice();

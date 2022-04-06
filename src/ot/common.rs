@@ -50,7 +50,7 @@ impl Message {
         for m in msg {
             vec.push([m[0].as_ref().to_vec(), m[1].as_ref().to_vec()]);
         }
-        Message(vec)
+        Self(vec)
     }
 
     pub fn new<T: AsRef<[u8]>>(m0: &[T], m1: &[T]) -> Self {
@@ -59,7 +59,7 @@ impl Message {
         for i in 0..m0.len() {
             m.push([m0[i].as_ref().to_vec(), m1[i].as_ref().to_vec()]);
         }
-        Message(m)
+        Self(m)
     }
 
     pub fn len(&self) -> usize {

@@ -81,8 +81,8 @@ pub struct CircuitBuilder {
 }
 
 impl CircuitBuilder {
-    pub fn new(num_inputs: usize) -> CircuitBuilder {
-        CircuitBuilder {
+    pub fn new(num_inputs: usize) -> Self {
+        Self {
             gates: Vec::new(),
             next_wire: 0,
             num_inputs,
@@ -93,7 +93,7 @@ impl CircuitBuilder {
     /// Offset circuit wires by `amount`.
     ///
     /// * `amount`: The amount to offset the circuit by.
-    pub fn offset(mut self, amount: usize) -> CircuitBuilder {
+    pub fn offset(mut self, amount: usize) -> Self {
         self.gates.iter_mut().for_each(|g| {
             g.output += amount;
             g.inputs.iter_mut().for_each(|i| {
@@ -108,7 +108,7 @@ impl CircuitBuilder {
     /// Add a new gate to the circuit.
     ///
     /// * `gate`: The gate to add.
-    pub fn add_gate(mut self, gate: Gate) -> CircuitBuilder {
+    pub fn add_gate(mut self, gate: Gate) -> Self {
         self.next_wire = gate.output;
         self.unread_wires.insert(gate.output);
         gate.inputs.iter().for_each(|i| {

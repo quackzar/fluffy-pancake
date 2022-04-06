@@ -49,7 +49,7 @@ impl From<EncodingKey> for BinaryEncodingKey {
         let zeros = key.wires;
         let ones: Vec<Wire> = zeros.iter().map(|w| w + &delta).collect();
         let ones = TryInto::try_into(ones).unwrap(); // should never fail
-        BinaryEncodingKey(zeros, ones)
+        Self(zeros, ones)
     }
 }
 
@@ -59,7 +59,7 @@ impl From<BinaryEncodingKey> for EncodingKey {
         let d = &key.0[0] + &key.1[0];
         delta.insert(2, d);
         let wires = key.0;
-        EncodingKey { wires, delta }
+        Self { wires, delta }
     }
 }
 

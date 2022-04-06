@@ -35,7 +35,7 @@ fn fk(key: &[u8], choice: u32) -> Vec<u8> {
     }
 
     debug_assert!(key.len() == result.len());
-    return result;
+    result
 }
 
 pub struct ManyOTSender {
