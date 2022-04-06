@@ -9,6 +9,9 @@ use crate::ot::bitmatrix::*;
 use crate::ot::common::*;
 use crate::ot::polynomial::*;
 use itertools::izip;
+use rand::Rng;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 
 /// The computational security paramter (k)
@@ -26,71 +29,18 @@ pub struct Receiver {
 
 impl Sender {
 
+    #[inline]
     pub fn new(bootstrap: Box<dyn ObliviousReceiver>) -> Self {
         Self { bootstrap }
     }
 
-    fn cote(&self, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn correlation_check(&self, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn de_rot(&self, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        todo!()
-    }
-}
-
-
-impl Receiver {
-
-    pub fn new(bootstrap: Box<dyn ObliviousSender>) -> Self {
-        Self { bootstrap }
-    }
-
-    fn cote(&self, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn correlation_check(&self, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn de_rot(&self, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        todo!()
-    }
-}
-
-
-impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        assert!(
-            msg.len() >= BLOCK_SIZE,
-            "Message length must be larger than {BLOCK_SIZE}"
-        );
-        assert!(
-            msg.len() % BLOCK_SIZE == 0,
-            "Message length must be a multiple of {BLOCK_SIZE}"
-        );
-        let pb = TransactionProperties {
-            msg_size: msg.len(),
-            protocol: "Apricot".to_string(),
-        };
-        validate_properties(&pb, channel)?;
-        let l = msg.len(); // 8 bits stored in a byte.
+    #[inline]
+    fn cote(&self, l : usize, channel: &Channel<Vec<u8>>) -> Result<(BitMatrix, BitVector), Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
-        let l = l + K + S; // refit with security padding
 
         // COTe
-        use rand::Rng;
-        use rand::SeedableRng;
-
-        // receiver:
         // sample k pairs of k-bit seeds.
-        use rand_chacha::ChaCha20Rng;
         let mut rng = ChaCha20Rng::from_entropy();
 
         // INITIALIZATION
@@ -129,8 +79,14 @@ impl ObliviousSender for Sender {
             }).collect();
 
         let q = q.transpose();
+        Ok((q, delta))
+    }
 
-        // -- Check correlation --
+    #[inline]
+    fn correlation_check(&self, l: usize, q: &BitMatrix, delta: &BitVector, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        const K: usize = COMP_SEC; // kappa
+        const S: usize = STAT_SEC;
+        let (_, r) = channel;
         let seed = coinflip_receiver::<32>(channel)?;
         let mut prg = ChaCha20Rng::from_seed(seed);
         let chi: BitMatrix = (0..l)
@@ -140,7 +96,7 @@ impl ObliviousSender for Sender {
             })
             .collect();
         let mut q_sum = Polynomial::new();
-        for (q, chi) in izip!(&q, &chi) {
+        for (q, chi) in izip!(q, &chi) {
             let q = <&Polynomial>::from(q);
             let chi = <&Polynomial>::from(chi);
 
@@ -148,20 +104,24 @@ impl ObliviousSender for Sender {
         }
         let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
         let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
-        let delta_ = <&Polynomial>::from(&delta);
+        let delta_ = <&Polynomial>::from(delta);
         q_sum.mul_add_assign(&x_sum, delta_);
 
         if t_sum != q_sum {
             return Err(Box::new(OTError::PolychromaticInput()));
         }
+        Ok(())
+    }
 
+    #[inline]
+    fn de_rot(&self, q : BitMatrix, delta: &BitVector, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
             .par_iter()
             .enumerate()
             .map(|(j, q)| {
                 let v0 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
-                let q = q ^ &delta;
+                let q = q ^ delta;
                 let v1 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
                 (v0, v1)
             })
@@ -192,38 +152,48 @@ impl ObliviousSender for Sender {
     }
 }
 
-impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
-        use rand::Rng;
-        use rand::SeedableRng;
-        use rand_chacha::ChaCha20Rng;
-        let mut rng = ChaCha20Rng::from_entropy();
 
-        let pb = TransactionProperties {
-            msg_size: choices.len(),
-            protocol: "Apricot".to_string(),
-        };
-        validate_properties(&pb, channel)?;
+impl ObliviousSender for Sender {
+    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        const K: usize = COMP_SEC; // kappa
+        const S: usize = STAT_SEC;
         assert!(
-            choices.len() >= BLOCK_SIZE,
+            msg.len() >= BLOCK_SIZE,
             "Message length must be larger than {BLOCK_SIZE}"
         );
         assert!(
-            choices.len() % BLOCK_SIZE == 0,
+            msg.len() % BLOCK_SIZE == 0,
             "Message length must be a multiple of {BLOCK_SIZE}"
         );
-        const K: usize = COMP_SEC;
+        let pb = TransactionProperties {
+            msg_size: msg.len(),
+            protocol: "Apricot".to_string(),
+        };
+        validate_properties(&pb, channel)?;
+
+        let l = msg.len();
+        let l = l + K + S; // refit with security padding
+        let (q, delta) = self.cote(l, channel)?;
+        self.correlation_check(l, &q, &delta, channel)?;
+        self.de_rot(q, &delta, msg, channel)
+    }
+}
+
+
+
+impl Receiver {
+
+    #[inline]
+    pub fn new(bootstrap: Box<dyn ObliviousSender>) -> Self {
+        Self { bootstrap }
+    }
+
+    #[inline]
+    fn cote(&self, choices : &[bool], channel: &Channel<Vec<u8>>) -> Result<BitMatrix, Error> {
+        const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         let l = choices.len();
-        let l = l + K + S;
-        let bonus: [bool; K + S] = rng.gen();
-
-        // COTe
-
-        // receiver:
-        // sample k pairs of k-bit seeds.
-
-        // INITIALIZATION
+        let mut rng = ChaCha20Rng::from_entropy();
         let seed0: [[u8; 32]; K] = rng.gen();
         let seed1: [[u8; 32]; K] = rng.gen();
 
@@ -231,9 +201,7 @@ impl ObliviousReceiver for Receiver {
         self.bootstrap.exchange(&msg, channel)?;
 
         // EXTENSION
-
-        let padded_choices = [choices, &bonus].concat();
-        let x: BitMatrix = padded_choices
+        let x: BitMatrix = choices
             .iter()
             .map(|b| {
                 if !*b {
@@ -278,10 +246,14 @@ impl ObliviousReceiver for Receiver {
         s.send(u)?;
 
         let t = t0.transpose();
+        Ok(t)
+    }
 
-        // Receiver outputs `t_j`
-
-        // -- Check correlation --
+    #[inline]
+    fn correlation_check(&self, t : &BitMatrix, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        const K: usize = COMP_SEC; // kappa
+        let (s, _) = channel;
+        let l = choices.len();
         let seed = coinflip_sender::<32>(channel)?;
         let mut prg = ChaCha20Rng::from_seed(seed);
         let chi: BitMatrix = (0..l)
@@ -294,10 +266,10 @@ impl ObliviousReceiver for Receiver {
         let mut x_sum = Polynomial::new();
         let mut t_sum = Polynomial::new();
         // PERF: Parallelize.
-        for (x, t, chi) in izip!(padded_choices, &t, &chi) {
+        for (x, t, chi) in izip!(choices, t, &chi) {
             let t = <&Polynomial>::from(t);
             let chi = <&Polynomial>::from(chi);
-            if x {
+            if *x {
                 x_sum += chi
             }
 
@@ -306,8 +278,11 @@ impl ObliviousReceiver for Receiver {
 
         s.send(bincode::serialize(&x_sum)?)?;
         s.send(bincode::serialize(&t_sum)?)?;
+        Ok(())
+    }
 
-        // -- Randomize --
+    #[inline]
+    fn de_rot(&self, choices: &[bool], t: BitMatrix, channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
         let v: Vec<Vec<u8>> = t
             .into_par_iter()
             .enumerate()
@@ -330,6 +305,34 @@ impl ObliviousReceiver for Receiver {
             })
             .collect();
         Ok(y)
+    }
+}
+
+
+impl ObliviousReceiver for Receiver {
+    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+        let pb = TransactionProperties {
+            msg_size: choices.len(),
+            protocol: "Apricot".to_string(),
+        };
+        validate_properties(&pb, channel)?;
+        assert!(
+            choices.len() >= BLOCK_SIZE,
+            "Message length must be larger than {BLOCK_SIZE}"
+        );
+        assert!(
+            choices.len() % BLOCK_SIZE == 0,
+            "Message length must be a multiple of {BLOCK_SIZE}"
+        );
+        const K: usize = COMP_SEC;
+        const S: usize = STAT_SEC;
+        let mut rng = ChaCha20Rng::from_entropy();
+        let bonus: [bool; K + S] = rng.gen();
+        let padded_choices = [choices, &bonus].concat();
+
+        let t = self.cote(&padded_choices, channel)?;
+        self.correlation_check(&t, &padded_choices, channel)?;
+        self.de_rot(choices, t, channel)
     }
 }
 
