@@ -43,7 +43,12 @@ pub struct ManyOTSender {
 }
 
 impl ManyOTSender {
-    pub fn exchange(&self, messages : &[Vec<u8>], domain: u32, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
+    pub fn exchange(
+        &self,
+        messages: &[Vec<u8>],
+        domain: u32,
+        ch: &Channel<Vec<u8>>,
+    ) -> Result<(), Error> {
         let byte_length = messages[0].len();
 
         // 1. B: Prepare random keys
@@ -95,7 +100,12 @@ pub struct ManyOTReceiver {
 }
 
 impl ManyOTReceiver {
-    pub fn exchange(&self, choice : u32, domain: u32, ch: &Channel<Vec<u8>>) -> Result<Vec<u8>, Error> {
+    pub fn exchange(
+        &self,
+        choice: u32,
+        domain: u32,
+        ch: &Channel<Vec<u8>>,
+    ) -> Result<Vec<u8>, Error> {
         let l = 1 << domain;
 
         // construct choices

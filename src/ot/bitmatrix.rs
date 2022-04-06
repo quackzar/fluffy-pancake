@@ -90,7 +90,6 @@ impl BitVector {
     pub fn as_mut_slice(&mut self) -> &mut [Block] {
         &mut self.0
     }
-
 }
 
 impl BitXor for BitVector {
@@ -211,8 +210,6 @@ impl BitMatrix {
     }
 }
 
-
-
 impl FromIterator<BitVector> for BitMatrix {
     fn from_iter<I: IntoIterator<Item = BitVector>>(iter: I) -> Self {
         let mut rows = Vec::new();
@@ -225,7 +222,7 @@ impl FromIterator<BitVector> for BitMatrix {
 
 impl FromParallelIterator<BitVector> for BitMatrix {
     fn from_par_iter<I: IntoParallelIterator<Item = BitVector>>(par_iter: I) -> Self {
-        let rows : Vec<BitVector> = par_iter.into_par_iter().collect();
+        let rows: Vec<BitVector> = par_iter.into_par_iter().collect();
         Self::new(rows)
     }
 }
@@ -268,7 +265,6 @@ impl IntoParallelIterator for BitMatrix {
         self.rows.into_par_iter()
     }
 }
-
 
 use std::ops::RangeTo;
 impl Index<RangeTo<usize>> for BitMatrix {

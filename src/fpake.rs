@@ -69,11 +69,7 @@ pub struct Key(WireBytes);
 use crate::util;
 
 impl HalfKey {
-    pub fn garbler(
-        password: &[u8],
-        threshold: u16,
-        ch: &Channel<Vec<u8>>,
-    ) -> Result<Self, Error> {
+    pub fn garbler(password: &[u8], threshold: u16, ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
         let password = u8_vec_to_bool_vec(password);
         let n = password.len();
 
@@ -245,7 +241,9 @@ impl OneOfManyKey {
             .map(|k| Wire::from_bytes(util::to_array(k), Domain::Binary));
 
         // 4. Receive and respond to the 1-to-n challenge from the r
-        let many_receiver = ManyOTReceiver { interal_receiver: OTReceiver };
+        let many_receiver = ManyOTReceiver {
+            interal_receiver: OTReceiver,
+        };
         let domain = log2(number_of_password);
         let encodings = many_receiver.exchange(index, domain, ch)?;
         let database_encoding = wires_from_bytes(encodings.as_slice(), Domain::Binary);
@@ -364,10 +362,7 @@ impl OneOfManyKey {
         Ok(Self(decoding.hashes[0][1]))
     }
 
-    pub fn evaluator_server(
-        passwords: &[Vec<u8>],
-        ch: &Channel<Vec<u8>>,
-    ) -> Result<Self, Error> {
+    pub fn evaluator_server(passwords: &[Vec<u8>], ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
         let (_, r) = ch;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;

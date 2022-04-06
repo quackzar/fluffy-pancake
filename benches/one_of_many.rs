@@ -5,7 +5,7 @@ fn log2(x: u32) -> u32 {
     ((std::mem::size_of::<u32>() * 8) as u32 - (x - 1).leading_zeros()) as u32
 }
 
-fn one_of_many_local(n: u32, domain: u32, messages : Vec<Vec<u8>>) {
+fn one_of_many_local(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
     let choice = n / 2;
 
     let (s1, r1) = ductile::new_local_channel();

@@ -89,7 +89,6 @@ impl Mul for &Polynomial {
     }
 }
 
-
 impl MulAssign for Polynomial {
     #[inline]
     fn mul_assign(&mut self, other: Self) {
@@ -98,12 +97,10 @@ impl MulAssign for Polynomial {
     }
 }
 
-
 #[cfg(target_arch = "x86_64")]
 pub fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     polynomial_mul_acc_x86(result, left, right);
 }
-
 
 #[cfg(target_arch = "aarch64")]
 pub fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
@@ -114,7 +111,6 @@ pub fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector
 pub fn gf128_mul_acc(result: &mut BitVector, left: &BitVector, right: &BitVector) {
     polynomial_mul_acc_generic(result, left, right);
 }
-
 
 pub const fn gf128_reduce(x32: u128, x10: u128) -> u128 {
     let x2 = x32 as u64;
@@ -141,10 +137,10 @@ pub fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, righ
     debug_assert!(right.len() == 128);
 
     #[inline]
-    unsafe fn clmul<const A: isize, const B: isize>(a : *const u64, b  : *const u64) -> u128 {
+    unsafe fn clmul<const A: isize, const B: isize>(a: *const u64, b: *const u64) -> u128 {
         let mut a = *a.offset(A) as u128;
         let mut b = *b.offset(B) as u128;
-        let mut r : u128 = 0;
+        let mut r: u128 = 0;
         while b != 0 {
             if a & 1 == 1 {
                 r ^= b;
@@ -155,8 +151,8 @@ pub fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, righ
         r
     }
 
-    let a = left.as_bytes().as_ptr() as *const u64 ;
-    let b = right.as_bytes().as_ptr() as *const u64 ;
+    let a = left.as_bytes().as_ptr() as *const u64;
+    let b = right.as_bytes().as_ptr() as *const u64;
 
     unsafe {
         let c = clmul::<0, 0>(a, b);
@@ -177,7 +173,6 @@ pub fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, righ
     }
 }
 
-
 #[inline]
 #[cfg(target_arch = "x86_64")]
 fn polynomial_mul_acc(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
@@ -185,10 +180,7 @@ fn polynomial_mul_acc(destination: &mut BitVector, left: &BitVector, right: &Bit
 }
 
 #[cfg(target_arch = "x86_64")]
-use {
-    std::arch::x86_64::*
-};
-
+use std::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
 unsafe fn m128i_to_u128(a: __m128i) -> u128 {
@@ -221,7 +213,6 @@ pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     return _mm_xor_si128(h, x10);
 }
 
-
 #[inline]
 #[cfg(target_arch = "x86_64")]
 fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
@@ -245,7 +236,6 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
 
         let left = _mm_xor_si128(d, upper);
         let right = _mm_xor_si128(c, lower);
-        
 
         // let reduced = polynomial_gf128_reduce(left, right);
         // *result_bytes = _mm_xor_si128(*result_bytes, reduced);
@@ -253,8 +243,6 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
         *result_bytes ^= reduced
     }
 }
-
-
 
 #[cfg(target_arch = "aarch64")]
 pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
@@ -264,10 +252,7 @@ pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, r
 
     #[inline(always)]
     unsafe fn pmull<const A_LANE: i32, const B_LANE: i32>(a: poly64x2_t, b: poly64x2_t) -> u128 {
-        vmull_p64(
-            vgetq_lane_p64(a, A_LANE),
-            vgetq_lane_p64(b, B_LANE),
-        )
+        vmull_p64(vgetq_lane_p64(a, A_LANE), vgetq_lane_p64(b, B_LANE))
     }
 
     unsafe {
@@ -297,20 +282,16 @@ pub fn polynomial_mul_acc_arm64(destination: &mut BitVector, left: &BitVector, r
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-
 
     #[test]
     fn test_polynomial_mul() {
         use super::*;
-        let left: BitVector = BitVector::from_bytes(&[
-            0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ]); // x + 1
-        let right: BitVector = BitVector::from_bytes(&[
-            0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ]); // x^2 + 1
+        let left: BitVector =
+            BitVector::from_bytes(&[0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
+        let right: BitVector =
+            BitVector::from_bytes(&[0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1
         let mut result = Polynomial::new();
 
         polynomial_mul_acc_generic(&mut result.0, &left, &right);
@@ -323,17 +304,14 @@ mod tests {
         }
     }
 
-
     #[test]
     #[cfg(target_arch = "x86_64")]
     fn test_polynomial_mul_x86() {
         use super::*;
-        let left: BitVector = BitVector::from_bytes(&[
-            0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ]); // x + 1
-        let right: BitVector = BitVector::from_bytes(&[
-            0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ]); // x^2 + 1
+        let left: BitVector =
+            BitVector::from_bytes(&[0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
+        let right: BitVector =
+            BitVector::from_bytes(&[0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1
         let mut result = Polynomial::new();
 
         polynomial_mul_acc_x86(&mut result.0, &left, &right);
@@ -350,12 +328,10 @@ mod tests {
     #[cfg(target_arch = "aarch64")]
     fn test_polynomial_mul_aarch64() {
         use super::*;
-        let left: BitVector = BitVector::from_bytes(&[
-            0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ]); // x + 1
-        let right: BitVector = BitVector::from_bytes(&[
-            0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ]); // x^2 + 1
+        let left: BitVector =
+            BitVector::from_bytes(&[0b00000011, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x + 1
+        let right: BitVector =
+            BitVector::from_bytes(&[0b00000101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // x^2 + 1
         let mut result = Polynomial::new();
 
         polynomial_mul_acc_arm64(&mut result.0, &left, &right);
@@ -368,7 +344,6 @@ mod tests {
             assert_eq!(0, result_bytes[i]);
         }
     }
-
 
     #[test]
     #[cfg(target_arch = "aarch64")]
@@ -422,16 +397,16 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_reduce() {
         use super::*;
+        use core::arch::x86_64::*;
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaChaRng;
-        use core::arch::x86_64::*;
         let mut rng = ChaChaRng::from_seed([0; 32]);
         for _ in 0..100 {
-            let a : u128 = rng.gen();
-            let b : u128 = rng.gen();
-            let c1 = gf128_reduce(a, b) ;
+            let a: u128 = rng.gen();
+            let b: u128 = rng.gen();
+            let c1 = gf128_reduce(a, b);
 
-            let c2  : u128 = unsafe {
+            let c2: u128 = unsafe {
                 let a0 = a as i64;
                 let a1 = (a >> 64) as i64;
                 let b0 = b as i64;
@@ -445,8 +420,5 @@ mod tests {
             };
             assert_eq!(c1, c2);
         }
-
     }
-
-
 }

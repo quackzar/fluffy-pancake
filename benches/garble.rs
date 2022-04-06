@@ -8,16 +8,17 @@ fn bench_garble_eval(c: &mut Criterion) {
         let bits = 1 << i;
 
         let circuit = build_circuit(bits, 8);
-        c.bench_function(&format!("Garble {}-bit Threshold Circuit", bits), |b| b.iter(|| garble(&circuit)));
+        c.bench_function(&format!("Garble {}-bit Threshold Circuit", bits), |b| {
+            b.iter(|| garble(&circuit))
+        });
 
         let (gc, e, _) = garble(&circuit);
         let x = encode(&e, &vec![1; 2 * bits]);
-        c.bench_function(&format!("Evaluate {}-bit Threshold Circuit", bits), |b| b.iter(|| evaluate(&gc, &x)));
+        c.bench_function(&format!("Evaluate {}-bit Threshold Circuit", bits), |b| {
+            b.iter(|| evaluate(&gc, &x))
+        });
     }
 }
 
-criterion_group!(
-    benches,
-    bench_garble_eval,
-);
+criterion_group!(benches, bench_garble_eval,);
 criterion_main!(benches);

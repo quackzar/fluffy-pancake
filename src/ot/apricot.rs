@@ -28,14 +28,13 @@ pub struct Receiver {
 }
 
 impl Sender {
-
     #[inline]
     pub fn new(bootstrap: Box<dyn ObliviousReceiver>) -> Self {
         Self { bootstrap }
     }
 
     #[inline]
-    fn cote(&self, l : usize, channel: &Channel<Vec<u8>>) -> Result<(BitMatrix, BitVector), Error> {
+    fn cote(&self, l: usize, channel: &Channel<Vec<u8>>) -> Result<(BitMatrix, BitVector), Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
 
@@ -69,21 +68,24 @@ impl Sender {
         let (_, r) = channel;
         let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
 
-        let q : BitMatrix = u8_vec_to_bool_vec(delta.as_bytes()).into_par_iter()
-            .enumerate().map(|(i, d)| {
-                if d {
-                    &u[i] ^ &t[i]
-                } else {
-                    t[i].clone()
-                }
-            }).collect();
+        let q: BitMatrix = u8_vec_to_bool_vec(delta.as_bytes())
+            .into_par_iter()
+            .enumerate()
+            .map(|(i, d)| if d { &u[i] ^ &t[i] } else { t[i].clone() })
+            .collect();
 
         let q = q.transpose();
         Ok((q, delta))
     }
 
     #[inline]
-    fn correlation_check(&self, l: usize, q: &BitMatrix, delta: &BitVector, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn correlation_check(
+        &self,
+        l: usize,
+        q: &BitMatrix,
+        delta: &BitVector,
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<(), Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         let (_, r) = channel;
@@ -114,7 +116,13 @@ impl Sender {
     }
 
     #[inline]
-    fn de_rot(&self, q : BitMatrix, delta: &BitVector, msg : &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn de_rot(
+        &self,
+        q: BitMatrix,
+        delta: &BitVector,
+        msg: &Message,
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<(), Error> {
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
             .par_iter()
@@ -152,7 +160,6 @@ impl Sender {
     }
 }
 
-
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         const K: usize = COMP_SEC; // kappa
@@ -179,17 +186,14 @@ impl ObliviousSender for Sender {
     }
 }
 
-
-
 impl Receiver {
-
     #[inline]
     pub fn new(bootstrap: Box<dyn ObliviousSender>) -> Self {
         Self { bootstrap }
     }
 
     #[inline]
-    fn cote(&self, choices : &[bool], channel: &Channel<Vec<u8>>) -> Result<BitMatrix, Error> {
+    fn cote(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<BitMatrix, Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         let l = choices.len();
@@ -231,7 +235,6 @@ impl Receiver {
             })
             .collect();
 
-
         let u: BitMatrix = izip!(x, &t0, &t1)
             .map(|(x, t0, t1)| {
                 let mut u = x;
@@ -250,7 +253,12 @@ impl Receiver {
     }
 
     #[inline]
-    fn correlation_check(&self, t : &BitMatrix, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn correlation_check(
+        &self,
+        t: &BitMatrix,
+        choices: &[bool],
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<(), Error> {
         const K: usize = COMP_SEC; // kappa
         let (s, _) = channel;
         let l = choices.len();
@@ -282,7 +290,12 @@ impl Receiver {
     }
 
     #[inline]
-    fn de_rot(&self, choices: &[bool], t: BitMatrix, channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+    fn de_rot(
+        &self,
+        choices: &[bool],
+        t: BitMatrix,
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<Payload, Error> {
         let v: Vec<Vec<u8>> = t
             .into_par_iter()
             .enumerate()
@@ -307,7 +320,6 @@ impl Receiver {
         Ok(y)
     }
 }
-
 
 impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
