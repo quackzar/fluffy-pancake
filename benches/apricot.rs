@@ -40,7 +40,7 @@ fn run_ot(msg: &Message, choices: &[bool]) {
 
 fn bench(c: &mut Criterion) {
     // Local
-    for i in 8..=24 {
+    for i in 8..=20 {
         let n = 1 << i;
         let name: String = format!("Local Apricot OT, {} messages", n);
         let circuit = build_circuit(n / 2, 0);
