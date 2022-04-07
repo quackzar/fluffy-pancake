@@ -210,8 +210,6 @@ fn polynomial_mul_acc(destination: &mut [u8], left: &[u8], right: &[u8]) {
 #[inline]
 #[cfg(target_arch = "aarch64")]
 fn polynomial_mul_acc(destination: &mut [u8], left: &[u8], right: &[u8]) {
-    debug_assert!(left.len() == 128);
-    debug_assert!(right.len() == 128);
     use core::arch::aarch64::*;
 
     #[inline(always)]

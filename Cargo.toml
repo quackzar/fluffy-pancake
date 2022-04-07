@@ -19,12 +19,9 @@ curve25519-dalek = {version = "4.0.0-pre.1", features = ["std"]}
 bytemuck = "1.7.3"
 bincode = "1.0"
 serde = {version = "1.0.136",  features = ["derive"]}
-crossbeam-channel = "0.5"
 rayon = "1.5.1"
 ductile = "0.2.0"
-bitvec = {version = "1.0.0", features = ["alloc", "serde"]}
 num-traits = "0.2"
-num-bigint = {version = "0.4.3", features = ["serde"]}
 num-integer = "0.1.44"
 
 [features]
@@ -59,8 +56,4 @@ harness = false
 
 [[bench]]
 name = "polynomial"
-harness = false
-
-[[bench]]
-name = "bits"
 harness = false
