@@ -3,8 +3,6 @@ use crate::ot::common::*;
 use crate::common::*;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use aes_gcm::aead::{Aead, NewAead};
-use aes_gcm::{Aes256Gcm, Key, Nonce};
 
 const K: usize = 128;
 const S: usize = 128;
@@ -340,7 +338,6 @@ impl ObliviousSender for Sender {
         // TODO: Should we put msg.len() in a variable?
         let mut d0 = Vec::with_capacity(msg.len());
         let mut d1 = Vec::with_capacity(msg.len());
-        let nonce = Nonce::from_slice(b"unique nonce");
         for row_idx in 0..msg.len() {
             let v0 = hash!(row_idx.to_be_bytes(), q_transposed[row_idx].as_slice());
 
@@ -350,12 +347,18 @@ impl ObliviousSender for Sender {
             let v1 = hash!(row_idx.to_be_bytes(), q_delta);
 
             let m0 = msg.0[row_idx][0].as_slice();
-            let cipher = Aes256Gcm::new(Key::from_slice(v0.as_slice()));
-            d0.push(cipher.encrypt(nonce, m0).unwrap());
+            let mut chacha = ChaCha20Rng::from_seed(v0);
+            let mut plain = vec![0u8; m0.len()];
+            chacha.fill_bytes(&mut plain);
+            xor_inplace(&mut plain, m0);
+            d0.push(plain);
 
             let m1 = msg.0[row_idx][1].as_slice();
-            let cipher = Aes256Gcm::new(Key::from_slice(v1.as_slice()));
-            d1.push(cipher.encrypt(nonce, m1).unwrap());
+            let mut chacha = ChaCha20Rng::from_seed(v1);
+            let mut plain = vec![0u8; m1.len()];
+            chacha.fill_bytes(&mut plain);
+            xor_inplace(&mut plain, m1);
+            d1.push(plain);
         }
 
         s.send(bincode::serialize(&d0)?)?;
@@ -493,12 +496,13 @@ impl ObliviousReceiver for Receiver {
         let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
         let mut y: Vec<Vec<u8>> = Vec::with_capacity(choices.len());
         for i in 0..choices.len() {
-            let nonce = Nonce::from_slice(b"unique nonce");
-            let cipher = Aes256Gcm::new(Key::from_slice(v[i].as_slice()));
-            // TODO: This we can probably optimize
-            let d = if choices[i] { d1[i].as_slice() } else { d0[i].as_slice() };
+            let mut chacha = ChaCha20Rng::from_seed(array(&v[i]));
 
-            let c = cipher.decrypt(nonce, d).unwrap();
+            let d = if choices[i] { d1[i].as_slice() } else { d0[i].as_slice() };
+            let mut c = vec![0u8; d.len()];
+            chacha.fill_bytes(&mut c);
+            xor_inplace(&mut c, d);
+
             y.push(c);
         }
 
