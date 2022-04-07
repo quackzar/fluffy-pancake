@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},
-    ot::apricot::{Receiver, Sender},
+    ot::apricot_avx2::{Receiver, Sender},
     ot::common::*,
 };
 
@@ -42,7 +42,7 @@ fn bench(c: &mut Criterion) {
     // Local
     for i in 8..=24 {
         let n = 1 << i;
-        let name: String = format!("Local Apricot OT, {} messages", n);
+        let name: String = format!("Local Apricot AVX2 OT, {} messages", n);
         let circuit = build_circuit(n / 2, 0);
         let (_, enc, _) = garble::garble(&circuit);
         let enc = BinaryEncodingKey::from(enc);
