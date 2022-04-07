@@ -162,28 +162,28 @@ use std::arch::x86_64::*;
 #[inline]
 #[cfg(target_arch = "x86_64")]
 unsafe fn _mm_slli_si128_1(value: __m128i) -> __m128i {
-    const shift: i32 = 1;
+    const SHIFT: i32 = 1;
     let carry = _mm_bslli_si128(value, 8);
-    let carry = _mm_srli_epi64(carry, 64 - shift);
-    let value = _mm_slli_epi64(value, shift);
+    let carry = _mm_srli_epi64(carry, 64 - SHIFT);
+    let value = _mm_slli_epi64(value, SHIFT);
     return _mm_or_si128(value, carry);
 }
 #[inline]
 #[cfg(target_arch = "x86_64")]
 unsafe fn _mm_slli_si128_2(value: __m128i) -> __m128i {
-    const shift: i32 = 2;
+    const SHIFT: i32 = 2;
     let carry = _mm_bslli_si128(value, 8);
-    let carry = _mm_srli_epi64(carry, 64 - shift);
-    let value = _mm_slli_epi64(value, shift);
+    let carry = _mm_srli_epi64(carry, 64 - SHIFT);
+    let value = _mm_slli_epi64(value, SHIFT);
     return _mm_or_si128(value, carry);
 }
 #[inline]
 #[cfg(target_arch = "x86_64")]
 unsafe fn _mm_slli_si128_7(value: __m128i) -> __m128i {
-    const shift: i32 = 7;
+    const SHIFT: i32 = 7;
     let carry = _mm_bslli_si128(value, 8);
-    let carry = _mm_srli_epi64(carry, 64 - shift);
-    let value = _mm_slli_epi64(value, shift);
+    let carry = _mm_srli_epi64(carry, 64 - SHIFT);
+    let value = _mm_slli_epi64(value, SHIFT);
     return _mm_or_si128(value, carry);
 }
 
@@ -616,52 +616,3 @@ mod tests {
         h2.unwrap().join().unwrap();
     }
 }
-
-/*
-unsafe fn tranpose_bitmatrix(source: *const u8, target: *mut u8, width: usize, height: usize) {
-    for x in 0..width {
-        for y in 0..height {
-            let index = y * width + x;
-            let byte = source[index];
-
-            for x_bit in 0..8 {
-                let bit = byte & (1 << x_bit) >> x_bit;
-
-                let transposed_index = x * width + x;
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    fn test_tranpose_bitmatrix() {
-        unsafe {
-            const WIDTH: usize = 4;
-            const HEIGHT: usize = 2;
-            let matrix = [
-                0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00,
-                0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11,
-                0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11,
-                0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11, 0b00, 0b11,
-            ].as_ptr();
-
-            let transposed = [0u8; WIDTH * HEIGHT].as_mut_ptr();
-            let expected = [
-                0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00,
-                0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00,
-                0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11,
-                0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11,
-                0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00,
-                0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00,
-                0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11,
-                0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b00, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11, 0b11,
-            ];
-
-            for i in 0..(WIDTH * HEIGHT) {
-                assert_eq!(expected[i], transposed[i]);
-            }
-        }
-    }
-}
-*/

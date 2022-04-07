@@ -192,34 +192,31 @@ unsafe fn m128i_to_u128(a: __m128i) -> u128 {
     a
 }
 
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
-
 #[inline]
 #[cfg(target_arch = "x86_64")]
 unsafe fn _mm_slli_si128_1(value: __m128i) -> __m128i {
-    const shift: i32 = 1;
+    const SHIFT: i32 = 1;
     let carry = _mm_bslli_si128(value, 8);
-    let carry = _mm_srli_epi64(carry, 64 - shift);
-    let value = _mm_slli_epi64(value, shift);
+    let carry = _mm_srli_epi64(carry, 64 - SHIFT);
+    let value = _mm_slli_epi64(value, SHIFT);
     return _mm_or_si128(value, carry);
 }
 #[inline]
 #[cfg(target_arch = "x86_64")]
 unsafe fn _mm_slli_si128_2(value: __m128i) -> __m128i {
-    const shift: i32 = 2;
+    const SHIFT: i32 = 2;
     let carry = _mm_bslli_si128(value, 8);
-    let carry = _mm_srli_epi64(carry, 64 - shift);
-    let value = _mm_slli_epi64(value, shift);
+    let carry = _mm_srli_epi64(carry, 64 - SHIFT);
+    let value = _mm_slli_epi64(value, SHIFT);
     return _mm_or_si128(value, carry);
 }
 #[inline]
 #[cfg(target_arch = "x86_64")]
 unsafe fn _mm_slli_si128_7(value: __m128i) -> __m128i {
-    const shift: i32 = 7;
+    const SHIFT: i32 = 7;
     let carry = _mm_bslli_si128(value, 8);
-    let carry = _mm_srli_epi64(carry, 64 - shift);
-    let value = _mm_slli_epi64(value, shift);
+    let carry = _mm_srli_epi64(carry, 64 - SHIFT);
+    let value = _mm_slli_epi64(value, SHIFT);
     return _mm_or_si128(value, carry);
 }
 
@@ -430,7 +427,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn test_reduce() {
         use super::*;
-        use core::arch::x86_64::*;
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaChaRng;
         let mut rng = ChaChaRng::from_seed([0; 32]);
