@@ -239,7 +239,8 @@ impl OneOfManyKey {
 
         let input_encoding = key_encoding
             .iter()
-            .map(|k| Wire::from_bytes(util::to_array(k), Domain::Binary));
+            .map(|k| Wire::from_bytes(util::to_array(k), Domain::Binary))
+            .collect();
 
         // 4. Receive and respond to the 1-to-n challenge from the r
         let many_receiver = ManyOTReceiver {
@@ -254,9 +255,7 @@ impl OneOfManyKey {
         //
 
         // 6. Evaluate the circuit
-        let mut input = Vec::<Wire>::new();
-        input.extend(database_encoding);
-        input.extend(input_encoding);
+        let input = [database_encoding, input_encoding].concat();
         let output = evaluate(&gc, &input);
         Ok(Self(hash!(
             (gc.circuit.num_wires - 1).to_be_bytes(),

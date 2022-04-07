@@ -12,6 +12,7 @@ use itertools::izip;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 
 /// The computational security paramter (k)
@@ -38,7 +39,6 @@ impl Sender {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
 
-        // COTe
         // sample k pairs of k-bit seeds.
         let mut rng = ChaCha20Rng::from_entropy();
 
@@ -66,7 +66,7 @@ impl Sender {
             .collect();
 
         let (_, r) = channel;
-        let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
+        let u: BitMatrix = bincode::deserialize(&r.recv_raw()?)?;
 
         let q: BitMatrix = u8_vec_to_bool_vec(delta.as_bytes())
             .into_par_iter()
@@ -104,8 +104,8 @@ impl Sender {
 
             q_sum.mul_add_assign(q, chi);
         }
-        let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
-        let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+        let x_sum: Polynomial = bincode::deserialize(&r.recv_raw()?)?;
+        let t_sum: Polynomial = bincode::deserialize(&r.recv_raw()?)?;
         let delta_ = <&Polynomial>::from(delta);
         q_sum.mul_add_assign(&x_sum, delta_);
 
@@ -140,13 +140,13 @@ impl Sender {
             .map(|([m0, m1], v0, v1)| {
                 // encrypt the messages.
                 let size = m0.len();
-                let mut rng = ChaCha20Rng::from_seed(v0.try_into().unwrap());
+                let mut rng = ChaCha8Rng::from_seed(v0.try_into().unwrap());
                 let cipher : Vec<u8> = (0..size)
                     .map(|_| rng.gen::<u8>()).collect();
                 let c0 = xor_bytes(m0, &cipher);
 
                 let size = m1.len();
-                let mut rng = ChaCha20Rng::from_seed(v1.try_into().unwrap());
+                let mut rng = ChaCha8Rng::from_seed(v1.try_into().unwrap());
                 let cipher : Vec<u8> = (0..size)
                     .map(|_| rng.gen::<u8>()).collect();
                 let c1 = xor_bytes(m1, &cipher);
@@ -158,8 +158,8 @@ impl Sender {
         let (s, _) = channel;
         let d0 = bincode::serialize(&d0)?;
         let d1 = bincode::serialize(&d1)?;
-        s.send(d0)?;
-        s.send(d1)?;
+        s.send_raw(&d0)?;
+        s.send_raw(&d1)?;
 
         Ok(())
     }
@@ -217,7 +217,7 @@ impl Receiver {
 
         let (s, _) = channel;
         let u = bincode::serialize(&u)?;
-        s.send(u)?;
+        s.send_raw(&u)?;
 
         let t = t0.transpose();
         Ok(t)
@@ -255,8 +255,8 @@ impl Receiver {
             t_sum.mul_add_assign(t, chi);
         }
 
-        s.send(bincode::serialize(&x_sum)?)?;
-        s.send(bincode::serialize(&t_sum)?)?;
+        s.send_raw(&bincode::serialize(&x_sum)?)?;
+        s.send_raw(&bincode::serialize(&t_sum)?)?;
         Ok(())
     }
 
@@ -275,13 +275,13 @@ impl Receiver {
 
         // -- DeROT --
         let (_, r) = channel;
-        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
+        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
         let y = izip!(v, choices, d0, d1)
             .map(|(v, c, d0, d1)| {
                 let d = if *c { d1 } else { d0 };
                 let size = d.len();
-                let mut rng = ChaCha20Rng::from_seed(v.try_into().unwrap());
+                let mut rng = ChaCha8Rng::from_seed(v.try_into().unwrap());
                 let cipher : Vec<u8> = (0..size)
                     .map(|_| rng.gen::<u8>()).collect();
                 xor_bytes(&d, &cipher)
@@ -353,8 +353,10 @@ mod tests {
         use crate::ot::chou_orlandi::{OTReceiver, OTSender};
         let (s1, r1) = ductile::new_local_channel();
         let (s2, r2) = ductile::new_local_channel();
+        const N : usize = 8 << 12;
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
+        println!("N = {}", N);
 
         use std::thread;
         let h1 = thread::Builder::new()
@@ -363,7 +365,7 @@ mod tests {
                 let sender = Sender {
                     bootstrap: Box::new(OTReceiver),
                 };
-                let msg = Message::new(&[b"Hello"; 8 << 4], &[b"World"; 8 << 4]);
+                let msg = Message::new(&[b"Hello"; N], &[b"World"; N]);
                 sender.exchange(&msg, &ch1).unwrap();
             });
 
@@ -373,7 +375,7 @@ mod tests {
                 let receiver = Receiver {
                     bootstrap: Box::new(OTSender),
                 };
-                let choices = [true; 8 << 4];
+                let choices = [true; N];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
                 assert_eq!(msg[0], b"World");
             });
