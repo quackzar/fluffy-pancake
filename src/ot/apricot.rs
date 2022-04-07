@@ -136,17 +136,22 @@ impl Sender {
             .unzip();
 
         // -- DeROT --
-        use aes_gcm::aead::{Aead, NewAead};
-        use aes_gcm::{Aes256Gcm, Key, Nonce};
         let (d0, d1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1)
             .map(|([m0, m1], v0, v1)| {
                 // encrypt the messages.
-                let nonce = Nonce::from_slice(b"unique nonce");
-                let cipher = Aes256Gcm::new(Key::from_slice(&v0));
-                let c0 = cipher.encrypt(nonce, m0.as_slice()).unwrap();
-                let cipher = Aes256Gcm::new(Key::from_slice(&v1));
-                let c1 = cipher.encrypt(nonce, m1.as_slice()).unwrap();
-                (c0, c1) // TODO: Proper error handling.
+                let size = m0.len();
+                let mut rng = ChaCha20Rng::from_seed(v0.try_into().unwrap());
+                let cipher : Vec<u8> = (0..size)
+                    .map(|_| rng.gen::<u8>()).collect();
+                let c0 = xor_bytes(m0, &cipher);
+
+                let size = m1.len();
+                let mut rng = ChaCha20Rng::from_seed(v1.try_into().unwrap());
+                let cipher : Vec<u8> = (0..size)
+                    .map(|_| rng.gen::<u8>()).collect();
+                let c1 = xor_bytes(m1, &cipher);
+
+                (c0, c1)
             })
             .unzip();
 
@@ -160,31 +165,6 @@ impl Sender {
     }
 }
 
-impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        const K: usize = COMP_SEC; // kappa
-        const S: usize = STAT_SEC;
-        assert!(
-            msg.len() >= BLOCK_SIZE,
-            "Message length must be larger than {BLOCK_SIZE}"
-        );
-        assert!(
-            msg.len() % BLOCK_SIZE == 0,
-            "Message length must be a multiple of {BLOCK_SIZE}"
-        );
-        let pb = TransactionProperties {
-            msg_size: msg.len(),
-            protocol: "Apricot".to_string(),
-        };
-        validate_properties(&pb, channel)?;
-
-        let l = msg.len();
-        let l = l + K + S; // refit with security padding
-        let (q, delta) = self.cote(l, channel)?;
-        self.correlation_check(l, &q, &delta, channel)?;
-        self.de_rot(q, &delta, msg, channel)
-    }
-}
 
 impl Receiver {
     #[inline]
@@ -303,21 +283,46 @@ impl Receiver {
             .collect();
 
         // -- DeROT --
-        use aes_gcm::aead::{Aead, NewAead};
-        use aes_gcm::{Aes256Gcm, Key, Nonce};
         let (_, r) = channel;
         let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
         let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
         let y = izip!(v, choices, d0, d1)
             .map(|(v, c, d0, d1)| {
-                let nonce = Nonce::from_slice(b"unique nonce");
-                let cipher = Aes256Gcm::new(Key::from_slice(&v));
                 let d = if *c { d1 } else { d0 };
-                let c = cipher.decrypt(nonce, d.as_slice()).unwrap();
-                c // TODO: Proper error handling.
+                let size = d.len();
+                let mut rng = ChaCha20Rng::from_seed(v.try_into().unwrap());
+                let cipher : Vec<u8> = (0..size)
+                    .map(|_| rng.gen::<u8>()).collect();
+                xor_bytes(&d, &cipher)
             })
             .collect();
         Ok(y)
+    }
+}
+
+impl ObliviousSender for Sender {
+    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        const K: usize = COMP_SEC; // kappa
+        const S: usize = STAT_SEC;
+        assert!(
+            msg.len() >= BLOCK_SIZE,
+            "Message length must be larger than {BLOCK_SIZE}"
+        );
+        assert!(
+            msg.len() % BLOCK_SIZE == 0,
+            "Message length must be a multiple of {BLOCK_SIZE}"
+        );
+        let pb = TransactionProperties {
+            msg_size: msg.len(),
+            protocol: "Apricot".to_string(),
+        };
+        validate_properties(&pb, channel)?;
+
+        let l = msg.len();
+        let l = l + K + S; // refit with security padding
+        let (q, delta) = self.cote(l, channel)?;
+        self.correlation_check(l, &q, &delta, channel)?;
+        self.de_rot(q, &delta, msg, channel)
     }
 }
 
