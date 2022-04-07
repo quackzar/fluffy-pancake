@@ -136,6 +136,7 @@ impl Sender {
             .unzip();
 
         // -- DeROT --
+        // TODO: parallelize
         let (d0, d1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1)
             .map(|([m0, m1], v0, v1)| {
                 // encrypt the messages.
@@ -277,6 +278,8 @@ impl Receiver {
         let (_, r) = channel;
         let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
         let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
+
+        // TODO: parallelize
         let y = izip!(v, choices, d0, d1)
             .map(|(v, c, d0, d1)| {
                 let d = if *c { d1 } else { d0 };

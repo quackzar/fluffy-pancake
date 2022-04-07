@@ -246,8 +246,17 @@ impl Wire {
         self.domain.num()
     }
 
-    pub fn from_bytes(values: WireBytes, domain: Domain) -> Self {
+    pub fn from_array(values: WireBytes, domain: Domain) -> Self {
         let wire = Self { domain, values };
+        match domain {
+            Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,
+            Domain::U8(m) => wire.map(|x| x % m),
+            Domain::U16(m) => wire.map_as_u16(|x| x % m),
+        }
+    }
+
+    pub fn from_bytes(values: &[u8], domain: Domain) -> Self {
+        let wire = Self { domain, values: values.try_into().unwrap() };
         match domain {
             Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,
             Domain::U8(m) => wire.map(|x| x % m),
@@ -276,7 +285,7 @@ pub fn hash_wire(index: usize, wire: &Wire, target: &Wire) -> Wire {
     // Makes values for the wire of target size from the output of the hash function, recall that
     // the hash function outputs 256 bits, which means that the number of values * the number of
     // bits in a value must be less than or equal to 256.
-    Wire::from_bytes(bytes, target.domain)
+    Wire::from_array(bytes, target.domain)
 }
 
 pub fn hash(index: usize, x: u16, wire: &Wire) -> WireBytes {

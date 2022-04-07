@@ -110,7 +110,7 @@ impl HalfKey {
         let enc_password: Vec<Wire> = enc_password
             .iter()
             .map(|b| to_array(b))
-            .map(|b: [u8; 32]| Wire::from_bytes(b, Domain::Binary))
+            .map(|b: [u8; 32]| Wire::from_array(b, Domain::Binary))
             .collect();
 
         let our_password = enc_password;
@@ -142,7 +142,7 @@ pub struct OneOfManyKey(WireBytes);
 fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
     let mut wires = Vec::with_capacity(bytes.len() / LENGTH);
     for chunk in bytes.chunks_exact(LENGTH) {
-        wires.push(Wire::from_bytes(util::to_array(chunk), domain));
+        wires.push(Wire::from_array(util::to_array(chunk), domain));
     }
 
     wires
@@ -239,7 +239,7 @@ impl OneOfManyKey {
 
         let input_encoding = key_encoding
             .iter()
-            .map(|k| Wire::from_bytes(util::to_array(k), Domain::Binary))
+            .map(|k| Wire::from_array(util::to_array(k), Domain::Binary))
             .collect();
 
         // 4. Receive and respond to the 1-to-n challenge from the r
@@ -398,7 +398,7 @@ impl OneOfManyKey {
         let mut database_encoding = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
             let bytes = &encoding_bytes[i];
-            let wire = Wire::from_bytes(util::to_array(bytes), Domain::Binary);
+            let wire = Wire::from_bytes(bytes, Domain::Binary);
             database_encoding.push(wire);
         }
 

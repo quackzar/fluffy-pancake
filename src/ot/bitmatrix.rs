@@ -182,15 +182,15 @@ impl BitMatrix {
     #[inline]
     pub fn monochrome(choices: &[bool], size: usize) -> Self {
         let l = choices.len();
-        let mut packed_choices = vec![0u64; l/64];
-        for i in 0..l/64 {
-            for b in 0..64 {
-                packed_choices[i] |= (choices[i*64 + b] as u64) << b;
+        let mut packed_choices : Vec<Block> = vec![0; l/BLOCK_SIZE];
+        for i in 0..l/BLOCK_SIZE {
+            for b in 0..BLOCK_SIZE {
+                packed_choices[i] |= (choices[i*BLOCK_SIZE + b] as Block) << b;
             }
         }
-        let mut x = vec![vec![0u64; l/64]; size];
+        let mut x = vec![vec![0; l/BLOCK_SIZE]; size];
         for row in x.iter_mut() {
-            row[..(l / 64)].copy_from_slice(&packed_choices);
+            row[..(l / BLOCK_SIZE)].copy_from_slice(&packed_choices);
         }
         Self::from(x)
     }
@@ -354,28 +354,3 @@ impl Index<RangeFull> for BitMatrix {
     }
 }
 
-
-mod tests {
-    use rand::{Rng, SeedableRng};
-
-    use super::tranpose_64;
-
-    #[test]
-    fn test_transpose64() {
-        // let mut rng = rand_chacha::ChaCha20Rng::from_seed([0; 32]);
-        // let mut x : [u64; 64] = rng.gen();
-        let mut x = [7; 64];
-        println!("Before");
-        for i in 0..64 {
-            println!("{:#066b}", &x[i]);
-        }
-
-        tranpose_64(&mut x);
-
-        println!("After");
-        for i in 0..64 {
-            println!("{:#066b}", &x[i]);
-        }
-    }
-
-}

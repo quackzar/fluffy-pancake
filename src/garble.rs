@@ -233,19 +233,19 @@ pub fn garble(circuit: &Circuit) -> (GarbledCircuit, EncodingKey, DecodingKey) {
                 j1 += 1;
 
                 // first half gate
-                let t_g = &Wire::from_bytes(hash!(w_a, j0.to_be_bytes()), Domain::Binary)
-                    + &Wire::from_bytes(hash!(w_a + delta, j0.to_be_bytes()), Domain::Binary);
+                let t_g = &Wire::from_array(hash!(w_a, j0.to_be_bytes()), Domain::Binary)
+                    + &Wire::from_array(hash!(w_a + delta, j0.to_be_bytes()), Domain::Binary);
                 let t_g = if p_b { &t_g + delta } else { t_g };
 
-                let w_g = Wire::from_bytes(hash!(w_a, j0.to_be_bytes()), Domain::Binary);
+                let w_g = Wire::from_array(hash!(w_a, j0.to_be_bytes()), Domain::Binary);
                 let w_g = if p_a { &w_g + &t_g } else { w_g };
 
                 // second half gate
-                let t_e = &Wire::from_bytes(hash!(w_b, j1.to_be_bytes()), Domain::Binary)
-                    + &Wire::from_bytes(hash!(w_b + delta, j1.to_be_bytes()), Domain::Binary);
+                let t_e = &Wire::from_array(hash!(w_b, j1.to_be_bytes()), Domain::Binary)
+                    + &Wire::from_array(hash!(w_b + delta, j1.to_be_bytes()), Domain::Binary);
                 let t_e = &t_e + w_a;
 
-                let w_e = Wire::from_bytes(hash!(w_b, j1.to_be_bytes()), Domain::Binary);
+                let w_e = Wire::from_array(hash!(w_b, j1.to_be_bytes()), Domain::Binary);
                 let w_e = if p_b { &w_e + &(&t_e + w_a) } else { w_e };
 
                 f_halfgate.insert(gate.output, (t_g, t_e));
@@ -334,10 +334,10 @@ pub fn evaluate(circuit: &GarbledCircuit, x: &[Wire]) -> Vec<Wire> {
                 j1 += 1;
                 let (t_g, t_e) = &f_halfgate[&gate.output];
 
-                let w_g = Wire::from_bytes(hash!(w_a, j0.to_be_bytes()), Domain::Binary);
+                let w_g = Wire::from_array(hash!(w_a, j0.to_be_bytes()), Domain::Binary);
                 let w_g = if s_a { &w_g + t_g } else { w_g };
 
-                let w_e = Wire::from_bytes(hash!(w_b, j1.to_be_bytes()), Domain::Binary);
+                let w_e = Wire::from_array(hash!(w_b, j1.to_be_bytes()), Domain::Binary);
 
                 let w_e = if s_b { &w_e + &(t_e + w_a) } else { w_e };
 
