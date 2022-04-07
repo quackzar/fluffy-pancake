@@ -9,8 +9,8 @@ use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use curve25519_dalek::scalar::Scalar;
 
-use rand::SeedableRng;
-use rand_chacha::ChaCha12Rng;
+use rand::{SeedableRng, Rng};
+use rand_chacha::{ChaCha12Rng, ChaCha20Rng};
 use serde::de::Visitor;
 
 use crate::hash;
@@ -222,12 +222,15 @@ impl Sender {
 
                 // Encrypt the messages.
                 // TODO: Error handling
-                let cipher = Aes256Gcm::new(Key::from_slice(&k0));
-                let nonce = Nonce::from_slice(b"unique nonce"); // TODO: Something with nonce.
-                let e0 = cipher.encrypt(nonce, m0.as_ref()).unwrap().to_vec();
-                let cipher = Aes256Gcm::new(Key::from_slice(&k1));
-                let nonce = Nonce::from_slice(b"unique nonce");
-                let e1 = cipher.encrypt(nonce, m1.as_ref()).unwrap().to_vec();
+                let mut stream = ChaCha20Rng::from_seed(k0.try_into().unwrap());
+                let size = m0.len();
+                let cipher : Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect(); 
+                let e0 = xor_bytes(m0, &cipher);
+
+                let mut stream = ChaCha20Rng::from_seed(k1.try_into().unwrap());
+                let size = m1.len();
+                let cipher : Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect(); 
+                let e1 = xor_bytes(m1, &cipher);
                 [e0, e1]
             })
             .collect();
@@ -240,7 +243,7 @@ impl Sender {
 pub struct Init;
 
 struct RetrievingPayload {
-    keys: Vec<Vec<u8>>,
+    keys: Vec<[u8; 32]>,
     publics: Public,
 }
 
@@ -270,7 +273,7 @@ impl Receiver<Init> {
             .0
             .par_iter()
             .enumerate()
-            .map(|(i, p)| -> (CompressedEdwardsY, Vec<u8>) {
+            .map(|(i, p)| -> (CompressedEdwardsY, [u8; 32]) {
                 let their_public = &p.decompress().unwrap();
                 let public = if self.choices[i] {
                     their_public + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
@@ -279,7 +282,7 @@ impl Receiver<Init> {
                 };
                 let mut hasher = Sha256::new();
                 hasher.update((their_public * self.secrets[i]).compress().as_bytes());
-                let key = hasher.finalize().to_vec();
+                let key : [u8; 32] = hasher.finalize().try_into().unwrap();
 
                 (public.compress(), key)
             })
@@ -305,12 +308,12 @@ impl Receiver<RetrievingPayload> {
             .par_iter()
             .enumerate()
             .map(|(i, [e0, e1])| -> Vec<u8> {
-                let key = Key::from_slice(&self.state.keys[i]);
-                let cipher = Aes256Gcm::new(key);
-                let nonce = Nonce::from_slice(b"unique nonce"); // HACK: hardcoded, has to be 96-bit.
-                cipher
-                    .decrypt(nonce, (if self.choices[i] { e1 } else { e0 }).as_ref())
-                    .expect("Failed to decrypt")
+                let e = if self.choices[i] {e1} else {e0};
+                let k = self.state.keys[i];
+                let mut stream = ChaCha20Rng::from_seed(k);
+                let size = e.len();
+                let cipher : Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect(); 
+                xor_bytes(e, &cipher)
             })
             .collect()
     }
