@@ -185,17 +185,8 @@ impl Receiver {
         self.bootstrap.exchange(&msg, channel)?;
 
         // EXTENSION
-        let x: BitMatrix = choices
-            .iter()
-            .map(|b| {
-                if !*b {
-                    BitVector::zeros(K)
-                } else {
-                    BitVector::ones(K)
-                }
-            })
-            .collect();
-        let x = x.transpose();
+
+        let x = BitMatrix::monochrome(choices, K);
 
         let t0: BitMatrix = seed0
             .par_iter()
