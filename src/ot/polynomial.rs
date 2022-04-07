@@ -173,6 +173,8 @@ pub fn polynomial_mul_acc_generic(result: &mut BitVector, left: &BitVector, righ
     }
 }
 
+// -------------------------------------------------------------------------------------------------
+// x86 implementations of gf128_reduce and gf128_mul_acc
 #[inline]
 #[cfg(target_arch = "x86_64")]
 fn polynomial_mul_acc(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
@@ -191,6 +193,38 @@ unsafe fn m128i_to_u128(a: __m128i) -> u128 {
 }
 
 #[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
+#[inline]
+#[cfg(target_arch = "x86_64")]
+unsafe fn _mm_slli_si128_1(value: __m128i) -> __m128i {
+    const shift: i32 = 1;
+    let carry = _mm_bslli_si128(value, 8);
+    let carry = _mm_srli_epi64(carry, 64 - shift);
+    let value = _mm_slli_epi64(value, shift);
+    return _mm_or_si128(value, carry);
+}
+#[inline]
+#[cfg(target_arch = "x86_64")]
+unsafe fn _mm_slli_si128_2(value: __m128i) -> __m128i {
+    const shift: i32 = 2;
+    let carry = _mm_bslli_si128(value, 8);
+    let carry = _mm_srli_epi64(carry, 64 - shift);
+    let value = _mm_slli_epi64(value, shift);
+    return _mm_or_si128(value, carry);
+}
+#[inline]
+#[cfg(target_arch = "x86_64")]
+unsafe fn _mm_slli_si128_7(value: __m128i) -> __m128i {
+    const shift: i32 = 7;
+    let carry = _mm_bslli_si128(value, 8);
+    let carry = _mm_srli_epi64(carry, 64 - shift);
+    let value = _mm_slli_epi64(value, shift);
+    return _mm_or_si128(value, carry);
+}
+
+#[inline]
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     use std::arch::x86_64::*;
     let x2 = _mm_extract_epi64(x32, 0) as u64;
@@ -202,9 +236,9 @@ pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     let d = x2 ^ a ^ b ^ c;
 
     let x3d = _mm_set_epi64x(x3 as i64, d as i64); // maybe here?
-    let e = _mm_slli_epi64(x3d, 1);
-    let f = _mm_slli_epi64(x3d, 2);
-    let g = _mm_slli_epi64(x3d, 7);
+    let e = _mm_slli_si128_1(x3d);
+    let f = _mm_slli_si128_2(x3d);
+    let g = _mm_slli_si128_7(x3d);
 
     let h = _mm_xor_si128(x3d, e);
     let h = _mm_xor_si128(h, f);
@@ -237,10 +271,9 @@ fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: 
         let left = _mm_xor_si128(d, upper);
         let right = _mm_xor_si128(c, lower);
 
-        // let reduced = polynomial_gf128_reduce(left, right);
-        // *result_bytes = _mm_xor_si128(*result_bytes, reduced);
-        let reduced = gf128_reduce(m128i_to_u128(left), m128i_to_u128(right));
-        *result_bytes ^= reduced
+        let reduced = polynomial_gf128_reduce(left, right);
+        // TODO: This "cast" seems very and unnecessary!
+        *result_bytes ^= m128i_to_u128(reduced)
     }
 }
 
