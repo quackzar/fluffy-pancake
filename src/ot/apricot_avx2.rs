@@ -20,56 +20,6 @@ pub struct Receiver {
 }
 
 // -------------------------------------------------------------------------------------------------
-// TEMPORARY: Helper functions
-
-fn print_matrix(matrix: &Vec<Vec<u8>>) {
-    let width = matrix[0].len();
-    let height = matrix.len();
-
-    for row_idx in 0..height {
-        for col_idx in 0..width {
-            for b in 0..8 {
-                let bit = (matrix[row_idx][col_idx] >> b) & 1;
-                print!("{}", bit);
-            }
-        }
-        println!();
-    }
-}
-
-fn print_matrix_transposed(matrix: &Vec<Vec<u8>>) {
-    let width = matrix[0].len();
-    let height = matrix.len();
-
-    for col_idx in 0..width {
-        for b in 0..8 {
-            for row_idx in 0..height {
-                let bit = (matrix[row_idx][col_idx] >> b) & 1;
-                print!("{}", bit);
-            }
-            println!();
-        }
-    }
-}
-
-fn print_bits(array: &[u8]) {
-    for i in 0..array.len() {
-        for b in 0..8 {
-            let bit = (array[i] >> b) & 1;
-            print!("{}", bit);
-        }
-    }
-}
-
-fn print_array(array: &[u8]) {
-    println!("0x");
-    for i in 0..array.len() {
-        print!("{:02X}", array[i]);
-    }
-    println!();
-}
-
-// -------------------------------------------------------------------------------------------------
 // Array/slice helpers
 #[inline]
 unsafe fn bool_vec(bytes: &[u8]) -> Vec<bool> {
@@ -154,6 +104,23 @@ fn eq(left: &[u8], right: &[u8]) -> bool {
     }
 
     return true;
+}
+
+#[inline]
+fn matrix_transpose(source: &Vec<Vec<u8>>, target: &mut Vec<Vec<u8>>, transposed_height: usize, transposed_width: usize) {
+    for row_idx in 0..transposed_height {
+        for col_idx in 0..transposed_width {
+            let source_byte = source[row_idx][col_idx];
+            for b in 0..8 {
+                let source_bit = (source_byte >> b) & 1;
+                let target_row = col_idx * 8 + b;
+                let target_col = row_idx / 8;
+                let target_shift = row_idx % 8;
+
+                target[target_row][target_col] |= source_bit << target_shift;
+            }
+        }
+    }
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -301,7 +268,6 @@ fn polynomial_mul_acc(destination: &mut [u8], left: &[u8], right: &[u8]) {
 // -------------------------------------------------------------------------------------------------
 // Polynomials
 
-
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         debug_assert!(msg.len() >= BLOCK_SIZE, "Message must be longer than {BLOCK_SIZE} bytes");
@@ -332,47 +298,33 @@ impl ObliviousSender for Sender {
 
         // do OT.
         let payloads = self.bootstrap.exchange(&delta_choices, channel)?;
-        let mut t_raw = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
+        let mut t = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
             let payload = &payloads[row_idx];
             let seed: [u8; 32] = array(payload);
-            let row = t_raw[row_idx].as_mut_slice();
+            let row = t[row_idx].as_mut_slice();
             fill_random_bytes_from_seed(&seed, row);
         }
 
-        let u_raw: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let mut q_orig = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
+        let u: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let mut q = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
-            let row = q_orig[row_idx].as_mut_slice();
+            let row = q[row_idx].as_mut_slice();
             let d = (delta[row_idx / 8] >> row_idx % 8) & 1;
             if d == 1 {
-                xor_inplace(row, u_raw[row_idx].as_slice());
+                xor_inplace(row, u[row_idx].as_slice());
             }
-            xor_inplace(row, t_raw[row_idx].as_slice());
+            xor_inplace(row, t[row_idx].as_slice());
         }
 
-        let mut q_raw = vec![vec![0u8; matrix_width]; matrix_height];
-        for row_idx in 0..matrix_transposed_height {
-            for col_idx in 0..matrix_transposed_width {
-                let source_byte = q_orig[row_idx][col_idx];
-                for b in 0..8 {
-                    let source_bit = (source_byte >> b) & 1;
-
-                    let target_row = col_idx * 8 + b;
-                    let target_col = row_idx / 8;
-                    let target_shift = row_idx % 8;
-
-                    q_raw[target_row][target_col] |= source_bit << target_shift;
-                }
-            }
-        }
+        let mut q_transposed = vec![vec![0u8; matrix_width]; matrix_height];
+        matrix_transpose(&q, &mut q_transposed, matrix_transposed_height, matrix_transposed_width);
 
         // -- Check correlation --
         let chi: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-
         let mut q_sum = vec![0u8; matrix_width];
         for row_idx in 0..matrix_height {
-            let q_row = q_raw[row_idx].as_slice();
+            let q_row = q_transposed[row_idx].as_slice();
             let chi_row = chi[row_idx].as_slice();
 
             polynomial_mul_acc(q_sum.as_mut_slice(), q_row, chi_row);
@@ -388,28 +340,28 @@ impl ObliviousSender for Sender {
 
         // -- Randomize --
         // TODO: Should we put msg.len() in a variable?
-        let mut d0_raw = Vec::with_capacity(msg.len());
-        let mut d1_raw = Vec::with_capacity(msg.len());
+        let mut d0 = Vec::with_capacity(msg.len());
+        let mut d1 = Vec::with_capacity(msg.len());
         let nonce = Nonce::from_slice(b"unique nonce");
         for row_idx in 0..msg.len() {
-            let v0 = hash!(row_idx.to_be_bytes(), q_raw[row_idx].as_slice());
+            let v0 = hash!(row_idx.to_be_bytes(), q_transposed[row_idx].as_slice());
 
             // TODO: Can we do this in a better way?
             let mut q_delta = vec![0u8; matrix_width];
-            xor(q_delta.as_mut_slice(), q_raw[row_idx].as_slice(), delta);
+            xor(q_delta.as_mut_slice(), q_transposed[row_idx].as_slice(), delta);
             let v1 = hash!(row_idx.to_be_bytes(), q_delta);
 
             let m0 = msg.0[row_idx][0].as_slice();
             let cipher = Aes256Gcm::new(Key::from_slice(v0.as_slice()));
-            d0_raw.push(cipher.encrypt(nonce, m0).unwrap());
+            d0.push(cipher.encrypt(nonce, m0).unwrap());
 
             let m1 = msg.0[row_idx][1].as_slice();
             let cipher = Aes256Gcm::new(Key::from_slice(v1.as_slice()));
-            d1_raw.push(cipher.encrypt(nonce, m1).unwrap());
+            d1.push(cipher.encrypt(nonce, m1).unwrap());
         }
 
-        s.send(bincode::serialize(&d0_raw)?)?;
-        s.send(bincode::serialize(&d1_raw)?)?;
+        s.send(bincode::serialize(&d0)?)?;
+        s.send(bincode::serialize(&d1)?)?;
 
         return Ok(());
     }
@@ -455,33 +407,20 @@ impl ObliviousReceiver for Receiver {
         */
 
         // EXTENSION
-        let mut t0_raw = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
+        let mut t0 = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
-            let row = t0_raw[row_idx].as_mut_slice();
+            let row = t0[row_idx].as_mut_slice();
             fill_random_bytes_from_seed(&seed0[row_idx], row);
         }
 
         // TODO: It might be beneficial to do this in the loop for t0!
         // TODO: Can we vectorize the transposing?
-        let mut t_raw = vec![vec![0u8; matrix_width]; matrix_height];
+        let mut t = vec![vec![0u8; matrix_width]; matrix_height];
+        matrix_transpose(&t0, &mut t, matrix_transposed_height, matrix_transposed_width);
+
+        let mut t1 = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
-            for col_idx in 0..matrix_transposed_width {
-                let source_byte = t0_raw[row_idx][col_idx];
-                for b in 0..8 {
-                    let source_bit = (source_byte >> b) & 1;
-
-                    let target_row = col_idx * 8 + b;
-                    let target_col = row_idx / 8;
-                    let target_shift = row_idx % 8;
-
-                    t_raw[target_row][target_col] |= source_bit << target_shift;
-                }
-            }
-        }
-
-        let mut t1_raw = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
-        for row_idx in 0..matrix_transposed_height {
-            let row = t1_raw[row_idx].as_mut_slice();
+            let row = t1[row_idx].as_mut_slice();
             fill_random_bytes_from_seed(&seed1[row_idx], row);
         }
 
@@ -504,48 +443,39 @@ impl ObliviousReceiver for Receiver {
             for col_idx in 0..matrix_transposed_width {
                 row[col_idx] = packed_choices[col_idx];
             }
-            /*
-            let choice = (packed_choices[row_idx / 8] >> row_idx % 8) & 1;
-            if choice > 0 {
-                // TODO: This can be vectorized
-                for col_idx in 0..matrix_transposed_width {
-                    row[col_idx] = 0xFF;
-                }
-            }
-            */
         }
 
-        let mut u_raw = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
+        let mut u = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
         for row_idx in 0..matrix_transposed_height {
-            let u_row = u_raw[row_idx].as_mut_slice();
+            let u_row = u[row_idx].as_mut_slice();
 
             // TODO: This can be done more efficiently
-            let t0_row = t0_raw[row_idx].as_slice();
-            let t1_row = t1_raw[row_idx].as_slice();
+            let t0_row = t0[row_idx].as_slice();
+            let t1_row = t1[row_idx].as_slice();
             xor(u_row, t0_row, t1_row);
 
             let x_row = x_transposed[row_idx].as_slice();
             xor_inplace(u_row, x_row);
         }
-        s.send(bincode::serialize(&u_raw)?)?;
+        s.send(bincode::serialize(&u)?)?;
 
         // -- Check correlation --
-        let mut chi_raw = vec![vec![0u8; matrix_width]; matrix_height];
+        let mut chi = vec![vec![0u8; matrix_width]; matrix_height];
         for row_idx in 0..matrix_height {
-            let row = chi_raw[row_idx].as_mut_slice();
+            let row = chi[row_idx].as_mut_slice();
             random.fill_bytes(row);
         }
-        s.send(bincode::serialize(&chi_raw)?)?;
+        s.send(bincode::serialize(&chi)?)?;
 
         let mut x_sum = vec![0u8; matrix_width];
         let mut t_sum = vec![0u8; matrix_width];
         for row_idx in 0..matrix_height {
-            let chi_row = chi_raw[row_idx].as_slice();
+            let chi_row = chi[row_idx].as_slice();
             if padded_choices[row_idx] {
                 xor_inplace(x_sum.as_mut_slice(), chi_row);
             }
 
-            let t_row = t_raw[row_idx].as_slice();
+            let t_row = t[row_idx].as_slice();
             polynomial_mul_acc(t_sum.as_mut_slice(), t_row, chi_row);
         }
         s.send(bincode::serialize(&x_sum)?)?;
@@ -553,10 +483,10 @@ impl ObliviousReceiver for Receiver {
 
 
         // -- Randomize --
-        let mut v_raw = vec![vec![0u8; 32]; matrix_height];
+        let mut v = vec![vec![0u8; 32]; matrix_height];
         for row_idx in 0..matrix_height {
-            let row = v_raw[row_idx].as_mut_slice();
-            let hash = hash!(row_idx.to_be_bytes(), t_raw[row_idx].as_slice());
+            let row = v[row_idx].as_mut_slice();
+            let hash = hash!(row_idx.to_be_bytes(), t[row_idx].as_slice());
             xor_inplace(row, &hash);
         }
 
@@ -566,7 +496,7 @@ impl ObliviousReceiver for Receiver {
         let mut y: Vec<Vec<u8>> = Vec::with_capacity(choices.len());
         for i in 0..choices.len() {
             let nonce = Nonce::from_slice(b"unique nonce");
-            let cipher = Aes256Gcm::new(Key::from_slice(v_raw[i].as_slice()));
+            let cipher = Aes256Gcm::new(Key::from_slice(v[i].as_slice()));
             // TODO: This we can probably optimize
             let d = if choices[i] { d1[i].as_slice() } else { d0[i].as_slice() };
 
