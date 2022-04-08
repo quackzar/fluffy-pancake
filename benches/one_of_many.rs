@@ -37,6 +37,9 @@ fn one_of_many_local(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
 }
 
 fn bench_1_of_n_ot(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1-to-n OT");
+    group.sample_size(10);
+
     // Local
     for i in 1..=16u32 {
         let n = 1 << i;
@@ -47,7 +50,7 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
             messages.push(i.to_be_bytes().to_vec());
         }
 
-        c.bench_function(&format!("Local OT 1-to-{}", n), |b| {
+        group.bench_function(&format!("Local 1-to-{}", n), |b| {
             b.iter(|| {
                 one_of_many_local(n, domain, messages.clone());
             })
@@ -56,6 +59,8 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
 
     // TODO: LAN
     // TODO: WAN
+
+    group.finish();
 }
 
 criterion_group!(benches, bench_1_of_n_ot,);

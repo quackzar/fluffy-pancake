@@ -39,10 +39,13 @@ fn run_ot(msg: &Message, choices: &[bool]) {
 }
 
 fn bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Apricot x86");
+    group.sample_size(10);
+
     // Local
     for i in 8..=20 {
         let n = 1 << i;
-        let name: String = format!("Local Apricot AVX2 OT, {} messages", n);
+        let name: String = format!("Local, {} messages", n);
         let circuit = build_circuit(n / 2, 0);
         let (_, enc, _) = garble::garble(&circuit);
         let enc = BinaryEncodingKey::from(enc);
@@ -53,11 +56,13 @@ fn bench(c: &mut Criterion) {
             .collect();
         let choices = vec![false; n];
         let msg = Message::new2(&enc);
-        c.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
+        group.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
     }
 
     // TODO: LAN
     // TODO: WAN
+
+    group.finish();
 }
 
 criterion_group!(benches, bench,);
