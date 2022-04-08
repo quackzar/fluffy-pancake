@@ -1,12 +1,23 @@
 use crate::common::{Channel, Error};
 use crate::ot::common::*;
-use crate::util::{random_bytes, xor_bytes, LENGTH};
+use crate::util::{random_bytes, xor_bytes, LENGTH, xor_bytes_inplace};
 use sha2::{Digest, Sha256};
 use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+use rand::{Rng, RngCore};
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
+use rand_chacha::ChaCha8Rng;
+
+#[inline]
+fn array<const N: usize>(vector: &Vec<u8>) -> [u8; N] {
+    return vector.as_slice().try_into().unwrap();
+}
+
 
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
 fn fk(key: &[u8], choice: u32) -> Vec<u8> {
+    /*
     let chunks = key.len() / 32;
     let excess = key.len() % 32;
     let mut result = Vec::with_capacity(key.len());
@@ -15,7 +26,7 @@ fn fk(key: &[u8], choice: u32) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(choice.to_be_bytes());
     hasher.update(key);
-    let intermediate = hasher.finalize().to_vec();
+    let mut intermediate = hasher.finalize().to_vec();
     for i in 0..excess {
         result.push(intermediate[i]);
     }
@@ -23,8 +34,8 @@ fn fk(key: &[u8], choice: u32) -> Vec<u8> {
     // Fill in the chunks
     for _ in 0..chunks {
         let mut hasher = Sha256::new();
-        hasher.update(&result);
-        let intermediate = hasher.finalize().to_vec();
+        hasher.update(&intermediate);
+        intermediate = hasher.finalize().to_vec();
 
         for j in 0..32 {
             result.push(intermediate[j]);
@@ -33,6 +44,18 @@ fn fk(key: &[u8], choice: u32) -> Vec<u8> {
 
     debug_assert!(key.len() == result.len());
     result
+    */
+
+    let mut hasher = Sha256::new();
+    hasher.update(choice.to_be_bytes());
+    hasher.update(key);
+    let seed = array(&hasher.finalize().to_vec());
+
+    let mut prg = ChaCha20Rng::from_seed(seed);
+    let mut result = vec![0u8; key.len()];
+    prg.fill_bytes(result.as_mut_slice());
+
+    return result;
 }
 
 pub struct ManyOTSender {
