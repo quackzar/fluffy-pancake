@@ -364,23 +364,6 @@ impl OneOfManyKey {
         let gc = bincode::deserialize(&r.recv()?)?;
         let input_encoding: Vec<Wire> = bincode::deserialize(&r.recv()?)?;
 
-        /*
-        let mut results = Vec::with_capacity(passwords.len());
-        for i in 0..passwords.len() {
-            let mut choices = Vec::with_capacity(password_bits);
-            for j in 0..password_bytes {
-                for k in 0..8 {
-                    let bit = ((&passwords[i][j] >> k) & 1) == 1;
-                    choices.push(bit)
-                }
-            }
-
-            let receiver = Receiver { bootstrap: Box::new(OTReceiver) };
-            let res = receiver.exchange(&choices, channel)?;
-            results.push(res)
-        }
-        */
-
         let mut choices = Vec::with_capacity(password_bits * passwords.len());
         for i in 0..passwords.len() {
             for j in 0..password_bytes {
