@@ -2,6 +2,7 @@ use crate::circuit::*;
 use crate::common::*;
 use crate::garble::*;
 use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+use crate::ot::apricot::{Receiver, Sender};
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::ot::one_of_many::*;
@@ -86,7 +87,7 @@ impl HalfKey {
             .collect();
 
         let msg = MessagePair::new2(&e_theirs);
-        let ot = OTSender;
+        let ot = Sender { bootstrap: Box::new(OTReceiver) };
         ot.exchange(&msg, ch)?;
         let (s, _) = ch;
 
@@ -103,7 +104,7 @@ impl HalfKey {
 
     pub fn evaluator(password: &[u8], ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
         let password = u8_vec_to_bool_vec(password);
-        let ot = OTReceiver;
+        let ot = Receiver { bootstrap: Box::new(OTSender) };
         let enc_password = ot.exchange(&password, ch)?;
         let (_, r) = ch;
 
@@ -175,7 +176,7 @@ impl OneOfManyKey {
             ])
         }
         let key_message = MessagePair::new2(key.as_slice());
-        let key_sender = OTSender;
+        let key_sender = Sender { bootstrap: Box::new(OTReceiver) };
         key_sender.exchange(&key_message, ch)?;
 
         // 4. Encode all passwords
@@ -234,7 +235,7 @@ impl OneOfManyKey {
                 choices.push(bit)
             }
         }
-        let key_receiver = OTReceiver;
+        let key_receiver = Receiver { bootstrap: Box::new(OTSender) };
         let key_encoding = key_receiver.exchange(&choices, ch)?;
 
         let input_encoding = key_encoding
@@ -344,7 +345,7 @@ impl OneOfManyKey {
 
         // 3. Initiate the OTs for all of the passwords
         let message = MessagePair::new2(keys.as_slice());
-        let sender = OTSender;
+        let sender = Sender { bootstrap: Box::new(OTReceiver) };
         sender.exchange(&message, channel)?;
 
         //
@@ -374,7 +375,7 @@ impl OneOfManyKey {
                 }
             }
 
-            let receiver = OTReceiver;
+            let receiver = Receiver { bootstrap: Box::new(OTReceiver) };
             let res = receiver.exchange(&choices, channel)?;
             results.push(res)
         }
@@ -390,7 +391,7 @@ impl OneOfManyKey {
             }
         }
 
-        let receiver = OTReceiver;
+        let receiver = Receiver { bootstrap: Box::new(OTSender) };
         let result = receiver.exchange(&choices, channel)?;
 
         // 4. Compute the encoding for the input from the result
