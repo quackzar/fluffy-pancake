@@ -253,6 +253,7 @@ impl Receiver {
                 x_sum += chi
             }
 
+            // PERF: Reduce last.
             t_sum.mul_add_assign(t, chi);
         }
 
@@ -279,7 +280,7 @@ impl Receiver {
         let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
         let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
 
-        // TODO: parallelize
+        // PERF: parallelize
         let y = izip!(v, choices, d0, d1)
             .map(|(v, c, d0, d1)| {
                 let d = if *c { d1 } else { d0 };
