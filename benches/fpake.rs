@@ -189,5 +189,5 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_fpake, bench_fpake_one_of_many);
+criterion_group!(benches, bench_fpake_one_of_many, bench_fpake);
 criterion_main!(benches);
