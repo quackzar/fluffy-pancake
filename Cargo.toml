@@ -27,6 +27,8 @@ num-integer = "0.1.44"
 [features]
 simd = ["curve25519-dalek/simd_backend", "rand/simd_support"]
 
+[profile.release]
+debug = 1
 
 [dev-dependencies]
 criterion = "0.3"

@@ -3,7 +3,7 @@ use ductile::new_local_channel;
 use magic_pake::fpake::OneOfManyKey;
 
 fn main() {
-    const NUMBER_OF_PASSWORDS: usize = 128;
+    const NUMBER_OF_PASSWORDS: usize = 1024;
     let passwords = vec![vec![0u8; 2048 / 8]; NUMBER_OF_PASSWORDS as usize];
     let index = 1;
     let password = passwords[index as usize].clone();
