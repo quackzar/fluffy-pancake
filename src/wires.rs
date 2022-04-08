@@ -80,8 +80,8 @@ impl ops::Neg for &Wire {
     fn neg(self) -> Wire {
         match self.domain {
             Domain::Binary => self.map(|x: u8| 0xFF ^ x),
-            Domain::U8(m) => self.map(|x: u8| m - x),
-            Domain::U16(m) => self.map_as_u16(|x: u16| m - x),
+            Domain::U8(m) => self.map(|x: u8| (m - x) % m),
+            Domain::U16(m) => self.map_as_u16(|x: u16| (m - x) % m),
             _ => panic!("Neg not defined for this domain {}", self.domain()),
         }
     }
