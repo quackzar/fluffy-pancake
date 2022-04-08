@@ -269,9 +269,9 @@ impl OneOfManyKey {
         index: u32,
         number_of_passwords: u32,
         threshold: u16,
-        ch: &Channel<Vec<u8>>,
+        channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        let (s, _r) = ch;
+        let (sender, _r) = channel;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
 
@@ -300,8 +300,8 @@ impl OneOfManyKey {
             }
         }
 
-        s.send(bincode::serialize(&gc)?)?;
-        s.send(bincode::serialize(&encoded_password)?)?;
+        sender.send(bincode::serialize(&gc)?)?;
+        sender.send(bincode::serialize(&encoded_password)?)?;
 
         // We now need to do a series of OTs for each possible password in the database for the so
         // that the server/evaluator can obtain an encoding of the password they have in their
@@ -324,16 +324,12 @@ impl OneOfManyKey {
         }
         random_keys.push(cancelling_key);
 
-        let _magic = vec![vec![0u8; LENGTH]; password_bits];
-
         let mut random_key = random_keys.iter();
         let mut keys = Vec::with_capacity(number_of_passwords as usize);
         for i in 0..number_of_passwords {
-            let mut keys_for_password = Vec::with_capacity(password_bits);
-
             if i == index {
                 for j in 0..password_bits {
-                    keys_for_password.push([
+                    keys.push([
                         evaluator_encoding[j][0].clone(),
                         evaluator_encoding[j][1].clone(),
                     ]);
@@ -341,19 +337,15 @@ impl OneOfManyKey {
             } else {
                 let random = random_key.next().unwrap();
                 for j in 0..password_bits {
-                    keys_for_password.push([random[j].clone(), random[j].clone()]);
+                    keys.push([random[j].clone(), random[j].clone()]);
                 }
             }
-
-            keys.push(keys_for_password);
         }
 
-        // 3. Initiate the OTs for each of the passwords
-        for i in 0..(number_of_passwords as usize) {
-            let msg = MessagePair::new2(&keys[i]);
-            let sender = OTSender;
-            sender.exchange(&msg, ch)?;
-        }
+        // 3. Initiate the OTs for all of the passwords
+        let message = MessagePair::new2(keys.as_slice());
+        let sender = OTSender;
+        sender.exchange(&message, channel)?;
 
         //
         // At this point the evaluator should have encodings of both inputs and should evaluate the garbled circuit to retrieve their version of they key.
@@ -362,8 +354,8 @@ impl OneOfManyKey {
         Ok(Self(decoding.hashes[0][1]))
     }
 
-    pub fn evaluator_server(passwords: &[Vec<u8>], ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
-        let (_, r) = ch;
+    pub fn evaluator_server(passwords: &[Vec<u8>], channel: &Channel<Vec<u8>>) -> Result<Self, Error> {
+        let (_, r) = channel;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
 
@@ -371,6 +363,7 @@ impl OneOfManyKey {
         let gc = bincode::deserialize(&r.recv()?)?;
         let input_encoding: Vec<Wire> = bincode::deserialize(&r.recv()?)?;
 
+        /*
         let mut results = Vec::with_capacity(passwords.len());
         for i in 0..passwords.len() {
             let mut choices = Vec::with_capacity(password_bits);
@@ -382,16 +375,29 @@ impl OneOfManyKey {
             }
 
             let receiver = OTReceiver;
-            let res = receiver.exchange(&choices, ch)?;
+            let res = receiver.exchange(&choices, channel)?;
             results.push(res)
         }
+        */
+
+        let mut choices = Vec::with_capacity(password_bits * passwords.len());
+        for i in 0..passwords.len() {
+            for j in 0..password_bytes {
+                for k in 0..8 {
+                    let bit = ((&passwords[i][j] >> k) & 1) == 1;
+                    choices.push(bit)
+                }
+            }
+        }
+
+        let receiver = OTReceiver;
+        let result = receiver.exchange(&choices, channel)?;
 
         // 4. Compute the encoding for the input from the result
         let mut encoding_bytes = vec![vec![0u8; LENGTH]; password_bits];
         for i in 0..passwords.len() {
-            let result = &results[i];
             for j in 0..password_bits {
-                encoding_bytes[j] = xor_bytes(&encoding_bytes[j], &result[j])
+                encoding_bytes[j] = xor_bytes(&encoding_bytes[j], &result[i * password_bits + j])
             }
         }
 
