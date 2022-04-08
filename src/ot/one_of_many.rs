@@ -49,8 +49,8 @@ impl ManyOTSender {
         let byte_length = messages[0].len();
 
         // 1. B: Prepare random keys
-        let l = messages.len();
-        debug_assert!(l == (1 << domain));
+        let l = domain as usize;
+        //debug_assert!(l == (1 << domain));
 
         let mut keys: Vec<[Vec<u8>; 2]> = Vec::with_capacity(l);
         for _i in 0..l {
@@ -103,7 +103,7 @@ impl ManyOTReceiver {
         domain: u32,
         ch: &Channel<Vec<u8>>,
     ) -> Result<Vec<u8>, Error> {
-        let l = 1 << domain;
+        let l = domain as usize;
 
         // construct choices
         let mut choices: Vec<bool> = Vec::with_capacity(l);
