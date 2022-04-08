@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use magic_pake::ot::one_of_many::*;
+use magic_pake::util::SECURITY_PARAM;
 
 fn log2(x: u32) -> u32 {
     ((std::mem::size_of::<u32>() * 8) as u32 - (x - 1).leading_zeros()) as u32
@@ -47,7 +48,7 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
 
         let mut messages = Vec::with_capacity(n as usize);
         for _ in 0..n {
-            messages.push(i.to_be_bytes().to_vec());
+            messages.push(vec![0u8; 2048 * (SECURITY_PARAM / 8)]);
         }
 
         group.bench_function(&format!("Local 1-to-{}", n), |b| {

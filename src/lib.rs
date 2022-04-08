@@ -9,5 +9,5 @@ pub mod common;
 pub mod fpake;
 pub mod garble;
 pub mod ot;
-mod util;
+pub mod util;
 mod wires;
