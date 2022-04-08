@@ -106,6 +106,14 @@ pub fn xor_bytes(left: &[u8], right: &[u8]) -> Vec<u8> {
     result
 }
 
+pub fn xor_bytes_inplace(left: &mut [u8], right: &[u8]) {
+    debug_assert_eq!(left.len(), right.len());
+
+    for i in 0..left.len() {
+        left[i] ^= right[i];
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use sha2::{Digest, Sha256};

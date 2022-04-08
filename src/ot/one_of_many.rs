@@ -91,9 +91,9 @@ impl ManyOTSender {
         for i in 0..domain_max {
             let mut value = messages[i].to_vec();
             for j in 0..domain {
-                let bit = (i & (1 << j)) >> j;
+                let bit = (i >> j) & 1;
                 let hash = fk(&keys[j as usize][bit as usize], i as u32);
-                value = xor_bytes(&value, &hash);
+                xor_bytes_inplace(&mut value, &hash);
             }
 
             y.push(value.to_vec());
