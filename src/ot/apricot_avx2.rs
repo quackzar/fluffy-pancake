@@ -1,12 +1,17 @@
 use crate::util::*;
 use crate::ot::common::*;
 use crate::common::*;
+use crate::instrument;
+use crate::instrument::{E_SEND_COLOR, E_COMP_COLOR, E_RECV_COLOR, E_FUNC_COLOR, E_PROT_COLOR};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
 const K: usize = 128;
 const S: usize = 128;
-const BLOCK_SIZE: usize = 8;
+const BLOCK_SIZE: usize = 128 / 8;
 const K_BYTES: usize = K / 8;
 
 pub struct Sender {
@@ -18,9 +23,333 @@ pub struct Receiver {
 }
 
 // -------------------------------------------------------------------------------------------------
+// Sender
+
+impl ObliviousSender for Sender {
+    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        instrument::begin("Apricot x86 Sender", E_FUNC_COLOR);
+
+        debug_assert!(msg.len() >= BLOCK_SIZE, "Message must be longer than {BLOCK_SIZE} bytes");
+        debug_assert!(msg.len() % BLOCK_SIZE == 0, "Message length must be multiple of {BLOCK_SIZE} bytes");
+
+        let transaction_properties = TransactionProperties { msg_size: msg.len(), protocol: "Apricot AVX2".to_string() };
+        validate_properties(&transaction_properties, channel)?;
+
+        let l = msg.len() + K + S;
+        const K_BYTES: usize = K / 8;
+
+        let (matrix_w, matrix_h) = (K_BYTES, l);
+        let (matrix_t_w, matrix_t_h) = (matrix_h / 8, matrix_w * 8);
+        let matrix_size = matrix_w * matrix_h;
+
+        // -- COTe
+        instrument::begin("COTe", E_PROT_COLOR);
+
+        let mut random = ChaCha20Rng::from_seed([0u8; 32]);
+        let (s, r) = channel;
+
+        let msg_size = msg.0[0][0].len();
+        s.send_raw(&(msg_size as u16).to_be_bytes())?;
+
+        // Generate random delta
+        instrument::begin("Generate delta", E_COMP_COLOR);
+        let mut delta = [0u8; K_BYTES];
+        let delta = delta.as_mut_slice();
+        random.fill_bytes(delta);
+        let delta_choices = unsafe { unpack_bits_to_vec(delta) };
+        instrument::end();
+
+        // do OT.
+        instrument::begin("Bootstrap", E_COMP_COLOR);
+        let payloads = self.bootstrap.exchange(&delta_choices, channel)?;
+        instrument::end();
+
+        instrument::begin("Compute t", E_COMP_COLOR);
+        let mut t = vec![0u8; matrix_t_w * matrix_t_h];
+        for row_idx in 0..matrix_t_h {
+            let row = unsafe { vector_row_mut(&mut t, row_idx, matrix_t_w) };
+            fill_random_bytes_from_seed(&payloads[row_idx], row);
+        }
+        instrument::end();
+
+        instrument::begin("Allocate q, q^T", E_COMP_COLOR);
+        let mut q = vec![0u8; matrix_t_w * matrix_t_h];
+        let mut q_transposed = vec![0u8; matrix_w * matrix_h];
+        instrument::end();
+
+        instrument::begin("Receive u", E_RECV_COLOR);
+        let u: Vec<u8> = r.recv_raw()?;
+        instrument::end();
+
+        instrument::begin("Compute q", E_COMP_COLOR);
+        for row_idx in 0..matrix_t_h {
+            let row = unsafe { vector_row_mut(&mut q, row_idx, matrix_t_w) };
+            let d = (delta[row_idx / 8] >> row_idx % 8) & 1;
+            if d == 1 {
+                let u_row = unsafe { vector_row(&u, row_idx, matrix_t_w) };
+                xor_inplace(row, u_row);
+            }
+
+            let t_row = unsafe { vector_row(&t, row_idx, matrix_t_w) };
+            xor_inplace(row, t_row);
+        }
+        instrument::end();
+
+        instrument::begin("Transpose q", E_COMP_COLOR);
+        transpose_matrix(&q, &mut q_transposed, matrix_t_h, matrix_t_w, matrix_w);
+        instrument::end();
+        instrument::end();
+
+        // -- ROTe
+        instrument::begin("ROTe", E_PROT_COLOR);
+
+        // Correlation Check
+        instrument::begin("Receive chi", E_RECV_COLOR);
+        let chi: Vec<u8> = r.recv_raw()?;
+        instrument::end();
+
+        instrument::begin("Compute q_sum", E_COMP_COLOR);
+        debug_assert_eq!(matrix_size, chi.len());
+        let mut q_sum = vec![0u8; matrix_w];
+        for row_idx in 0..matrix_h {
+            let q_row = unsafe { vector_row(&q_transposed, row_idx, matrix_w) };
+            let chi_row = unsafe { vector_row(&chi, row_idx, matrix_w) };
+
+            polynomial_mul_acc(q_sum.as_mut_slice(), q_row, chi_row);
+        }
+        instrument::end();
+
+        instrument::begin("Receive x_sum, t_sum", E_RECV_COLOR);
+        let x_sum: Vec<u8> = r.recv_raw()?;
+        let t_sum: Vec<u8> = r.recv_raw()?;
+        instrument::end();
+
+        instrument::begin("Compare correlation sums", E_COMP_COLOR);
+        debug_assert_eq!(matrix_w, x_sum.len());
+        debug_assert_eq!(matrix_w, t_sum.len());
+        polynomial_mul_acc(q_sum.as_mut_slice(), x_sum.as_slice(), delta);
+
+        if !eq(t_sum.as_slice(), q_sum.as_slice()) {
+            return Err(Box::new(OTError::PolychromaticInput()));
+        }
+        instrument::end();
+
+        // Randomize
+        instrument::begin("Randomize", E_COMP_COLOR);
+        let msg_total_size = msg_size * msg.len();
+        let mut d = vec![0u8; msg_total_size * 2];
+        for row_idx in 0..msg.len() {
+            let q_row = unsafe { vector_row(&q_transposed, row_idx, matrix_w) };
+            let v0 = hash!(row_idx.to_be_bytes(), q_row);
+
+            let m0 = msg.0[row_idx][0].as_slice();
+            let mut chacha = ChaCha20Rng::from_seed(v0);
+            let mut plain = unsafe { vector_slice_mut(&mut d, row_idx * msg_size * 2, msg_size) };
+            chacha.fill_bytes(&mut plain);
+            xor_inplace(&mut plain, m0);
+
+            let q_row = unsafe { vector_row_mut(&mut q_transposed, row_idx, matrix_w) };
+            xor_inplace(q_row, delta);
+            let v1 = hash!(row_idx.to_be_bytes(), &q_row);
+
+            let m1 = msg.0[row_idx][1].as_slice();
+            let mut chacha = ChaCha20Rng::from_seed(v1);
+            let mut plain = unsafe { vector_slice_mut(&mut d, row_idx * msg_size * 2 | 1, msg_size) };
+            chacha.fill_bytes(&mut plain);
+            xor_inplace(&mut plain, m1);
+        }
+        instrument::end();
+
+        instrument::begin("Send d", E_SEND_COLOR);
+        s.send_raw(d.as_slice())?;
+        instrument::end();
+        instrument::end();
+        instrument::end();
+
+        return Ok(());
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Receiver
+
+impl ObliviousReceiver for Receiver {
+    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+        instrument::begin("Apricot x86 Receiver", E_FUNC_COLOR);
+
+        debug_assert!(choices.len() >= BLOCK_SIZE, "Choices must be longer than {BLOCK_SIZE} bytes");
+        debug_assert!(choices.len() % BLOCK_SIZE == 0, "Choices length must be multiple of {BLOCK_SIZE} bytes");
+
+        let transaction_properties = TransactionProperties { msg_size: choices.len(), protocol: "Apricot AVX2".to_string() };
+        validate_properties(&transaction_properties, channel)?;
+
+        let l = choices.len() + K + S;
+        let l_bytes = l / 8;
+        const K_BYTES: usize = K / 8;
+
+        let (matrix_w, matrix_h) = (K_BYTES, l);
+        let (matrix_t_w, matrix_t_h) = (matrix_h / 8, matrix_w * 8);
+
+        // TODO: Grab from entropy instead!
+        let mut random = ChaCha20Rng::from_seed([0u8; 32]);
+        let (s, r) = channel;
+
+        // INITIALIZATION
+        instrument::begin("COTe", E_PROT_COLOR);
+        instrument::begin("Initialization", E_COMP_COLOR);
+        let bonus: [bool; K + S] = random.gen();
+        let seed0: [[u8; 32]; K] = random.gen();
+        let seed1: [[u8; 32]; K] = random.gen();
+        instrument::end();
+
+        instrument::begin("Receive msg_size", E_COMP_COLOR);
+        let msg_size_bytes = r.recv_raw()?;
+        let msg_size = ((msg_size_bytes[0] as u16) << 8) | (msg_size_bytes[1] as u16);
+        instrument::end();
+
+        instrument::begin("Bootstrap", E_COMP_COLOR);
+        let msg = Message::new(&seed0, &seed1);
+        self.bootstrap.exchange(&msg, channel)?;
+        instrument::end();
+
+        // EXTENSION
+        instrument::begin("Compute t0", E_COMP_COLOR);
+        let mut t0 = vec![0u8; matrix_t_w * matrix_t_h];
+        for row_idx in 0..matrix_t_h {
+            let row = unsafe { vector_row_mut(&mut t0, row_idx, matrix_t_w) };
+            fill_random_bytes_from_seed_array(&seed0[row_idx], row);
+        }
+        instrument::end();
+
+        instrument::begin("Compute t1", E_COMP_COLOR);
+        let mut t1 = vec![0u8; matrix_t_w * matrix_t_h];
+        for row_idx in 0..matrix_t_h {
+            let row = unsafe { vector_row_mut(&mut t1, row_idx, matrix_t_w) };
+            fill_random_bytes_from_seed_array(&seed1[row_idx], row);
+        }
+        instrument::end();
+
+        // TODO: We can do this without concat!
+        instrument::begin("Pack choices", E_COMP_COLOR);
+        let padded_choices = [choices, &bonus].concat();
+        let mut packed_choices = vec![0u8; l_bytes];
+        let packed_choices = packed_choices.as_mut_slice();
+        for i in 0..l_bytes {
+            for b in 0..8 {
+                let index = i * 8 + b;
+                if padded_choices[index] {
+                    packed_choices[i] |= 1 << b;
+                }
+            }
+        }
+        instrument::end();
+
+        instrument::begin("Compute u", E_COMP_COLOR);
+        let mut u = vec![0u8; matrix_t_w * matrix_t_h];
+        for row_idx in 0..matrix_t_h {
+            let u_row = unsafe { vector_row_mut(&mut u, row_idx, matrix_t_w) };
+
+            // TODO: This can be done more efficiently
+            let t0_row = unsafe { vector_row(&t0, row_idx, matrix_t_w) };
+            let t1_row = unsafe { vector_row(&t1, row_idx, matrix_t_w) };
+            xor(u_row, t0_row, t1_row);
+
+            xor_inplace(u_row, &packed_choices);
+        }
+        instrument::end();
+
+        instrument::begin("Send u", E_SEND_COLOR);
+        s.send_raw(u.as_slice())?;
+        instrument::end();
+
+        instrument::begin("Transpose t0 -> t", E_COMP_COLOR);
+        let mut t = vec![0u8; matrix_w * matrix_h];
+        transpose_matrix(&t0, &mut t, matrix_t_h, matrix_t_w, matrix_w);
+        instrument::end();
+
+        instrument::end();
+
+        // -- Check correlation / ROTe
+        instrument::begin("ROTe", E_PROT_COLOR);
+
+        instrument::begin("Generate Chi", E_COMP_COLOR);
+        let mut chi = vec![0u8; matrix_w * matrix_h];
+        random.fill_bytes(&mut chi);
+        instrument::end();
+
+        instrument::begin("Send chi", E_SEND_COLOR);
+        s.send_raw(chi.as_slice())?;
+        instrument::end();
+
+        instrument::begin("Check Correlation", E_COMP_COLOR);
+        let mut x_sum = vec![0u8; matrix_w];
+        let mut t_sum = vec![0u8; matrix_w];
+        for row_idx in 0..matrix_h {
+            let chi_row = unsafe { vector_row(&chi, row_idx, matrix_w) };
+            if padded_choices[row_idx] {
+                xor_inplace(x_sum.as_mut_slice(), chi_row);
+            }
+
+            let t_row = unsafe { vector_row(&t, row_idx, matrix_w) };
+            polynomial_mul_acc(t_sum.as_mut_slice(), t_row, chi_row);
+        }
+        instrument::end();
+
+        instrument::begin("Send x_sum, t_sum", E_SEND_COLOR);
+        s.send_raw(x_sum.as_slice())?;
+        s.send_raw(t_sum.as_slice())?;
+        instrument::end();
+        instrument::end();
+
+        // -- DeROT
+        instrument::begin("DeROT", E_PROT_COLOR);
+
+        instrument::begin("Compute v", E_COMP_COLOR);
+        let mut v = vec![0u8; 32 * matrix_h];
+        for row_idx in 0..matrix_h {
+            let row = unsafe { vector_row_mut(&mut v, row_idx, 32) };
+            let t_row = unsafe { vector_row(&t, row_idx, matrix_w) };
+            let hash = hash!(row_idx.to_be_bytes(), t_row);
+            xor_inplace(row, &hash);
+        }
+        instrument::end();
+
+        instrument::begin("Allocate y", E_COMP_COLOR);
+        let mut y = vec![vec![0u8; msg_size as usize]; choices.len()];
+        instrument::end();
+
+        instrument::begin("Receive d", E_RECV_COLOR);
+        let d: Vec<u8> = r.recv_raw()?;
+        instrument::end();
+
+        instrument::begin("De-randomize", E_COMP_COLOR);
+        let msg_size = (d.len() / 2) / choices.len();
+        for i in 0..(choices.len() / 8) {
+            for b in 0..8 {
+                let j = i * 8 + b;
+
+                let v_row = unsafe { vector_row(&v, j, 32) };
+                let mut chacha = ChaCha20Rng::from_seed(*array_from_slice(v_row));
+                chacha.fill_bytes(y[j].as_mut_slice());
+
+                let choice = ((packed_choices[i] >> b) & 1) as usize;
+                let d = unsafe { vector_slice(&d, i * msg_size * 2 | choice, msg_size) };
+
+                xor_inplace(y[j].as_mut_slice(), d);
+            }
+        }
+        instrument::end();
+        instrument::end();
+        instrument::end();
+
+        return Ok(y);
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
 // Array/slice helpers
 #[inline]
-unsafe fn bool_vec(bytes: &[u8]) -> Vec<bool> {
+unsafe fn unpack_bits_to_vec(bytes: &[u8]) -> Vec<bool> {
     let mut bits = Vec::with_capacity(8 * bytes.len());
     for i in 0..bytes.len() {
         let s = bytes[i];
@@ -33,17 +362,56 @@ unsafe fn bool_vec(bytes: &[u8]) -> Vec<bool> {
 }
 
 #[inline]
-fn array<const N: usize>(vector: &Vec<u8>) -> [u8; N] {
-    return vector.as_slice().try_into().unwrap();
+fn array_from_slice<const N: usize>(vector: &[u8]) -> &[u8; N] {
+    return unsafe { std::mem::transmute(vector.as_ptr()) }
 }
 
 // -------------------------------------------------------------------------------------------------
 // RNG
 #[inline]
-fn fill_random_bytes_from_seed(seed: &[u8; 32], bytes: &mut [u8]) {
-    // TODO: Is it better to not have it be a reference?
+fn fill_random_bytes_from_seed(seed: &Vec<u8>, bytes: &mut [u8]) {
+    let mut random = ChaCha20Rng::from_seed(*array_from_slice(seed.as_slice()));
+    random.fill_bytes(bytes);
+}
+
+#[inline]
+fn fill_random_bytes_from_seed_array(seed: &[u8; 32], bytes: &mut [u8]) {
     let mut random = ChaCha20Rng::from_seed(*seed);
     random.fill_bytes(bytes);
+}
+
+// -------------------------------------------------------------------------------------------------
+// Polynomials
+// PTR helpers
+#[inline]
+fn index_1d(row: usize, column: usize, width: usize) -> usize {
+    return width * row + column;
+}
+#[inline]
+unsafe fn vector_row(vector: &Vec<u8>, row: usize, width: usize) -> &[u8] {
+    let ptr = vector.as_ptr();
+    let offset = (width * row) as isize;
+    let into = ptr.offset(offset);
+    return std::slice::from_raw_parts(into, width);
+}
+#[inline]
+unsafe fn vector_row_mut(vector: &mut Vec<u8>, row: usize, width: usize) -> &mut [u8] {
+    let ptr = vector.as_mut_ptr();
+    let offset = (width * row) as isize;
+    let into = ptr.offset(offset);
+    return std::slice::from_raw_parts_mut(into, width);
+}
+#[inline]
+unsafe fn vector_slice(vector: &Vec<u8>, offset: usize, length: usize) -> &[u8] {
+    let ptr = vector.as_ptr();
+    let into = ptr.offset(offset as isize);
+    return std::slice::from_raw_parts(into, length);
+}
+#[inline]
+unsafe fn vector_slice_mut(vector: &mut Vec<u8>, offset: usize, length: usize) -> &mut [u8] {
+    let ptr = vector.as_mut_ptr();
+    let into = ptr.offset(offset as isize);
+    return std::slice::from_raw_parts_mut(into, length);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -70,27 +438,6 @@ fn xor_inplace(destination: &mut [u8], right: &[u8]) {
 }
 
 #[inline]
-fn and(destination: &mut [u8], left: &[u8], right: &[u8]) {
-    debug_assert_eq!(left.len(), right.len());
-    debug_assert_eq!(left.len(), destination.len());
-
-    // TODO: Vectorize this!
-    for i in 0..left.len() {
-        destination[i] = left[i] & right[i];
-    }
-}
-
-#[inline]
-fn and_inplace(destination: &mut [u8], right: &[u8]) {
-    debug_assert_eq!(right.len(), destination.len());
-
-    // TODO: Vectorize this!
-    for i in 0..right.len() {
-        destination[i] &= right[i];
-    }
-}
-
-#[inline]
 fn eq(left: &[u8], right: &[u8]) -> bool {
     debug_assert_eq!(left.len(), right.len());
 
@@ -105,24 +452,27 @@ fn eq(left: &[u8], right: &[u8]) -> bool {
 }
 
 #[inline]
-fn matrix_transpose(source: &Vec<Vec<u8>>, target: &mut Vec<Vec<u8>>, transposed_height: usize, transposed_width: usize) {
+fn transpose_matrix(source: &Vec<u8>, target: &mut Vec<u8>, transposed_height: usize, transposed_width: usize, original_width: usize) {
+    // TODO: There is probably a better way of doing this!
     for row_idx in 0..transposed_height {
         for col_idx in 0..transposed_width {
-            let source_byte = source[row_idx][col_idx];
+            let source_byte = source[index_1d(row_idx, col_idx, transposed_width)];
             for b in 0..8 {
                 let source_bit = (source_byte >> b) & 1;
                 let target_row = col_idx * 8 + b;
                 let target_col = row_idx / 8;
                 let target_shift = row_idx % 8;
 
-                target[target_row][target_col] |= source_bit << target_shift;
+                let idx = index_1d(target_row, target_col, original_width);
+                //println!("Target: {}, {} -> {}", target_row, target_col, idx);
+                target[idx] |= source_bit << target_shift;
             }
         }
     }
 }
 
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+// -------------------------------------------------------------------------------------------------
+// Polynomials
 
 #[inline]
 #[cfg(target_arch = "x86_64")]
@@ -151,7 +501,6 @@ unsafe fn _mm_slli_si128_7(value: __m128i) -> __m128i {
     let value = _mm_slli_epi64(value, SHIFT);
     return _mm_or_si128(value, carry);
 }
-
 #[inline]
 #[cfg(target_arch = "x86_64")]
 pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
@@ -262,253 +611,7 @@ fn polynomial_mul_acc(destination: &mut [u8], left: &[u8], right: &[u8]) {
 }
 
 // -------------------------------------------------------------------------------------------------
-// Polynomials
-
-impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
-        debug_assert!(msg.len() >= BLOCK_SIZE, "Message must be longer than {BLOCK_SIZE} bytes");
-        debug_assert!(msg.len() % BLOCK_SIZE == 0, "Message length must be multiple of {BLOCK_SIZE} bytes");
-
-        // TODO: What the hell are these?
-        let transaction_properties = TransactionProperties { msg_size: msg.len(), protocol: "Apricot AVX2".to_string() };
-        validate_properties(&transaction_properties, channel)?;
-
-        // "Constants" and things we need throughout
-        let l = msg.len() + K + S;
-        let _l_bytes = l / 8;
-        const K_BYTES: usize = K / 8;
-
-        let matrix_width = K_BYTES;
-        let matrix_height = l;
-        let matrix_transposed_width = matrix_height / 8;
-        let matrix_transposed_height = matrix_width * 8;
-
-        let mut random = ChaCha20Rng::from_seed([0u8; 32]);
-        let (s, r) = channel;
-
-        // Generate random delta
-        let mut delta = [0u8; K_BYTES];
-        let delta = delta.as_mut_slice();
-        random.fill_bytes(delta);
-        let delta_choices = unsafe { bool_vec(delta) };
-
-        // do OT.
-        let payloads = self.bootstrap.exchange(&delta_choices, channel)?;
-        let mut t = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
-        for row_idx in 0..matrix_transposed_height {
-            let payload = &payloads[row_idx];
-            let seed: [u8; 32] = array(payload);
-            let row = t[row_idx].as_mut_slice();
-            fill_random_bytes_from_seed(&seed, row);
-        }
-
-        let u: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let mut q = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
-        for row_idx in 0..matrix_transposed_height {
-            let row = q[row_idx].as_mut_slice();
-            let d = (delta[row_idx / 8] >> row_idx % 8) & 1;
-            if d == 1 {
-                xor_inplace(row, u[row_idx].as_slice());
-            }
-            xor_inplace(row, t[row_idx].as_slice());
-        }
-
-        let mut q_transposed = vec![vec![0u8; matrix_width]; matrix_height];
-        matrix_transpose(&q, &mut q_transposed, matrix_transposed_height, matrix_transposed_width);
-
-        // -- Check correlation --
-        let chi: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let mut q_sum = vec![0u8; matrix_width];
-        for row_idx in 0..matrix_height {
-            let q_row = q_transposed[row_idx].as_slice();
-            let chi_row = chi[row_idx].as_slice();
-
-            polynomial_mul_acc(q_sum.as_mut_slice(), q_row, chi_row);
-        }
-
-        let x_sum: Vec<u8> = bincode::deserialize(&r.recv()?)?;
-        let t_sum: Vec<u8> = bincode::deserialize(&r.recv()?)?;
-        polynomial_mul_acc(q_sum.as_mut_slice(), x_sum.as_slice(), delta);
-
-        if !eq(t_sum.as_slice(), q_sum.as_slice()) {
-            return Err(Box::new(OTError::PolychromaticInput()));
-        }
-
-        // -- Randomize --
-        // TODO: Should we put msg.len() in a variable?
-        let mut d0 = Vec::with_capacity(msg.len());
-        let mut d1 = Vec::with_capacity(msg.len());
-        for row_idx in 0..msg.len() {
-            let v0 = hash!(row_idx.to_be_bytes(), q_transposed[row_idx].as_slice());
-
-            // TODO: Can we do this in a better way?
-            let mut q_delta = vec![0u8; matrix_width];
-            xor(q_delta.as_mut_slice(), q_transposed[row_idx].as_slice(), delta);
-            let v1 = hash!(row_idx.to_be_bytes(), q_delta);
-
-            let m0 = msg.0[row_idx][0].as_slice();
-            let mut chacha = ChaCha20Rng::from_seed(v0);
-            let mut plain = vec![0u8; m0.len()];
-            chacha.fill_bytes(&mut plain);
-            xor_inplace(&mut plain, m0);
-            d0.push(plain);
-
-            let m1 = msg.0[row_idx][1].as_slice();
-            let mut chacha = ChaCha20Rng::from_seed(v1);
-            let mut plain = vec![0u8; m1.len()];
-            chacha.fill_bytes(&mut plain);
-            xor_inplace(&mut plain, m1);
-            d1.push(plain);
-        }
-
-        s.send(bincode::serialize(&d0)?)?;
-        s.send(bincode::serialize(&d1)?)?;
-
-        return Ok(());
-    }
-}
-
-impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
-        debug_assert!(choices.len() >= BLOCK_SIZE, "Choices must be longer than {BLOCK_SIZE} bytes");
-        debug_assert!(choices.len() % BLOCK_SIZE == 0, "Choices length must be multiple of {BLOCK_SIZE} bytes");
-
-        // TODO: What the hell are these?
-        let transaction_properties = TransactionProperties { msg_size: choices.len(), protocol: "Apricot AVX2".to_string() };
-        validate_properties(&transaction_properties, channel)?;
-
-        // "Constants" and things we need throughout
-        let l = choices.len() + K + S;
-        let l_bytes = l / 8;
-        const K_BYTES: usize = K / 8;
-
-        let matrix_width = K_BYTES;
-        let matrix_height = l;
-        let matrix_transposed_width = matrix_height / 8;
-        let matrix_transposed_height = matrix_width * 8;
-
-        let mut random = ChaCha20Rng::from_seed([0u8; 32]);
-        let (s, r) = channel;
-
-        // INITIALIZATION
-        let bonus: [bool; K + S] = random.gen();
-        let seed0: [[u8; 32]; K] = random.gen();
-        let seed1: [[u8; 32]; K] = random.gen();
-
-        let msg = Message::new(&seed0, &seed1);
-        self.bootstrap.exchange(&msg, channel)?;
-
-        /* The matrices are supposed to be this large (width by height):
-            x: 128 by 288
-            x^T: 288 by 128
-            t0: 288 by 128
-            t1: 288 by 128
-            t: 128 by 288
-            u: 288 by 128
-        */
-
-        // EXTENSION
-        let mut t0 = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
-        for row_idx in 0..matrix_transposed_height {
-            let row = t0[row_idx].as_mut_slice();
-            fill_random_bytes_from_seed(&seed0[row_idx], row);
-        }
-
-        // TODO: It might be beneficial to do this in the loop for t0!
-        // TODO: Can we vectorize the transposing?
-        let mut t = vec![vec![0u8; matrix_width]; matrix_height];
-        matrix_transpose(&t0, &mut t, matrix_transposed_height, matrix_transposed_width);
-
-        let mut t1 = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
-        for row_idx in 0..matrix_transposed_height {
-            let row = t1[row_idx].as_mut_slice();
-            fill_random_bytes_from_seed(&seed1[row_idx], row);
-        }
-
-        // TODO: Get rid of the choices bool array and just use this all the time instead
-        let padded_choices = [choices, &bonus].concat();
-        let mut packed_choices = vec![0u8; l_bytes];
-        let packed_choices = packed_choices.as_mut_slice();
-        for i in 0..l_bytes {
-            for b in 0..8 {
-                let index = i * 8 + b;
-                if padded_choices[index] {
-                    packed_choices[i] |= 1 << b;
-                }
-            }
-        }
-
-        let mut x_transposed = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
-        for row_idx in 0..matrix_transposed_height {
-            let row = x_transposed[row_idx].as_mut_slice();
-            for col_idx in 0..matrix_transposed_width {
-                row[col_idx] = packed_choices[col_idx];
-            }
-        }
-
-        let mut u = vec![vec![0u8; matrix_transposed_width]; matrix_transposed_height];
-        for row_idx in 0..matrix_transposed_height {
-            let u_row = u[row_idx].as_mut_slice();
-
-            // TODO: This can be done more efficiently
-            let t0_row = t0[row_idx].as_slice();
-            let t1_row = t1[row_idx].as_slice();
-            xor(u_row, t0_row, t1_row);
-
-            let x_row = x_transposed[row_idx].as_slice();
-            xor_inplace(u_row, x_row);
-        }
-        s.send(bincode::serialize(&u)?)?;
-
-        // -- Check correlation --
-        let mut chi = vec![vec![0u8; matrix_width]; matrix_height];
-        for row_idx in 0..matrix_height {
-            let row = chi[row_idx].as_mut_slice();
-            random.fill_bytes(row);
-        }
-        s.send(bincode::serialize(&chi)?)?;
-
-        let mut x_sum = vec![0u8; matrix_width];
-        let mut t_sum = vec![0u8; matrix_width];
-        for row_idx in 0..matrix_height {
-            let chi_row = chi[row_idx].as_slice();
-            if padded_choices[row_idx] {
-                xor_inplace(x_sum.as_mut_slice(), chi_row);
-            }
-
-            let t_row = t[row_idx].as_slice();
-            polynomial_mul_acc(t_sum.as_mut_slice(), t_row, chi_row);
-        }
-        s.send(bincode::serialize(&x_sum)?)?;
-        s.send(bincode::serialize(&t_sum)?)?;
-
-
-        // -- Randomize --
-        let mut v = vec![vec![0u8; 32]; matrix_height];
-        for row_idx in 0..matrix_height {
-            let row = v[row_idx].as_mut_slice();
-            let hash = hash!(row_idx.to_be_bytes(), t[row_idx].as_slice());
-            xor_inplace(row, &hash);
-        }
-
-        // -- DeROT --
-        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let mut y: Vec<Vec<u8>> = Vec::with_capacity(choices.len());
-        for i in 0..choices.len() {
-            let mut chacha = ChaCha20Rng::from_seed(array(&v[i]));
-
-            let d = if choices[i] { d1[i].as_slice() } else { d0[i].as_slice() };
-            let mut c = vec![0u8; d.len()];
-            chacha.fill_bytes(&mut c);
-            xor_inplace(&mut c, d);
-
-            y.push(c);
-        }
-
-        return Ok(y);
-    }
-}
+// Tests
 
 #[cfg(test)]
 mod tests {

@@ -10,4 +10,5 @@ pub mod fpake;
 pub mod garble;
 pub mod ot;
 pub mod util;
+mod instrument;
 mod wires;

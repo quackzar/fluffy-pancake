@@ -23,12 +23,13 @@ rayon = "1.5.1"
 ductile = "0.2.0"
 num-traits = "0.2"
 num-integer = "0.1.44"
+superluminal-perf = "0.1.1"
 
 [features]
 simd = ["curve25519-dalek/simd_backend", "rand/simd_support"]
 
 [profile.release]
-debug = 1
+debug = 2
 
 [dev-dependencies]
 criterion = "0.3"

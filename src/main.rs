@@ -1,37 +1,51 @@
-use std::thread;
-use ductile::new_local_channel;
-use magic_pake::fpake::OneOfManyKey;
+use magic_pake::{
+    fpake::build_circuit,
+    garble::{self, BinaryEncodingKey},
+    ot::apricot_avx2::{Receiver, Sender},
+    ot::common::*,
+};
 
 fn main() {
-    const NUMBER_OF_PASSWORDS: usize = 4096;
-    let passwords = vec![vec![0u8; 2048 / 8]; NUMBER_OF_PASSWORDS as usize];
-    let index = 1;
-    let password = passwords[index as usize].clone();
-    let password_2 = password.clone();
-    let threshold = 0;
+    let n = 1 << 20;
+    let circuit = build_circuit(n / 2, 0);
+    let (_, enc, _) = garble::garble(&circuit);
+    let enc = BinaryEncodingKey::from(enc);
+    let enc: Vec<_> = enc
+        .zipped()
+        .iter()
+        .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+        .collect();
+    let choices = vec![false; n];
+    let msg = Message::new2(&enc);
 
-    // Do the thing
-    let (s1, r1) = new_local_channel();
-    let (s2, r2) = new_local_channel();
-    let ch1 = (s2, r1);
-    let ch2 = (s1, r2);
+    use magic_pake::ot::chou_orlandi::{OTReceiver, OTSender};
+    let (s1, r1) = ductile::new_local_channel();
+    let (s2, r2) = ductile::new_local_channel();
+    let ch1 = (s1, r2);
+    let ch2 = (s2, r1);
+    let msg = msg.clone();
+    let choices = choices.to_vec();
 
-    let h1 = thread::spawn(move || {
-        // Party 1
-        let _ = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-    });
+    use std::thread;
+    let h1 = thread::Builder::new()
+        .name("Sender".to_string())
+        .spawn(move || {
+            let sender = Sender {
+                bootstrap: Box::new(OTReceiver),
+            };
+            sender.exchange(&msg, &ch1).unwrap();
+        });
 
-    let h2 = thread::spawn(move || {
-        // Party 1
-        let _ = OneOfManyKey::evaluator_client(
-            &password_2,
-            NUMBER_OF_PASSWORDS as u32,
-            index,
-            &ch2,
-        ).unwrap();
-    });
+    let h2 = thread::Builder::new()
+        .name("Receiver".to_string())
+        .spawn(move || {
+            let receiver = Receiver {
+                bootstrap: Box::new(OTSender),
+            };
+            let _ = receiver.exchange(&choices, &ch2).unwrap();
+        });
 
-    let _k1 = h1.join().unwrap();
-    let _k2 = h2.join().unwrap();
+    h1.unwrap().join().unwrap();
+    h2.unwrap().join().unwrap();
 }
 
