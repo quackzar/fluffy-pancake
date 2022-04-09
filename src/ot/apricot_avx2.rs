@@ -3,6 +3,8 @@ use crate::instrument::{E_SEND_COLOR, E_COMP_COLOR, E_RECV_COLOR, E_FUNC_COLOR, 
 use crate::instrument;
 use crate::ot::common::*;
 use crate::util::*;
+use crate::ot::coinflip::coinflip_receiver;
+use crate::ot::coinflip::coinflip_sender;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -42,11 +44,14 @@ impl ObliviousSender for Sender {
         let (matrix_t_w, matrix_t_h) = (matrix_h / 8, matrix_w * 8);
         let matrix_size = matrix_w * matrix_h;
 
+        instrument::begin("Chi Coinflip Receiver", E_PROT_COLOR);
+        let seed = coinflip_receiver::<32>(channel)?;
+        instrument::end();
+
         // -- COTe
         instrument::begin("COTe", E_PROT_COLOR);
 
-        // TODO: Use from entropy instead!
-        let mut random = ChaCha20Rng::from_seed([0u8; 32]);
+        let mut random = ChaCha20Rng::from_entropy();
         let (s, r) = channel;
 
         let msg_size = msg.0[0][0].len();
@@ -77,6 +82,11 @@ impl ObliviousSender for Sender {
         let mut q = vec![0u8; matrix_t_w * matrix_t_h];
         let mut q_transposed = vec![0u8; matrix_w * matrix_h];
         instrument::end();
+        
+        instrument::begin("Generate Chi", E_COMP_COLOR);
+        let mut chi = vec![0u8; matrix_w * matrix_h];
+        fill_random_bytes_from_seed_array(&seed, &mut chi);
+        instrument::end();
 
         instrument::begin("Receive u", E_RECV_COLOR);
         let u: Vec<u8> = r.recv_raw()?;
@@ -105,10 +115,6 @@ impl ObliviousSender for Sender {
         instrument::begin("ROTe", E_PROT_COLOR);
 
         // Correlation Check
-        instrument::begin("Receive chi", E_RECV_COLOR);
-        let chi: Vec<u8> = r.recv_raw()?;
-        instrument::end();
-
         instrument::begin("Compute q_sum", E_COMP_COLOR);
         debug_assert_eq!(matrix_size, chi.len());
         let mut q_sum = vec![0u8; matrix_w];
@@ -194,9 +200,12 @@ impl ObliviousReceiver for Receiver {
         let (matrix_w, matrix_h) = (K_BYTES, l);
         let (matrix_t_w, matrix_t_h) = (matrix_h / 8, matrix_w * 8);
 
-        // TODO: Use from entropy instead!
-        let mut random = ChaCha20Rng::from_seed([0u8; 32]);
+        let mut random = ChaCha20Rng::from_entropy();
         let (s, r) = channel;
+
+        instrument::begin("Chi Coinflip Sender", E_PROT_COLOR);
+        let seed = coinflip_sender::<32>(channel)?;
+        instrument::end();
 
         // INITIALIZATION
         instrument::begin("COTe", E_PROT_COLOR);
@@ -278,11 +287,7 @@ impl ObliviousReceiver for Receiver {
 
         instrument::begin("Generate Chi", E_COMP_COLOR);
         let mut chi = vec![0u8; matrix_w * matrix_h];
-        random.fill_bytes(&mut chi);
-        instrument::end();
-
-        instrument::begin("Send chi", E_SEND_COLOR);
-        s.send_raw(chi.as_slice())?;
+        fill_random_bytes_from_seed_array(&seed, &mut chi);
         instrument::end();
 
         instrument::begin("Check Correlation", E_COMP_COLOR);
