@@ -3,10 +3,9 @@ use crate::ot::common::*;
 use crate::util::{random_bytes, xor_bytes, LENGTH, xor_bytes_inplace};
 use sha2::{Digest, Sha256};
 use crate::ot::chou_orlandi::{OTReceiver, OTSender};
-use rand::{Rng, RngCore};
+use rand::RngCore;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use rand_chacha::ChaCha8Rng;
 
 #[inline]
 fn array<const N: usize>(vector: &Vec<u8>) -> [u8; N] {
