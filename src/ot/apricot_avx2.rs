@@ -143,9 +143,12 @@ impl ObliviousSender for Sender {
             let q_row = unsafe { vector_row(&q_transposed, row_idx, matrix_w) };
             let v0 = hash!(row_idx.to_be_bytes(), q_row);
 
+            let d0_idx = row_idx * msg_size * 2;
+            let d1_idx = d0_idx + msg_size;
+
             let m0 = msg.0[row_idx][0].as_slice();
             let mut chacha = ChaCha20Rng::from_seed(v0);
-            let mut plain = unsafe { vector_slice_mut(&mut d, row_idx * msg_size * 2, msg_size) };
+            let mut plain = unsafe { vector_slice_mut(&mut d, d0_idx, msg_size) };
             chacha.fill_bytes(&mut plain);
             xor_inplace(&mut plain, m0);
 
@@ -155,7 +158,7 @@ impl ObliviousSender for Sender {
 
             let m1 = msg.0[row_idx][1].as_slice();
             let mut chacha = ChaCha20Rng::from_seed(v1);
-            let mut plain = unsafe { vector_slice_mut(&mut d, row_idx * msg_size * 2 | 1, msg_size) };
+            let mut plain = unsafe { vector_slice_mut(&mut d, d1_idx, msg_size) };
             chacha.fill_bytes(&mut plain);
             xor_inplace(&mut plain, m1);
         }
@@ -334,7 +337,8 @@ impl ObliviousReceiver for Receiver {
                 chacha.fill_bytes(y[j].as_mut_slice());
 
                 let choice = ((packed_choices[i] >> b) & 1) as usize;
-                let d = unsafe { vector_slice(&d, i * msg_size * 2 | choice, msg_size) };
+                let d_idx = (j * msg_size * 2) + choice * msg_size;
+                let d = unsafe { vector_slice(&d, d_idx, msg_size) };
 
                 xor_inplace(y[j].as_mut_slice(), d);
             }
@@ -645,6 +649,89 @@ mod tests {
                 let choices = [true; 8 << 2];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
                 assert_eq!(msg[0], b"World");
+            });
+
+        h1.unwrap().join().unwrap();
+        h2.unwrap().join().unwrap();
+    }
+
+
+    #[test]
+    fn test_avx2_ot_receiver_many() {
+        use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+        let (s1, r1) = ductile::new_local_channel();
+        let (s2, r2) = ductile::new_local_channel();
+        let ch1 = (s1, r2);
+        let ch2 = (s2, r1);
+
+        fn print_vec(vec: &Vec<u8>) {
+            print!("[");
+            for i in 0..vec.len() {
+                print!("{:#04x}", vec[i]);
+
+                if i != vec.len() - 1 {
+                    print!(", ");
+                }
+            }
+            print!("]");
+        }
+
+        const CASES: usize = 1 << 5;
+
+        use std::thread;
+        let h1 = thread::Builder::new()
+            .name("Sender".to_string())
+            .spawn(move || {
+                let sender = Sender {
+                    bootstrap: Box::new(OTReceiver),
+                };
+
+                let mut m0 = [[0u8; 8]; CASES];
+                let mut m1 = [[0u8; 8]; CASES];
+                for i in 0..CASES {
+                    m0[i] = (i as u64).to_be_bytes();
+                    m1[i] = (0xFFFFFFFF_FFFFFFFF - (i as u64)).to_be_bytes();
+                }
+
+                for i in 0..CASES {
+                    print!("{:04}: ", i);
+                    print_vec(&m0[i].to_vec());
+                    print!(", ");
+                    print_vec(&m1[i].to_vec());
+                    println!();
+                }
+
+                let msg = Message::new(&m0, &m1);
+                sender.exchange(&msg, &ch1).unwrap();
+            });
+
+        let h2 = thread::Builder::new()
+            .name("Receiver".to_string())
+            .spawn(move || {
+                let receiver = Receiver {
+                    bootstrap: Box::new(OTSender),
+                };
+                let mut choices = vec![true; CASES];
+                for i in 0..CASES {
+                    choices[i] = (i & 1) > 0;
+                }
+
+                let msg = receiver.exchange(&choices, &ch2).unwrap();
+
+                for i in 0..CASES {
+                    print!("{:04}: ", i);
+                    print_vec(&msg[i]);
+                    println!();
+                }
+
+                for i in 0..CASES {
+                    if choices[i] {
+                        assert_eq!((0xFFFFFFFF_FFFFFFFFu64 - i as u64).to_be_bytes().to_vec(), msg[i]);
+                    } else {
+                        assert_eq!((i as u64).to_be_bytes().to_vec(), msg[i]);
+                    }
+
+                }
             });
 
         h1.unwrap().join().unwrap();
