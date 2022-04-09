@@ -1,8 +1,8 @@
-use crate::util::*;
-use crate::ot::common::*;
 use crate::common::*;
-use crate::instrument;
 use crate::instrument::{E_SEND_COLOR, E_COMP_COLOR, E_RECV_COLOR, E_FUNC_COLOR, E_PROT_COLOR};
+use crate::instrument;
+use crate::ot::common::*;
+use crate::util::*;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -45,6 +45,7 @@ impl ObliviousSender for Sender {
         // -- COTe
         instrument::begin("COTe", E_PROT_COLOR);
 
+        // TODO: Use from entropy instead!
         let mut random = ChaCha20Rng::from_seed([0u8; 32]);
         let (s, r) = channel;
 
@@ -190,7 +191,7 @@ impl ObliviousReceiver for Receiver {
         let (matrix_w, matrix_h) = (K_BYTES, l);
         let (matrix_t_w, matrix_t_h) = (matrix_h / 8, matrix_w * 8);
 
-        // TODO: Grab from entropy instead!
+        // TODO: Use from entropy instead!
         let mut random = ChaCha20Rng::from_seed([0u8; 32]);
         let (s, r) = channel;
 
@@ -464,7 +465,6 @@ fn transpose_matrix(source: &Vec<u8>, target: &mut Vec<u8>, transposed_height: u
                 let target_shift = row_idx % 8;
 
                 let idx = index_1d(target_row, target_col, original_width);
-                //println!("Target: {}, {} -> {}", target_row, target_col, idx);
                 target[idx] |= source_bit << target_shift;
             }
         }
