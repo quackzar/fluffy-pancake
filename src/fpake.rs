@@ -286,7 +286,7 @@ impl OneOfManyKey {
         // 4. Receive and respond to the 1-to-n challenge from the r
         instrument::begin("1-to-n OT Receiver", E_PROT_COLOR);
         let many_receiver = ManyOTReceiver {
-            interal_receiver: OTReceiver,
+            internal_receiver: OTReceiver,
         };
         let domain = log2(number_of_password);
         let encodings = many_receiver.exchange(index, domain, ch)?;
@@ -462,7 +462,7 @@ impl OneOfManyKey {
         let mut encoding_bytes = vec![vec![0u8; LENGTH]; password_bits];
         for i in 0..passwords.len() {
             for j in 0..password_bits {
-                encoding_bytes[j] = xor_bytes(&encoding_bytes[j], &result[i * password_bits + j])
+                xor_bytes_inplace(&mut encoding_bytes[j], &result[i * password_bits + j])
             }
         }
 

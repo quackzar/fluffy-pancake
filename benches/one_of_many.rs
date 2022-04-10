@@ -28,7 +28,7 @@ fn one_of_many_local(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
         .name("Receiver".to_string())
         .spawn(move || {
             let receiver = ManyOTReceiver {
-                interal_receiver: magic_pake::ot::chou_orlandi::OTReceiver,
+                internal_receiver: magic_pake::ot::chou_orlandi::OTReceiver,
             };
             receiver.exchange(choice, domain, &ch2).unwrap()
         });

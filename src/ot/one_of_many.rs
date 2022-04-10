@@ -1,21 +1,22 @@
 use crate::common::{Channel, Error};
-use crate::ot::common::*;
-use crate::util::{random_bytes, xor_bytes, LENGTH, xor_bytes_inplace};
-use sha2::{Digest, Sha256};
 use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+use crate::ot::common::*;
+use crate::util::{random_bytes, xor_bytes, LENGTH, xor_bytes_inplace, SECURITY_PARAM};
+use crate::instrument::{E_SEND_COLOR, E_COMP_COLOR, E_RECV_COLOR, E_FUNC_COLOR, E_PROT_COLOR};
+use crate::instrument;
 use rand::RngCore;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use sha2::{Digest, Sha256};
 
 #[inline]
 fn array<const N: usize>(vector: &Vec<u8>) -> [u8; N] {
     return vector.as_slice().try_into().unwrap();
 }
 
-
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
-fn fk(key: &[u8], choice: u32) -> Vec<u8> {
+fn fk(key: &[u8], choice: u32, length: usize) -> Vec<u8> {
     /*
     let chunks = key.len() / 32;
     let excess = key.len() % 32;
@@ -51,7 +52,7 @@ fn fk(key: &[u8], choice: u32) -> Vec<u8> {
     let seed = array(&hasher.finalize().to_vec());
 
     let mut prg = ChaCha20Rng::from_seed(seed);
-    let mut result = vec![0u8; key.len()];
+    let mut result = vec![0u8; length];
     prg.fill_bytes(result.as_mut_slice());
 
     return result;
@@ -61,6 +62,21 @@ pub struct ManyOTSender {
     pub interal_sender: OTSender,
 }
 
+#[inline]
+unsafe fn vector_row(vector: &Vec<u8>, row: usize, width: usize) -> &[u8] {
+    let ptr = vector.as_ptr();
+    let offset = (width * row) as isize;
+    let into = ptr.offset(offset);
+    return std::slice::from_raw_parts(into, width);
+}
+#[inline]
+unsafe fn vector_row_mut(vector: &mut Vec<u8>, row: usize, width: usize) -> &mut [u8] {
+    let ptr = vector.as_mut_ptr();
+    let offset = (width * row) as isize;
+    let into = ptr.offset(offset);
+    return std::slice::from_raw_parts_mut(into, width);
+}
+
 impl ManyOTSender {
     pub fn exchange(
         &self,
@@ -68,26 +84,44 @@ impl ManyOTSender {
         domain: u32,
         ch: &Channel<Vec<u8>>,
     ) -> Result<(), Error> {
+        instrument::begin("1-to-n OT Sender", E_FUNC_COLOR);
         let byte_length = messages[0].len();
 
         // 1. B: Prepare random keys
         let l = domain as usize;
-        //debug_assert!(l == (1 << domain));
 
+        instrument::begin("Generate keys", E_COMP_COLOR);
         let mut keys: Vec<[Vec<u8>; 2]> = Vec::with_capacity(l);
         for _i in 0..l {
-            let mut left = vec![0u8; byte_length];
-            let mut right = vec![0u8; byte_length];
+            let mut left = vec![0u8; SECURITY_PARAM / 8];
+            let mut right = vec![0u8; SECURITY_PARAM / 8];
 
             random_bytes(&mut left);
             random_bytes(&mut right);
 
             keys.push([left, right]);
         }
+        instrument::end();
 
+        instrument::begin("Compute y", E_COMP_COLOR);
         let domain_max = 1 << domain; // 2^domain
-        let mut y = Vec::with_capacity(domain_max);
+        let mut y = vec![0u8; domain_max * byte_length];
         for i in 0..domain_max {
+            let mut y_value = unsafe { vector_row_mut(&mut y, i, byte_length) };
+            xor_bytes_inplace(&mut y_value, messages[i].as_slice());
+
+            for j in 0..domain {
+                let bit = (i >> j) & 1;
+                let hash = fk(&keys[j as usize][bit as usize], i as u32, byte_length);
+                xor_bytes_inplace(&mut y_value, &hash);
+            }
+        }
+        /*
+        // TODO: Parallelization is one way to speed this up (about 50%), but due to how things are
+                 allocated and things not being flat this is still a bad way of doing it (threads
+                 are around %50 idle, and we spend a ton of time serializing).
+        use rayon::prelude::*;
+        let y: Vec<Vec<u8>> = (0..domain_max).into_par_iter().map(|i| {
             let mut value = messages[i].to_vec();
             for j in 0..domain {
                 let bit = (i >> j) & 1;
@@ -95,27 +129,38 @@ impl ManyOTSender {
                 xor_bytes_inplace(&mut value, &hash);
             }
 
-            y.push(value.to_vec());
-        }
+            value
+        }).collect();
+        */
+        instrument::end();
+
+        let (s, _r) = ch;
+        instrument::begin("Send y", E_SEND_COLOR);
+        s.send_raw(&y.as_slice())?;
+        instrument::end();
 
         // 2. Initiate 1-out-of-2 OTs by sending challenges
+        instrument::begin("Build boostrap messages", E_COMP_COLOR);
         let mut messages = Vec::with_capacity(l);
         for i in 0..l {
             let m0 = keys[i as usize][0].to_vec();
             let m1 = keys[i as usize][1].to_vec();
             messages.push([m0, m1]);
         }
-
         let message = Message::new2(messages.as_slice());
+        instrument::end();
+
+        instrument::begin("Boostrap", E_PROT_COLOR);
         self.interal_sender.exchange(&message, ch)?;
-        let (s, _r) = ch;
-        s.send(bincode::serialize(&y)?)?;
+        instrument::end();
+
+        instrument::end();
         Ok(())
     }
 }
 
 pub struct ManyOTReceiver {
-    pub interal_receiver: OTReceiver,
+    pub internal_receiver: OTReceiver,
 }
 
 impl ManyOTReceiver {
@@ -125,18 +170,29 @@ impl ManyOTReceiver {
         domain: u32,
         ch: &Channel<Vec<u8>>,
     ) -> Result<Vec<u8>, Error> {
+        instrument::begin("1-to-n OT Receiver", E_FUNC_COLOR);
         let l = domain as usize;
 
         // construct choices
+        instrument::begin("Build choices", E_COMP_COLOR);
         let mut choices: Vec<bool> = Vec::with_capacity(l);
         for i in 0..l {
             let bit = (choice & (1 << i)) >> i;
             choices.push(bit == 1);
         }
+        instrument::end();
 
-        let messages = self.interal_receiver.exchange(&choices, ch)?;
+        let (_s, r) = ch;
+        instrument::begin("Receive y", E_RECV_COLOR);
+        let mut y: Vec<u8> = r.recv_raw()?;
+        instrument::end();
+
+        instrument::begin("Bootstrap", E_PROT_COLOR);
+        let messages = self.internal_receiver.exchange(&choices, ch)?;
+        instrument::end();
 
         // convert payload to keys
+        instrument::begin("Convert payload to keys", E_COMP_COLOR);
         let mut keys: Vec<Vec<u8>> = Vec::with_capacity(l);
         for i in 0..l {
             let message = &messages[i];
@@ -149,18 +205,20 @@ impl ManyOTReceiver {
 
             keys.push(key);
         }
-
-        let (_s, r) = ch;
-        let y: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        instrument::end();
 
         // reconstruct x from choice and keys
-        let mut x = y[choice as usize].to_vec();
+        instrument::begin("Reconstruct value", E_COMP_COLOR);
+        let byte_length = y.len() / (1 << domain);
+        let mut x = unsafe { vector_row_mut(&mut y, choice as usize, byte_length) };
         for i in 0..domain {
-            let hash = fk(&keys[i as usize], choice);
-            x = xor_bytes(&x, &hash);
+            let hash = fk(&keys[i as usize], choice, byte_length);
+            xor_bytes_inplace(&mut x, &hash);
         }
+        instrument::end();
 
-        Ok(x)
+        instrument::end();
+        Ok(x.to_vec())
     }
 }
 
@@ -199,7 +257,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = ManyOTReceiver {
-                    interal_receiver: crate::ot::chou_orlandi::OTReceiver,
+                    internal_receiver: crate::ot::chou_orlandi::OTReceiver,
                 };
                 receiver.exchange(choice, domain, &ch2).unwrap()
             });
