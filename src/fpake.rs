@@ -375,20 +375,23 @@ impl OneOfManyKey {
         // 2. Prepare keys needed to mask values
         instrument::begin("Prepare keys", E_COMP_COLOR);
         let mut random_keys = Vec::with_capacity(number_of_passwords as usize - 1);
-        let mut cancelling_key = vec![vec![0u8; LENGTH]; password_bits];
+        let mut cancelling_keys = vec![vec![0u8; LENGTH]; password_bits];
         for _ in 0..(number_of_passwords - 2) {
             let mut keys = Vec::with_capacity(password_bits);
+
             for j in 0..password_bits {
                 let mut key = vec![0u8; LENGTH];
                 random_bytes(&mut key);
 
-                cancelling_key[j] = xor_bytes(&cancelling_key[j], &key);
+                let mut cancelling_key = cancelling_keys[j].as_mut_slice();
+                xor_bytes_inplace(&mut cancelling_key, &key);
+
                 keys.push(key);
             }
 
             random_keys.push(keys);
         }
-        random_keys.push(cancelling_key);
+        random_keys.push(cancelling_keys);
 
         let mut random_key = random_keys.iter();
         let mut keys = Vec::with_capacity(number_of_passwords as usize);

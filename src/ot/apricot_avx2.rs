@@ -391,40 +391,6 @@ fn fill_random_bytes_from_seed_array(seed: &[u8; 32], bytes: &mut [u8]) {
 }
 
 // -------------------------------------------------------------------------------------------------
-// Polynomials
-// PTR helpers
-#[inline]
-fn index_1d(row: usize, column: usize, width: usize) -> usize {
-    return width * row + column;
-}
-#[inline]
-unsafe fn vector_row(vector: &Vec<u8>, row: usize, width: usize) -> &[u8] {
-    let ptr = vector.as_ptr();
-    let offset = (width * row) as isize;
-    let into = ptr.offset(offset);
-    return std::slice::from_raw_parts(into, width);
-}
-#[inline]
-unsafe fn vector_row_mut(vector: &mut Vec<u8>, row: usize, width: usize) -> &mut [u8] {
-    let ptr = vector.as_mut_ptr();
-    let offset = (width * row) as isize;
-    let into = ptr.offset(offset);
-    return std::slice::from_raw_parts_mut(into, width);
-}
-#[inline]
-unsafe fn vector_slice(vector: &Vec<u8>, offset: usize, length: usize) -> &[u8] {
-    let ptr = vector.as_ptr();
-    let into = ptr.offset(offset as isize);
-    return std::slice::from_raw_parts(into, length);
-}
-#[inline]
-unsafe fn vector_slice_mut(vector: &mut Vec<u8>, offset: usize, length: usize) -> &mut [u8] {
-    let ptr = vector.as_mut_ptr();
-    let into = ptr.offset(offset as isize);
-    return std::slice::from_raw_parts_mut(into, length);
-}
-
-// -------------------------------------------------------------------------------------------------
 // Helpers for working with arrays of packed bits
 #[inline]
 fn xor(destination: &mut [u8], left: &[u8], right: &[u8]) {

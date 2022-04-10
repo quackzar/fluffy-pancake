@@ -1,7 +1,7 @@
 use crate::common::{Channel, Error};
 use crate::ot::chou_orlandi::{OTReceiver, OTSender};
 use crate::ot::common::*;
-use crate::util::{random_bytes, xor_bytes, LENGTH, xor_bytes_inplace, SECURITY_PARAM};
+use crate::util::*;
 use crate::instrument::{E_SEND_COLOR, E_COMP_COLOR, E_RECV_COLOR, E_FUNC_COLOR, E_PROT_COLOR};
 use crate::instrument;
 use rand::RngCore;
@@ -60,21 +60,6 @@ fn fk(key: &[u8], choice: u32, length: usize) -> Vec<u8> {
 
 pub struct ManyOTSender {
     pub interal_sender: OTSender,
-}
-
-#[inline]
-unsafe fn vector_row(vector: &Vec<u8>, row: usize, width: usize) -> &[u8] {
-    let ptr = vector.as_ptr();
-    let offset = (width * row) as isize;
-    let into = ptr.offset(offset);
-    return std::slice::from_raw_parts(into, width);
-}
-#[inline]
-unsafe fn vector_row_mut(vector: &mut Vec<u8>, row: usize, width: usize) -> &mut [u8] {
-    let ptr = vector.as_mut_ptr();
-    let offset = (width * row) as isize;
-    let into = ptr.offset(offset);
-    return std::slice::from_raw_parts_mut(into, width);
 }
 
 impl ManyOTSender {
