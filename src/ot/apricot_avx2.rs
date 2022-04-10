@@ -447,8 +447,8 @@ fn eq(left: &[u8], right: &[u8]) -> bool {
 
 #[inline]
 fn transpose_matrix(
-    source: &Vec<u8>,
-    target: &mut Vec<u8>,
+    source: &[u8],
+    target: &mut [u8],
     transposed_height: usize,
     transposed_width: usize,
     original_width: usize,
