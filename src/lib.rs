@@ -7,14 +7,13 @@
 // #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 
-
 extern crate core;
 
 pub mod circuit;
 pub mod common;
 pub mod fpake;
 pub mod garble;
+mod instrument;
 pub mod ot;
 pub mod util;
-mod instrument;
 mod wires;

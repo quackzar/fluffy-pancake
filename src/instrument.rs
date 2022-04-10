@@ -14,7 +14,7 @@ pub fn begin(name: &str, color: u32) {
 
 #[inline(always)]
 #[cfg(not(target_os = "windows"))]
-pub fn begin(name: &str, color: u32) { }
+pub fn begin(name: &str, color: u32) {}
 
 #[inline(always)]
 #[cfg(target_os = "windows")]
@@ -24,4 +24,4 @@ pub fn end() {
 
 #[inline(always)]
 #[cfg(not(target_os = "windows"))]
-pub fn end() { }
+pub fn end() {}

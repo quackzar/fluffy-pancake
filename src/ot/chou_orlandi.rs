@@ -9,7 +9,7 @@ use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use curve25519_dalek::scalar::Scalar;
 
-use rand::{SeedableRng, Rng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::{ChaCha12Rng, ChaCha20Rng};
 use serde::de::Visitor;
 
@@ -224,12 +224,12 @@ impl Sender {
                 // TODO: Error handling
                 let mut stream = ChaCha20Rng::from_seed(k0.try_into().unwrap());
                 let size = m0.len();
-                let cipher : Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect(); 
+                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
                 let e0 = xor_bytes(m0, &cipher);
 
                 let mut stream = ChaCha20Rng::from_seed(k1.try_into().unwrap());
                 let size = m1.len();
-                let cipher : Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect(); 
+                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
                 let e1 = xor_bytes(m1, &cipher);
                 [e0, e1]
             })
@@ -282,7 +282,7 @@ impl Receiver<Init> {
                 };
                 let mut hasher = Sha256::new();
                 hasher.update((their_public * self.secrets[i]).compress().as_bytes());
-                let key : [u8; 32] = hasher.finalize().try_into().unwrap();
+                let key: [u8; 32] = hasher.finalize().try_into().unwrap();
 
                 (public.compress(), key)
             })
@@ -308,11 +308,11 @@ impl Receiver<RetrievingPayload> {
             .par_iter()
             .enumerate()
             .map(|(i, [e0, e1])| -> Vec<u8> {
-                let e = if self.choices[i] {e1} else {e0};
+                let e = if self.choices[i] { e1 } else { e0 };
                 let k = self.state.keys[i];
                 let mut stream = ChaCha20Rng::from_seed(k);
                 let size = e.len();
-                let cipher : Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect(); 
+                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
                 xor_bytes(e, &cipher)
             })
             .collect()

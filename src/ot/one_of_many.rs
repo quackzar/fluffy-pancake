@@ -1,9 +1,9 @@
 use crate::common::{Channel, Error};
+use crate::instrument;
+use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::chou_orlandi::{OTReceiver, OTSender};
 use crate::ot::common::*;
 use crate::util::*;
-use crate::instrument::{E_SEND_COLOR, E_COMP_COLOR, E_RECV_COLOR, E_FUNC_COLOR, E_PROT_COLOR};
-use crate::instrument;
 use rand::RngCore;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;

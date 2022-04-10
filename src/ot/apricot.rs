@@ -142,14 +142,12 @@ impl Sender {
                 // encrypt the messages.
                 let size = m0.len();
                 let mut rng = ChaCha8Rng::from_seed(v0.try_into().unwrap());
-                let cipher : Vec<u8> = (0..size)
-                    .map(|_| rng.gen::<u8>()).collect();
+                let cipher: Vec<u8> = (0..size).map(|_| rng.gen::<u8>()).collect();
                 let c0 = xor_bytes(m0, &cipher);
 
                 let size = m1.len();
                 let mut rng = ChaCha8Rng::from_seed(v1.try_into().unwrap());
-                let cipher : Vec<u8> = (0..size)
-                    .map(|_| rng.gen::<u8>()).collect();
+                let cipher: Vec<u8> = (0..size).map(|_| rng.gen::<u8>()).collect();
                 let c1 = xor_bytes(m1, &cipher);
 
                 (c0, c1)
@@ -165,7 +163,6 @@ impl Sender {
         Ok(())
     }
 }
-
 
 impl Receiver {
     #[inline]
@@ -286,8 +283,7 @@ impl Receiver {
                 let d = if *c { d1 } else { d0 };
                 let size = d.len();
                 let mut rng = ChaCha8Rng::from_seed(v.try_into().unwrap());
-                let cipher : Vec<u8> = (0..size)
-                    .map(|_| rng.gen::<u8>()).collect();
+                let cipher: Vec<u8> = (0..size).map(|_| rng.gen::<u8>()).collect();
                 xor_bytes(&d, &cipher)
             })
             .collect();
@@ -357,7 +353,7 @@ mod tests {
         use crate::ot::chou_orlandi::{OTReceiver, OTSender};
         let (s1, r1) = ductile::new_local_channel();
         let (s2, r2) = ductile::new_local_channel();
-        const N : usize = 8 << 12;
+        const N: usize = 8 << 12;
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
         println!("N = {}", N);

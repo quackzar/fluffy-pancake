@@ -1,10 +1,10 @@
 use crate::common::*;
-use crate::instrument::{E_SEND_COLOR, E_COMP_COLOR, E_RECV_COLOR, E_FUNC_COLOR, E_PROT_COLOR};
 use crate::instrument;
-use crate::ot::common::*;
-use crate::util::*;
+use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::coinflip::coinflip_receiver;
 use crate::ot::coinflip::coinflip_sender;
+use crate::ot::common::*;
+use crate::util::*;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -31,10 +31,19 @@ impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
         instrument::begin("Apricot x86 Sender", E_FUNC_COLOR);
 
-        debug_assert!(msg.len() >= BLOCK_SIZE, "Message must be longer than {BLOCK_SIZE} bytes");
-        debug_assert!(msg.len() % BLOCK_SIZE == 0, "Message length must be multiple of {BLOCK_SIZE} bytes");
+        debug_assert!(
+            msg.len() >= BLOCK_SIZE,
+            "Message must be longer than {BLOCK_SIZE} bytes"
+        );
+        debug_assert!(
+            msg.len() % BLOCK_SIZE == 0,
+            "Message length must be multiple of {BLOCK_SIZE} bytes"
+        );
 
-        let transaction_properties = TransactionProperties { msg_size: msg.len(), protocol: "Apricot AVX2".to_string() };
+        let transaction_properties = TransactionProperties {
+            msg_size: msg.len(),
+            protocol: "Apricot AVX2".to_string(),
+        };
         validate_properties(&transaction_properties, channel)?;
 
         let l = msg.len() + K + S;
@@ -82,7 +91,7 @@ impl ObliviousSender for Sender {
         let mut q = vec![0u8; matrix_t_w * matrix_t_h];
         let mut q_transposed = vec![0u8; matrix_w * matrix_h];
         instrument::end();
-        
+
         instrument::begin("Generate Chi", E_COMP_COLOR);
         let mut chi = vec![0u8; matrix_w * matrix_h];
         fill_random_bytes_from_seed_array(&seed, &mut chi);
@@ -187,10 +196,19 @@ impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
         instrument::begin("Apricot x86 Receiver", E_FUNC_COLOR);
 
-        debug_assert!(choices.len() >= BLOCK_SIZE, "Choices must be longer than {BLOCK_SIZE} bytes");
-        debug_assert!(choices.len() % BLOCK_SIZE == 0, "Choices length must be multiple of {BLOCK_SIZE} bytes");
+        debug_assert!(
+            choices.len() >= BLOCK_SIZE,
+            "Choices must be longer than {BLOCK_SIZE} bytes"
+        );
+        debug_assert!(
+            choices.len() % BLOCK_SIZE == 0,
+            "Choices length must be multiple of {BLOCK_SIZE} bytes"
+        );
 
-        let transaction_properties = TransactionProperties { msg_size: choices.len(), protocol: "Apricot AVX2".to_string() };
+        let transaction_properties = TransactionProperties {
+            msg_size: choices.len(),
+            protocol: "Apricot AVX2".to_string(),
+        };
         validate_properties(&transaction_properties, channel)?;
 
         let l = choices.len() + K + S;
@@ -373,7 +391,7 @@ unsafe fn unpack_bits_to_vec(bytes: &[u8]) -> Vec<bool> {
 
 #[inline]
 fn array_from_slice<const N: usize>(vector: &[u8]) -> &[u8; N] {
-    return unsafe { std::mem::transmute(vector.as_ptr()) }
+    return unsafe { std::mem::transmute(vector.as_ptr()) };
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -428,7 +446,13 @@ fn eq(left: &[u8], right: &[u8]) -> bool {
 }
 
 #[inline]
-fn transpose_matrix(source: &Vec<u8>, target: &mut Vec<u8>, transposed_height: usize, transposed_width: usize, original_width: usize) {
+fn transpose_matrix(
+    source: &Vec<u8>,
+    target: &mut Vec<u8>,
+    transposed_height: usize,
+    transposed_width: usize,
+    original_width: usize,
+) {
     // TODO: There is probably a better way of doing this!
     for row_idx in 0..transposed_height {
         for col_idx in 0..transposed_width {
@@ -626,7 +650,6 @@ mod tests {
         h2.unwrap().join().unwrap();
     }
 
-
     #[test]
     fn test_avx2_ot_receiver_many() {
         use crate::ot::chou_orlandi::{OTReceiver, OTSender};
@@ -697,11 +720,13 @@ mod tests {
 
                 for i in 0..CASES {
                     if choices[i] {
-                        assert_eq!((0xFFFFFFFF_FFFFFFFFu64 - i as u64).to_be_bytes().to_vec(), msg[i]);
+                        assert_eq!(
+                            (0xFFFFFFFF_FFFFFFFFu64 - i as u64).to_be_bytes().to_vec(),
+                            msg[i]
+                        );
                     } else {
                         assert_eq!((i as u64).to_be_bytes().to_vec(), msg[i]);
                     }
-
                 }
             });
 

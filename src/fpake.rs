@@ -1,15 +1,15 @@
 use crate::circuit::*;
 use crate::common::*;
 use crate::garble::*;
-use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+use crate::instrument;
+use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::apricot_avx2::{Receiver, Sender};
+use crate::ot::chou_orlandi::{OTReceiver, OTSender};
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::ot::one_of_many::*;
 use crate::util::*;
 use crate::wires::*;
-use crate::instrument::{E_SEND_COLOR, E_COMP_COLOR, E_RECV_COLOR, E_FUNC_COLOR, E_PROT_COLOR};
-use crate::instrument;
 
 pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     let mut gates: Vec<Gate> = Vec::new();
@@ -91,7 +91,9 @@ impl HalfKey {
             .collect();
 
         let msg = MessagePair::new2(&e_theirs);
-        let ot = Sender { bootstrap: Box::new(OTReceiver) };
+        let ot = Sender {
+            bootstrap: Box::new(OTReceiver),
+        };
         ot.exchange(&msg, ch)?;
         let (s, _) = ch;
 
@@ -111,7 +113,9 @@ impl HalfKey {
         instrument::begin("Evaluator", E_PROT_COLOR);
 
         let password = u8_vec_to_bool_vec(password);
-        let ot = Receiver { bootstrap: Box::new(OTSender) };
+        let ot = Receiver {
+            bootstrap: Box::new(OTSender),
+        };
         let enc_password = ot.exchange(&password, ch)?;
         let (_, r) = ch;
 
@@ -158,7 +162,6 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
     wires
 }
 
-
 // Bob / server is Garbler
 impl OneOfManyKey {
     pub fn garbler_server(
@@ -196,7 +199,9 @@ impl OneOfManyKey {
             ])
         }
         let key_message = MessagePair::new2(key.as_slice());
-        let key_sender = Sender { bootstrap: Box::new(OTReceiver) };
+        let key_sender = Sender {
+            bootstrap: Box::new(OTReceiver),
+        };
         instrument::end();
 
         instrument::begin("OT Sender", E_PROT_COLOR);
@@ -272,7 +277,9 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("OT Receiver", E_PROT_COLOR);
-        let key_receiver = Receiver { bootstrap: Box::new(OTSender) };
+        let key_receiver = Receiver {
+            bootstrap: Box::new(OTSender),
+        };
         let key_encoding = key_receiver.exchange(&choices, ch)?;
         instrument::end();
 
@@ -415,7 +422,9 @@ impl OneOfManyKey {
         // 3. Initiate the OTs for all of the passwords
         instrument::begin("OT Server passwords", E_PROT_COLOR);
         let message = MessagePair::new2(keys.as_slice());
-        let sender = Sender { bootstrap: Box::new(OTReceiver) };
+        let sender = Sender {
+            bootstrap: Box::new(OTReceiver),
+        };
         sender.exchange(&message, channel)?;
         instrument::end();
 
@@ -427,7 +436,10 @@ impl OneOfManyKey {
         Ok(Self(decoding.hashes[0][1]))
     }
 
-    pub fn evaluator_server(passwords: &[Vec<u8>], channel: &Channel<Vec<u8>>) -> Result<Self, Error> {
+    pub fn evaluator_server(
+        passwords: &[Vec<u8>],
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<Self, Error> {
         instrument::begin("evaluator_server", E_FUNC_COLOR);
 
         let (_, r) = channel;
@@ -456,7 +468,9 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("OT Server passwords", E_PROT_COLOR);
-        let receiver = Receiver { bootstrap: Box::new(OTSender) };
+        let receiver = Receiver {
+            bootstrap: Box::new(OTSender),
+        };
         let result = receiver.exchange(&choices, channel)?;
         instrument::end();
 

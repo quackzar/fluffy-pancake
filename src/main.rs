@@ -1,6 +1,6 @@
-use std::thread;
 use ductile::new_local_channel;
 use magic_pake::fpake::OneOfManyKey;
+use std::thread;
 
 fn main() {
     let number_of_passwords = 1 << 13;
@@ -26,26 +26,15 @@ fn main() {
 
     let h2 = thread::spawn(move || {
         // Party 1
-        let k1 = OneOfManyKey::evaluator_client(
-            &password_2,
-            number_of_passwords,
-            index,
-            &ch2,
-        )
-            .unwrap();
+        let k1 =
+            OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
 
-        let k2 = OneOfManyKey::garbler_client(
-            &password,
-            index,
-            number_of_passwords,
-            threshold,
-            &ch2,
-        )
-            .unwrap();
+        let k2 =
+            OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &ch2)
+                .unwrap();
         k1.combine(k2);
     });
 
     let _k1 = h1.join().unwrap();
     let _k2 = h2.join().unwrap();
 }
-

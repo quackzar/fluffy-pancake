@@ -134,10 +134,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
         // Both parts
         group.bench_function(
-            &format!(
-                "2048-bit ({} passwords)",
-                number_of_passwords
-            ),
+            &format!("2048-bit ({} passwords)", number_of_passwords),
             |b| {
                 b.iter(|| {
                     let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
@@ -167,14 +164,16 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                             number_of_passwords,
                             index,
                             &ch2,
-                        ).unwrap();
+                        )
+                        .unwrap();
                         let k2 = OneOfManyKey::garbler_client(
                             &password,
                             index,
                             number_of_passwords,
                             threshold,
                             &ch2,
-                        ).unwrap();
+                        )
+                        .unwrap();
                         k1.combine(k2);
                     });
 

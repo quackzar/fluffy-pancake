@@ -182,13 +182,13 @@ impl BitMatrix {
     #[inline]
     pub fn monochrome(choices: &[bool], size: usize) -> Self {
         let l = choices.len();
-        let mut packed_choices : Vec<Block> = vec![0; l/BLOCK_SIZE];
-        for i in 0..l/BLOCK_SIZE {
+        let mut packed_choices: Vec<Block> = vec![0; l / BLOCK_SIZE];
+        for i in 0..l / BLOCK_SIZE {
             for b in 0..BLOCK_SIZE {
-                packed_choices[i] |= (choices[i*BLOCK_SIZE + b] as Block) << b;
+                packed_choices[i] |= (choices[i * BLOCK_SIZE + b] as Block) << b;
             }
         }
-        let mut x = vec![vec![0; l/BLOCK_SIZE]; size];
+        let mut x = vec![vec![0; l / BLOCK_SIZE]; size];
         for row in x.iter_mut() {
             row[..(l / BLOCK_SIZE)].copy_from_slice(&packed_choices);
         }
@@ -226,15 +226,15 @@ impl BitMatrix {
     }
 }
 
-fn tranpose_64(matrix: &mut [u64; 64])  {
+fn tranpose_64(matrix: &mut [u64; 64]) {
     let mut m = 0x0000_0000_FFFF_FFFF; // 32 bit.
     let mut j = 16;
     while j != 0 {
         let mut k = 0;
         while k < 64 {
-            let t = matrix[k] ^ (matrix[k+j] >> j) & m;
-            matrix[k] ^=  t;
-            matrix[k+j] ^= t << j;
+            let t = matrix[k] ^ (matrix[k + j] >> j) & m;
+            matrix[k] ^= t;
+            matrix[k + j] ^= t << j;
             k = (k + j + 1) & !j;
         }
         m ^= m << j;
@@ -245,12 +245,9 @@ fn tranpose_64(matrix: &mut [u64; 64])  {
 impl From<Vec<Vec<Block>>> for BitMatrix {
     #[inline]
     fn from(rows: Vec<Vec<Block>>) -> Self {
-        unsafe {
-            mem::transmute(rows)
-        }
+        unsafe { mem::transmute(rows) }
     }
 }
-
 
 impl FromIterator<BitVector> for BitMatrix {
     fn from_iter<I: IntoIterator<Item = BitVector>>(iter: I) -> Self {
@@ -353,4 +350,3 @@ impl Index<RangeFull> for BitMatrix {
         &self.rows[..]
     }
 }
-

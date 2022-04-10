@@ -157,7 +157,7 @@ impl Wire {
     {
         debug_assert_eq!(self.domain, other.domain, "Domain not matching");
         let mut values = [0u8; LENGTH];
-        for (i,v) in values.iter_mut().enumerate() {
+        for (i, v) in values.iter_mut().enumerate() {
             *v = op(self.values[i], other.values[i]);
         }
         let domain = self.domain;
@@ -256,7 +256,10 @@ impl Wire {
     }
 
     pub fn from_bytes(values: &[u8], domain: Domain) -> Self {
-        let wire = Self { domain, values: values.try_into().unwrap() };
+        let wire = Self {
+            domain,
+            values: values.try_into().unwrap(),
+        };
         match domain {
             Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,
             Domain::U8(m) => wire.map(|x| x % m),
