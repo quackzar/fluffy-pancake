@@ -46,11 +46,11 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
     let mut group = c.benchmark_group("fPAKE One of Many");
     group.sample_size(10);
 
-    // Full fpake
-    for i in 1..=16u32 {
+    for i in 13..=13u32 {
         let number_of_passwords = (1 << i) as u32;
 
         // garbler server, evaluator client
+        /*
         group.bench_function(
             &format!(
                 "2048-bit ({} passwords) - garbler client",
@@ -130,6 +130,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                 })
             },
         );
+        */
 
         // Both parts
         group.bench_function(
@@ -155,14 +156,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                     let h1 = thread::spawn(move || {
                         // Party 1
                         let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-                        let k2 = OneOfManyKey::garbler_client(
-                            &password,
-                            index,
-                            number_of_passwords,
-                            threshold,
-                            &ch1,
-                        )
-                        .unwrap();
+                        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
@@ -173,9 +167,14 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                             number_of_passwords,
                             index,
                             &ch2,
-                        )
-                        .unwrap();
-                        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
+                        ).unwrap();
+                        let k2 = OneOfManyKey::garbler_client(
+                            &password,
+                            index,
+                            number_of_passwords,
+                            threshold,
+                            &ch2,
+                        ).unwrap();
                         k1.combine(k2);
                     });
 

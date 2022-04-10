@@ -1,51 +1,51 @@
-use magic_pake::{
-    fpake::build_circuit,
-    garble::{self, BinaryEncodingKey},
-    ot::apricot_avx2::{Receiver, Sender},
-    ot::common::*,
-};
+use std::thread;
+use ductile::new_local_channel;
+use magic_pake::fpake::OneOfManyKey;
 
 fn main() {
-    let n = 1 << 20;
-    let circuit = build_circuit(n / 2, 0);
-    let (_, enc, _) = garble::garble(&circuit);
-    let enc = BinaryEncodingKey::from(enc);
-    let enc: Vec<_> = enc
-        .zipped()
-        .iter()
-        .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
-        .collect();
-    let choices = vec![false; n];
-    let msg = Message::new2(&enc);
+    let number_of_passwords = 1 << 13;
+    let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
+    let passwords_2 = passwords.clone();
+    let index = 1;
+    let password = passwords[index as usize].clone();
+    let password_2 = password.clone();
+    let threshold = 0;
 
-    use magic_pake::ot::chou_orlandi::{OTReceiver, OTSender};
-    let (s1, r1) = ductile::new_local_channel();
-    let (s2, r2) = ductile::new_local_channel();
-    let ch1 = (s1, r2);
-    let ch2 = (s2, r1);
-    let msg = msg.clone();
-    let choices = choices.to_vec();
+    // Do the thing
+    let (s1, r1) = new_local_channel();
+    let (s2, r2) = new_local_channel();
+    let ch1 = (s2, r1);
+    let ch2 = (s1, r2);
 
-    use std::thread;
-    let h1 = thread::Builder::new()
-        .name("Sender".to_string())
-        .spawn(move || {
-            let sender = Sender {
-                bootstrap: Box::new(OTReceiver),
-            };
-            sender.exchange(&msg, &ch1).unwrap();
-        });
+    let h1 = thread::spawn(move || {
+        // Party 1
+        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
+        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
+        k1.combine(k2);
+    });
 
-    let h2 = thread::Builder::new()
-        .name("Receiver".to_string())
-        .spawn(move || {
-            let receiver = Receiver {
-                bootstrap: Box::new(OTSender),
-            };
-            let _ = receiver.exchange(&choices, &ch2).unwrap();
-        });
+    let h2 = thread::spawn(move || {
+        // Party 1
+        let k1 = OneOfManyKey::evaluator_client(
+            &password_2,
+            number_of_passwords,
+            index,
+            &ch2,
+        )
+            .unwrap();
 
-    h1.unwrap().join().unwrap();
-    h2.unwrap().join().unwrap();
+        let k2 = OneOfManyKey::garbler_client(
+            &password,
+            index,
+            number_of_passwords,
+            threshold,
+            &ch2,
+        )
+            .unwrap();
+        k1.combine(k2);
+    });
+
+    let _k1 = h1.join().unwrap();
+    let _k2 = h2.join().unwrap();
 }
 
