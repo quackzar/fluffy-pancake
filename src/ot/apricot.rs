@@ -353,7 +353,7 @@ mod tests {
         use crate::ot::chou_orlandi::{OTReceiver, OTSender};
         let (s1, r1) = ductile::new_local_channel();
         let (s2, r2) = ductile::new_local_channel();
-        const N: usize = 8 << 12;
+        const N: usize = 8 << 8;
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
         println!("N = {}", N);
