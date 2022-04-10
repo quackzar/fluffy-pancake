@@ -6,19 +6,20 @@ use magic_pake::{
     ot::common::*,
 };
 
-fn run_ot(msg: &Message, choices: &[bool]) {
+use std::thread;
+
+
+fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
     use magic_pake::ot::chou_orlandi::{OTReceiver, OTSender};
     let (s1, r1) = ductile::new_local_channel();
     let (s2, r2) = ductile::new_local_channel();
     let ch1 = (s1, r2);
     let ch2 = (s2, r1);
-    let msg = msg.clone();
-    let choices = choices.to_vec();
 
-    use std::thread;
     let h1 = thread::Builder::new()
         .name("Sender".to_string())
         .spawn(move || {
+            let msg = Message::from_zipped(&msg);
             let sender = Sender {
                 bootstrap: Box::new(OTReceiver),
             };
@@ -55,8 +56,7 @@ fn bench(c: &mut Criterion) {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
         let choices = vec![false; n];
-        let msg = Message::new2(&enc);
-        group.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
+        group.bench_function(&name, |b| b.iter(|| run_ot(enc.clone(), choices.clone())));
     }
 
     // TODO: LAN

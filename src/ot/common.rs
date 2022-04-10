@@ -2,7 +2,6 @@ use crate::common::*;
 use serde::{Deserialize, Serialize};
 
 /// Pair of plaintexts
-pub type PlaintextPair = [Vec<u8>; 2];
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TransactionProperties {
@@ -42,22 +41,22 @@ impl std::fmt::Display for OTError {
 
 /// Set of message
 #[derive(Debug, Clone)]
-pub struct Message(pub Vec<PlaintextPair>);
+pub struct Message<'a>(pub Vec<[&'a [u8]; 2]>);
 
-impl Message {
-    pub fn new2<T: AsRef<[u8]>>(msg: &[[T; 2]]) -> Self {
+impl<'a> Message<'a> {
+    pub fn from_zipped<T: AsRef<[u8]>>(msg: &'a [[T; 2]]) -> Self {
         let mut vec = Vec::with_capacity(msg.len());
         for m in msg {
-            vec.push([m[0].as_ref().to_vec(), m[1].as_ref().to_vec()]);
+            vec.push([m[0].as_ref(), m[1].as_ref()]);
         }
         Self(vec)
     }
 
-    pub fn new<T: AsRef<[u8]>>(m0: &[T], m1: &[T]) -> Self {
+    pub fn from_unzipped<T: AsRef<[u8]>>(m0: &'a [T], m1: &'a [T]) -> Self {
         assert!(m0.len() == m1.len());
         let mut m = Vec::with_capacity(m0.len());
         for i in 0..m0.len() {
-            m.push([m0[i].as_ref().to_vec(), m1[i].as_ref().to_vec()]);
+            m.push([m0[i].as_ref(), m1[i].as_ref()]);
         }
         Self(m)
     }

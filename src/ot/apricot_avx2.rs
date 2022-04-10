@@ -161,7 +161,7 @@ impl ObliviousSender for Sender {
             let d0_idx = row_idx * msg_size * 2;
             let d1_idx = d0_idx + msg_size;
 
-            let m0 = msg.0[row_idx][0].as_slice();
+            let m0 = msg.0[row_idx][0];
             let mut chacha = ChaCha20Rng::from_seed(v0);
             let plain = unsafe { vector_slice_mut(&mut d, d0_idx, msg_size) };
             chacha.fill_bytes(plain);
@@ -171,7 +171,7 @@ impl ObliviousSender for Sender {
             xor_inplace(q_row, delta);
             let v1 = hash!(row_idx.to_be_bytes(), &q_row);
 
-            let m1 = msg.0[row_idx][1].as_slice();
+            let m1 = msg.0[row_idx][1];
             let mut chacha = ChaCha20Rng::from_seed(v1);
             let plain = unsafe { vector_slice_mut(&mut d, d1_idx, msg_size) };
             chacha.fill_bytes(plain);
@@ -239,7 +239,7 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Bootstrap", E_COMP_COLOR);
-        let msg = Message::new(&seed0, &seed1);
+        let msg = Message::from_unzipped(&seed0, &seed1);
         self.bootstrap.exchange(&msg, channel)?;
         instrument::end();
 
@@ -631,7 +631,7 @@ mod tests {
                 let sender = Sender {
                     bootstrap: Box::new(OTReceiver),
                 };
-                let msg = Message::new(&[b"Hello"; 8 << 2], &[b"World"; 8 << 2]);
+                let msg = Message::from_unzipped(&[b"Hello"; 8 << 2], &[b"World"; 8 << 2]);
                 sender.exchange(&msg, &ch1).unwrap();
             });
 
@@ -695,7 +695,7 @@ mod tests {
                     println!();
                 }
 
-                let msg = Message::new(&m0, &m1);
+                let msg = Message::from_unzipped(&m0, &m1);
                 sender.exchange(&msg, &ch1).unwrap();
             });
 

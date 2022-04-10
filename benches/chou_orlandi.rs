@@ -50,7 +50,7 @@ fn bench(c: &mut Criterion) {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
         let choices = vec![false; n];
-        let msg = Message::new2(&enc);
+        let msg = Message::from_zipped(&enc);
         group.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
     }
 

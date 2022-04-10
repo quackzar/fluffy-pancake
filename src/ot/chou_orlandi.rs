@@ -36,11 +36,18 @@ impl ObliviousSender for OTSender {
         validate_properties(&pb, ch)?;
         let (s, r) = ch;
 
-        let sender = Sender::new(msg);
+        let n = msg.0.len();
+        let mut rng = ChaCha12Rng::from_entropy();
+        let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
+        let publics = secrets
+            .par_iter()
+            .map(|secret| &ED25519_BASEPOINT_TABLE * secret)
+            .map(|public| public.compress())
+            .collect::<Vec<_>>();
+        let publics = Public(publics);
 
         // round 1
-        let pbs = sender.public();
-        let pbs = pbs.0.iter().map(|&p| p.to_bytes());
+        let pbs = publics.0.iter().map(|&p| p.to_bytes());
         for pb in pbs {
             s.send(pb.to_vec())?;
         }
@@ -54,7 +61,39 @@ impl ObliviousSender for OTSender {
         let pb = Public(pb);
 
         // round 3
-        let payload = sender.accept(&pb);
+        let their_public = &pb;
+        assert!(publics.0.len() == their_public.0.len());
+        let payload : Vec<_> = msg
+            .0
+            .par_iter()
+            .enumerate()
+            .map(|(i, [m0, m1])| -> CiphertextPair {
+                let their_public = &their_public.0[i].decompress().unwrap();
+                let public = &publics.0[i].decompress().unwrap();
+                let secret = &secrets[i];
+
+                // Compute the two shared keys.
+                let mut hasher = Sha256::new();
+                hasher.update((their_public * secret).compress().as_bytes());
+                let k0 = hasher.finalize();
+                let mut hasher = Sha256::new();
+                hasher.update(((their_public - public) * secret).compress().as_bytes());
+                let k1 = hasher.finalize();
+
+                // Encrypt the messages.
+                // TODO: Error handling
+                let mut stream = ChaCha20Rng::from_seed(k0.try_into().unwrap());
+                let size = m0.len();
+                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
+                let e0 = xor_bytes(m0, &cipher);
+
+                let mut stream = ChaCha20Rng::from_seed(k1.try_into().unwrap());
+                let size = m1.len();
+                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
+                let e1 = xor_bytes(m1, &cipher);
+                [e0, e1]
+            })
+            .collect();
 
         let msg = bincode::serialize(&payload)?;
         s.send(msg)?;
@@ -71,31 +110,65 @@ impl ObliviousReceiver for OTReceiver {
         validate_properties(&pb, ch)?;
         let (s, r) = ch;
 
-        let receiver = Receiver::new(choices);
         let n = choices.len();
+        let mut rng = ChaCha12Rng::from_entropy();
+        let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
+        let choices = choices.to_vec();
 
         // round 1
         let pb = (0..n)
             .map(|_| r.recv().unwrap())
             .map(|p| CompressedEdwardsY::from_slice(&p))
             .collect();
-        let pb = Public(pb);
+        let their_publics = Public(pb);
 
-        let receiver = receiver.accept(&pb);
+        debug_assert_eq!(choices.len(), their_publics.0.len());
+        let (publics, keys): (Vec<CompressedEdwardsY>, Vec<_>) = their_publics
+            .0
+            .par_iter()
+            .enumerate()
+            .map(|(i, p)| -> (CompressedEdwardsY, [u8; 32]) {
+                let their_public = &p.decompress().unwrap();
+                let public = if choices[i] {
+                    their_public + (&ED25519_BASEPOINT_TABLE * &secrets[i])
+                } else {
+                    &ED25519_BASEPOINT_TABLE * &secrets[i]
+                };
+                let mut hasher = Sha256::new();
+                hasher.update((their_public * secrets[i]).compress().as_bytes());
+                let key: [u8; 32] = hasher.finalize().try_into().unwrap();
+
+                (public.compress(), key)
+            })
+            .unzip();
+        let publics = Public(publics);
 
         // round 2
-        let pbs = receiver.public();
-        let pbs = pbs.0.iter().map(|&p| p.to_bytes());
+        let pbs = publics.0.iter().map(|&p| p.to_bytes());
         for pb in pbs {
             s.send(pb.to_vec())?;
         }
 
         // round 3
         let payload = r.recv()?;
-        let payload = bincode::deserialize(&payload)?;
+        let payload : EncryptedPayload = bincode::deserialize(&payload)?;
 
-        let msg = receiver.receive(&payload);
+        let msg = payload
+            .0
+            .par_iter()
+            .enumerate()
+            .map(|(i, [e0, e1])| -> Vec<u8> {
+                let e = if choices[i] { e1 } else { e0 };
+                let k = keys[i];
+                let mut stream = ChaCha20Rng::from_seed(k);
+                let size = e.len();
+                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
+                xor_bytes(e, &cipher)
+            })
+            .collect();
+
         Ok(msg)
+
     }
 }
 
@@ -168,157 +241,6 @@ pub type CiphertextPair = [Vec<u8>; 2];
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptedPayload(pub Vec<CiphertextPair>);
 
-// === Sender ====
-struct Sender {
-    secrets: Vec<Scalar>,
-    publics: Public,
-    messages: Message,
-}
-
-impl Sender {
-    pub fn new(messages: &Message) -> Self {
-        // FUTURE: Take randomness as input.
-        let n = messages.0.len();
-        let mut rng = ChaCha12Rng::from_entropy();
-        let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
-        let publics = secrets
-            .par_iter()
-            .map(|secret| &ED25519_BASEPOINT_TABLE * secret)
-            .map(|public| public.compress())
-            .collect::<Vec<_>>();
-        let publics = Public(publics);
-        Self {
-            secrets,
-            publics,
-            messages: messages.clone(),
-        }
-    }
-
-    pub fn public(&self) -> Public {
-        self.publics.clone()
-    }
-
-    pub fn accept(&self, their_public: &Public) -> EncryptedPayload {
-        let secrets = &self.secrets;
-        let publics = &self.publics;
-        assert!(publics.0.len() == their_public.0.len());
-        let messages = &self.messages;
-        let payload = messages
-            .0
-            .par_iter()
-            .enumerate()
-            .map(|(i, [m0, m1])| -> CiphertextPair {
-                let their_public = &their_public.0[i].decompress().unwrap();
-                let public = &publics.0[i].decompress().unwrap();
-                let secret = &secrets[i];
-
-                // Compute the two shared keys.
-                let mut hasher = Sha256::new();
-                hasher.update((their_public * secret).compress().as_bytes());
-                let k0 = hasher.finalize();
-                let mut hasher = Sha256::new();
-                hasher.update(((their_public - public) * secret).compress().as_bytes());
-                let k1 = hasher.finalize();
-
-                // Encrypt the messages.
-                // TODO: Error handling
-                let mut stream = ChaCha20Rng::from_seed(k0.try_into().unwrap());
-                let size = m0.len();
-                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
-                let e0 = xor_bytes(m0, &cipher);
-
-                let mut stream = ChaCha20Rng::from_seed(k1.try_into().unwrap());
-                let size = m1.len();
-                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
-                let e1 = xor_bytes(m1, &cipher);
-                [e0, e1]
-            })
-            .collect();
-        EncryptedPayload(payload)
-    }
-}
-
-// === Receiver ===
-
-pub struct Init;
-
-struct RetrievingPayload {
-    keys: Vec<[u8; 32]>,
-    publics: Public,
-}
-
-struct Receiver<S> {
-    state: S,
-    secrets: Vec<Scalar>,
-    choices: Vec<bool>,
-}
-
-impl Receiver<Init> {
-    pub fn new(choices: &[bool]) -> Self {
-        // FUTURE: Take randomness as input.
-        let n = choices.len();
-        let mut rng = ChaCha12Rng::from_entropy();
-        let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
-        let choices = choices.to_vec();
-        Self {
-            state: Init,
-            secrets,
-            choices,
-        }
-    }
-
-    pub fn accept(&self, their_publics: &Public) -> Receiver<RetrievingPayload> {
-        assert_eq!(self.choices.len(), their_publics.0.len());
-        let (publics, keys): (Vec<CompressedEdwardsY>, _) = their_publics
-            .0
-            .par_iter()
-            .enumerate()
-            .map(|(i, p)| -> (CompressedEdwardsY, [u8; 32]) {
-                let their_public = &p.decompress().unwrap();
-                let public = if self.choices[i] {
-                    their_public + (&ED25519_BASEPOINT_TABLE * &self.secrets[i])
-                } else {
-                    &ED25519_BASEPOINT_TABLE * &self.secrets[i]
-                };
-                let mut hasher = Sha256::new();
-                hasher.update((their_public * self.secrets[i]).compress().as_bytes());
-                let key: [u8; 32] = hasher.finalize().try_into().unwrap();
-
-                (public.compress(), key)
-            })
-            .unzip();
-        let publics = Public(publics);
-        Receiver {
-            state: RetrievingPayload { keys, publics },
-            secrets: self.secrets.clone(),
-            choices: self.choices.clone(),
-        }
-    }
-}
-
-impl Receiver<RetrievingPayload> {
-    pub fn public(&self) -> Public {
-        self.state.publics.clone()
-    }
-
-    pub fn receive(&self, payload: &EncryptedPayload) -> Vec<Vec<u8>> {
-        assert_eq!(self.choices.len(), payload.0.len());
-        payload
-            .0
-            .par_iter()
-            .enumerate()
-            .map(|(i, [e0, e1])| -> Vec<u8> {
-                let e = if self.choices[i] { e1 } else { e0 };
-                let k = self.state.keys[i];
-                let mut stream = ChaCha20Rng::from_seed(k);
-                let size = e.len();
-                let cipher: Vec<u8> = (0..size).map(|_| stream.gen::<u8>()).collect();
-                xor_bytes(e, &cipher)
-            })
-            .collect()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,7 +256,7 @@ mod tests {
         use std::thread;
         let h1 = thread::spawn(move || {
             let sender = OTSender;
-            let msg = Message::new(&[b"Hello"], &[b"World"]);
+            let msg = Message::from_unzipped(&[b"Hello"], &[b"World"]);
             sender.exchange(&msg, &ch1).unwrap();
         });
 
@@ -349,77 +271,6 @@ mod tests {
         h2.join().unwrap();
     }
 
-    #[test]
-    fn test_ot_protocol_zero() {
-        let m0 = b"Hello, world!".to_vec();
-        let m1 = b"Hello, sweden!".to_vec();
-
-        // round 0
-        let receiver = Receiver::new(&[false]);
-        let sender = Sender::new(&Message(vec![[m0.clone(), m1]]));
-
-        // round 1
-        let receiver = receiver.accept(&sender.public());
-
-        // round 2
-        let payload = sender.accept(&receiver.public());
-
-        let msg = receiver.receive(&payload);
-
-        assert!(msg[0] == m0);
-    }
-
-    #[test]
-    fn test_ot_protocol_one() {
-        let m0 = b"Hello, world!".to_vec();
-        let m1 = b"Hello, sweden!".to_vec();
-
-        // round 0
-        let receiver = Receiver::new(&[true]);
-        let sender = Sender::new(&Message(vec![[m0, m1.clone()]]));
-
-        // round 1
-        let receiver = receiver.accept(&sender.public());
-
-        // round 2
-        let payload = sender.accept(&receiver.public());
-
-        let msg = receiver.receive(&payload);
-
-        assert!(msg[0] == m1);
-    }
-
-    #[test]
-    fn test_n_ots() {
-        let m: [[[u8; 1]; 2]; 5] = [[[1], [6]], [[2], [7]], [[3], [8]], [[4], [9]], [[5], [10]]];
-
-        let msg = Message::new2(&m);
-
-        let c = [true, false, true, false, true];
-        let receiver = Receiver::new(&c);
-        let sender = Sender::new(&msg);
-
-        // round 1
-        let receiver = receiver.accept(&sender.public());
-
-        // round 2
-        let payload = sender.accept(&receiver.public());
-
-        let msg = receiver.receive(&payload);
-        for m in &msg {
-            println!("{:?}", m);
-        }
-        for (i, &b) in c.iter().enumerate() {
-            assert!(
-                msg[i] == m[i][b as usize],
-                "b={} has {:?} =! {:?} at i={}",
-                b,
-                msg[i],
-                m[i][b as usize],
-                i
-            );
-        }
-    }
 
     #[allow(non_snake_case)]
     #[test]

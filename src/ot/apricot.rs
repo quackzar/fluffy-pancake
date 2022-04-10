@@ -179,7 +179,7 @@ impl Receiver {
         let seed0: [[u8; 32]; K] = rng.gen();
         let seed1: [[u8; 32]; K] = rng.gen();
 
-        let msg = Message::new(&seed0, &seed1);
+        let msg = Message::from_unzipped(&seed0, &seed1);
         self.bootstrap.exchange(&msg, channel)?;
 
         // EXTENSION
@@ -365,7 +365,7 @@ mod tests {
                 let sender = Sender {
                     bootstrap: Box::new(OTReceiver),
                 };
-                let msg = Message::new(&[b"Hello"; N], &[b"World"; N]);
+                let msg = Message::from_unzipped(&[b"Hello"; N], &[b"World"; N]);
                 sender.exchange(&msg, &ch1).unwrap();
             });
 

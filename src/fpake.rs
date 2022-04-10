@@ -90,7 +90,7 @@ impl HalfKey {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
 
-        let msg = MessagePair::new2(&e_theirs);
+        let msg = MessagePair::from_zipped(&e_theirs);
         let ot = Sender {
             bootstrap: Box::new(OTReceiver),
         };
@@ -198,7 +198,7 @@ impl OneOfManyKey {
                 encoding[i][1].to_bytes().to_vec(),
             ])
         }
-        let key_message = MessagePair::new2(key.as_slice());
+        let key_message = MessagePair::from_zipped(key.as_slice());
         let key_sender = Sender {
             bootstrap: Box::new(OTReceiver),
         };
@@ -421,7 +421,7 @@ impl OneOfManyKey {
 
         // 3. Initiate the OTs for all of the passwords
         instrument::begin("OT Server passwords", E_PROT_COLOR);
-        let message = MessagePair::new2(keys.as_slice());
+        let message = MessagePair::from_zipped(keys.as_slice());
         let sender = Sender {
             bootstrap: Box::new(OTReceiver),
         };

@@ -132,7 +132,7 @@ impl ManyOTSender {
             let m1 = keys[i as usize][1].to_vec();
             messages.push([m0, m1]);
         }
-        let message = Message::new2(messages.as_slice());
+        let message = Message::from_zipped(messages.as_slice());
         instrument::end();
 
         instrument::begin("Boostrap", E_PROT_COLOR);
