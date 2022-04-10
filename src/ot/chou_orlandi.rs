@@ -9,6 +9,7 @@ use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use curve25519_dalek::scalar::Scalar;
 
+use itertools::Itertools;
 use rand::{Rng, SeedableRng};
 use rand_chacha::{ChaCha12Rng, ChaCha20Rng};
 use serde::de::Visitor;
@@ -49,13 +50,13 @@ impl ObliviousSender for OTSender {
         // round 1
         let pbs = publics.0.iter().map(|&p| p.to_bytes());
         for pb in pbs {
-            s.send(pb.to_vec())?;
+            s.send_raw(pb.as_ref())?;
         }
 
         // round 2
         let n = msg.0.len();
         let pb = (0..n)
-            .map(|_| r.recv().unwrap())
+            .map(|_| r.recv_raw().unwrap() )
             .map(|p| CompressedEdwardsY::from_slice(&p))
             .collect();
         let pb = Public(pb);
@@ -96,7 +97,7 @@ impl ObliviousSender for OTSender {
             .collect();
 
         let msg = bincode::serialize(&payload)?;
-        s.send(msg)?;
+        s.send_raw(&msg)?;
         Ok(())
     }
 }
@@ -117,7 +118,7 @@ impl ObliviousReceiver for OTReceiver {
 
         // round 1
         let pb = (0..n)
-            .map(|_| r.recv().unwrap())
+            .map(|_| r.recv_raw().unwrap())
             .map(|p| CompressedEdwardsY::from_slice(&p))
             .collect();
         let their_publics = Public(pb);
@@ -146,11 +147,11 @@ impl ObliviousReceiver for OTReceiver {
         // round 2
         let pbs = publics.0.iter().map(|&p| p.to_bytes());
         for pb in pbs {
-            s.send(pb.to_vec())?;
+            s.send_raw(pb.as_ref())?;
         }
 
         // round 3
-        let payload = r.recv()?;
+        let payload = r.recv_raw()?;
         let payload : EncryptedPayload = bincode::deserialize(&payload)?;
 
         let msg = payload

@@ -3,7 +3,7 @@ use magic_pake::fpake::OneOfManyKey;
 use std::thread;
 
 fn main() {
-    let number_of_passwords = 1 << 13;
+    let number_of_passwords = 1 << 8;
     let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
     let passwords_2 = passwords.clone();
     let index = 1;
