@@ -1,3 +1,5 @@
+#[cfg(target_os = "windows")]
+use superluminal_perf::*;
 
 
 pub const E_RECV_COLOR: u32 = 0xFF6D6DFF;
