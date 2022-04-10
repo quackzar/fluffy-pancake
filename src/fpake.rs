@@ -390,8 +390,8 @@ impl OneOfManyKey {
                 let mut key = vec![0u8; LENGTH];
                 random_bytes(&mut key);
 
-                let mut cancelling_key = cancelling_keys[j].as_mut_slice();
-                xor_bytes_inplace(&mut cancelling_key, &key);
+                let cancelling_key = cancelling_keys[j].as_mut_slice();
+                xor_bytes_inplace(cancelling_key, &key);
 
                 keys.push(key);
             }

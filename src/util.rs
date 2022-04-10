@@ -118,33 +118,33 @@ pub fn xor_bytes_inplace(left: &mut [u8], right: &[u8]) {
 // PTR helpers
 #[inline]
 pub fn index_1d(row: usize, column: usize, width: usize) -> usize {
-    return width * row + column;
+    width * row + column
 }
 #[inline]
 pub unsafe fn vector_row(vector: &Vec<u8>, row: usize, width: usize) -> &[u8] {
     let ptr = vector.as_ptr();
     let offset = (width * row) as isize;
     let into = ptr.offset(offset);
-    return std::slice::from_raw_parts(into, width);
+    std::slice::from_raw_parts(into, width)
 }
 #[inline]
 pub unsafe fn vector_row_mut(vector: &mut Vec<u8>, row: usize, width: usize) -> &mut [u8] {
     let ptr = vector.as_mut_ptr();
     let offset = (width * row) as isize;
     let into = ptr.offset(offset);
-    return std::slice::from_raw_parts_mut(into, width);
+    std::slice::from_raw_parts_mut(into, width)
 }
 #[inline]
 pub unsafe fn vector_slice(vector: &Vec<u8>, offset: usize, length: usize) -> &[u8] {
     let ptr = vector.as_ptr();
-    let into = ptr.offset(offset as isize);
-    return std::slice::from_raw_parts(into, length);
+    let into = ptr.add(offset);
+    std::slice::from_raw_parts(into, length)
 }
 #[inline]
 pub unsafe fn vector_slice_mut(vector: &mut Vec<u8>, offset: usize, length: usize) -> &mut [u8] {
     let ptr = vector.as_mut_ptr();
-    let into = ptr.offset(offset as isize);
-    return std::slice::from_raw_parts_mut(into, length);
+    let into = ptr.add(offset);
+    std::slice::from_raw_parts_mut(into, length)
 }
 
 #[cfg(test)]

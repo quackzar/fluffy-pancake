@@ -104,7 +104,7 @@ impl ObliviousSender for Sender {
         instrument::begin("Compute q", E_COMP_COLOR);
         for row_idx in 0..matrix_t_h {
             let row = unsafe { vector_row_mut(&mut q, row_idx, matrix_t_w) };
-            let d = (delta[row_idx / 8] >> row_idx % 8) & 1;
+            let d = (delta[row_idx / 8] >> (row_idx % 8)) & 1;
             if d == 1 {
                 let u_row = unsafe { vector_row(&u, row_idx, matrix_t_w) };
                 xor_inplace(row, u_row);
@@ -163,9 +163,9 @@ impl ObliviousSender for Sender {
 
             let m0 = msg.0[row_idx][0].as_slice();
             let mut chacha = ChaCha20Rng::from_seed(v0);
-            let mut plain = unsafe { vector_slice_mut(&mut d, d0_idx, msg_size) };
-            chacha.fill_bytes(&mut plain);
-            xor_inplace(&mut plain, m0);
+            let plain = unsafe { vector_slice_mut(&mut d, d0_idx, msg_size) };
+            chacha.fill_bytes(plain);
+            xor_inplace(plain, m0);
 
             let q_row = unsafe { vector_row_mut(&mut q_transposed, row_idx, matrix_w) };
             xor_inplace(q_row, delta);
@@ -173,9 +173,9 @@ impl ObliviousSender for Sender {
 
             let m1 = msg.0[row_idx][1].as_slice();
             let mut chacha = ChaCha20Rng::from_seed(v1);
-            let mut plain = unsafe { vector_slice_mut(&mut d, d1_idx, msg_size) };
-            chacha.fill_bytes(&mut plain);
-            xor_inplace(&mut plain, m1);
+            let plain = unsafe { vector_slice_mut(&mut d, d1_idx, msg_size) };
+            chacha.fill_bytes(plain);
+            xor_inplace(plain, m1);
         }
         instrument::end();
 
@@ -185,7 +185,7 @@ impl ObliviousSender for Sender {
         instrument::end();
         instrument::end();
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -285,7 +285,7 @@ impl ObliviousReceiver for Receiver {
             let t1_row = unsafe { vector_row(&t1, row_idx, matrix_t_w) };
             xor(u_row, t0_row, t1_row);
 
-            xor_inplace(u_row, &packed_choices);
+            xor_inplace(u_row, packed_choices);
         }
         instrument::end();
 
@@ -370,7 +370,7 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
         instrument::end();
 
-        return Ok(y);
+        Ok(y)
     }
 }
 
@@ -386,12 +386,12 @@ unsafe fn unpack_bits_to_vec(bytes: &[u8]) -> Vec<bool> {
         }
     }
 
-    return bits;
+    bits
 }
 
 #[inline]
 fn array_from_slice<const N: usize>(vector: &[u8]) -> &[u8; N] {
-    return unsafe { std::mem::transmute(vector.as_ptr()) };
+    unsafe { std::mem::transmute(vector.as_ptr()) }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -442,7 +442,7 @@ fn eq(left: &[u8], right: &[u8]) -> bool {
         }
     }
 
-    return true;
+    true
 }
 
 #[inline]
@@ -684,7 +684,7 @@ mod tests {
                 let mut m1 = [[0u8; 8]; CASES];
                 for i in 0..CASES {
                     m0[i] = (i as u64).to_be_bytes();
-                    m1[i] = (0xFFFFFFFF_FFFFFFFF - (i as u64)).to_be_bytes();
+                    m1[i] = (0xFFFF_FFFF_FFFF_FFFF - (i as u64)).to_be_bytes();
                 }
 
                 for i in 0..CASES {
@@ -721,7 +721,7 @@ mod tests {
                 for i in 0..CASES {
                     if choices[i] {
                         assert_eq!(
-                            (0xFFFFFFFF_FFFFFFFFu64 - i as u64).to_be_bytes().to_vec(),
+                            (0xFFFF_FFFF_FFFF_FFFF_u64 - i as u64).to_be_bytes().to_vec(),
                             msg[i]
                         );
                     } else {

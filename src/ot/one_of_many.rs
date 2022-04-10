@@ -55,7 +55,7 @@ fn fk(key: &[u8], choice: u32, length: usize) -> Vec<u8> {
     let mut result = vec![0u8; length];
     prg.fill_bytes(result.as_mut_slice());
 
-    return result;
+    result
 }
 
 pub struct ManyOTSender {
@@ -92,13 +92,13 @@ impl ManyOTSender {
         let domain_max = 1 << domain; // 2^domain
         let mut y = vec![0u8; domain_max * byte_length];
         for i in 0..domain_max {
-            let mut y_value = unsafe { vector_row_mut(&mut y, i, byte_length) };
-            xor_bytes_inplace(&mut y_value, messages[i].as_slice());
+            let y_value = unsafe { vector_row_mut(&mut y, i, byte_length) };
+            xor_bytes_inplace(y_value, messages[i].as_slice());
 
             for j in 0..domain {
                 let bit = (i >> j) & 1;
                 let hash = fk(&keys[j as usize][bit as usize], i as u32, byte_length);
-                xor_bytes_inplace(&mut y_value, &hash);
+                xor_bytes_inplace(y_value, &hash);
             }
         }
         /*
@@ -121,7 +121,7 @@ impl ManyOTSender {
 
         let (s, _r) = ch;
         instrument::begin("Send y", E_SEND_COLOR);
-        s.send_raw(&y.as_slice())?;
+        s.send_raw(y.as_slice())?;
         instrument::end();
 
         // 2. Initiate 1-out-of-2 OTs by sending challenges
@@ -195,10 +195,10 @@ impl ManyOTReceiver {
         // reconstruct x from choice and keys
         instrument::begin("Reconstruct value", E_COMP_COLOR);
         let byte_length = y.len() / (1 << domain);
-        let mut x = unsafe { vector_row_mut(&mut y, choice as usize, byte_length) };
+        let x = unsafe { vector_row_mut(&mut y, choice as usize, byte_length) };
         for i in 0..domain {
             let hash = fk(&keys[i as usize], choice, byte_length);
-            xor_bytes_inplace(&mut x, &hash);
+            xor_bytes_inplace(x, &hash);
         }
         instrument::end();
 
