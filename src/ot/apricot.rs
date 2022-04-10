@@ -34,7 +34,7 @@ impl Sender {
         Self { bootstrap }
     }
 
-    #[inline]
+    #[inline(always)]
     fn cote(&self, l: usize, channel: &Channel<Vec<u8>>) -> Result<(BitMatrix, BitVector), Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
@@ -78,7 +78,7 @@ impl Sender {
         Ok((q, delta))
     }
 
-    #[inline]
+    #[inline(always)]
     fn correlation_check(
         &self,
         l: usize,
@@ -115,7 +115,7 @@ impl Sender {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     fn de_rot(
         &self,
         q: BitMatrix,
@@ -173,7 +173,7 @@ impl Receiver {
         Self { bootstrap }
     }
 
-    #[inline]
+    #[inline(always)]
     fn cote(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<BitMatrix, Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
@@ -224,7 +224,7 @@ impl Receiver {
         Ok(t)
     }
 
-    #[inline]
+    #[inline(always)]
     fn correlation_check(
         &self,
         t: &BitMatrix,
@@ -262,7 +262,7 @@ impl Receiver {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     fn de_rot(
         &self,
         choices: &[bool],

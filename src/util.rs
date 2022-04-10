@@ -12,7 +12,7 @@ pub fn rng(max: u16) -> u16 {
 }
 
 #[inline]
-pub fn random_bytes(bytes: &mut Vec<u8>) {
+pub fn random_bytes(bytes: &mut [u8]) {
     rand::thread_rng().fill_bytes(bytes)
 }
 
