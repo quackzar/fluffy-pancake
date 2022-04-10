@@ -1,16 +1,24 @@
 // https://eprint.iacr.org/2015/546.pdf
 
+use crate::ot::coinflip::coinflip_receiver;
+use crate::ot::coinflip::coinflip_sender;
 use crate::util::*;
 
+use crate::common::*;
 use crate::ot::bitmatrix::*;
 use crate::ot::common::*;
-use bitvec::prelude::*;
+use crate::ot::polynomial::*;
 use itertools::izip;
+use rand::Rng;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
+use rand_chacha::ChaCha8Rng;
+use rayon::prelude::*;
 
 /// The computational security paramter (k)
-const COMP_SEC: usize = 256;
+const COMP_SEC: usize = 128;
 /// The statistical security paramter (s)
-const STAT_SEC: usize = 128;
+const STAT_SEC: usize = 64;
 
 pub struct Sender {
     pub bootstrap: Box<dyn ObliviousReceiver>,
@@ -20,9 +28,273 @@ pub struct Receiver {
     pub bootstrap: Box<dyn ObliviousSender>,
 }
 
+impl Sender {
+    #[inline]
+    pub fn new(bootstrap: Box<dyn ObliviousReceiver>) -> Self {
+        Self { bootstrap }
+    }
+
+    #[inline(always)]
+    fn cote(&self, l: usize, channel: &Channel<Vec<u8>>) -> Result<(BitMatrix, BitVector), Error> {
+        const K: usize = COMP_SEC; // kappa
+        const S: usize = STAT_SEC;
+
+        // sample k pairs of k-bit seeds.
+        let mut rng = ChaCha20Rng::from_entropy();
+
+        // INITIALIZATION
+        let delta: [Block; K / BLOCK_SIZE] = rng.gen();
+        let delta = BitVector::from_vec(delta.to_vec());
+
+        // do OT.
+        let payload = self
+            .bootstrap
+            .exchange(&u8_vec_to_bool_vec(delta.as_bytes()), channel)?;
+        let mut seed = [[0u8; 32]; K];
+        for (i, p) in payload.iter().enumerate() {
+            seed[i].copy_from_slice(p);
+        }
+
+        // EXTENSION
+        let t: BitMatrix = seed
+            .par_iter()
+            .map(|&s| {
+                let mut prg = ChaCha20Rng::from_seed(s);
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                BitVector::from_vec(v)
+            })
+            .collect();
+
+        let (_, r) = channel;
+        let u: BitMatrix = bincode::deserialize(&r.recv_raw()?)?;
+
+        let q: BitMatrix = u8_vec_to_bool_vec(delta.as_bytes())
+            .into_par_iter()
+            .enumerate()
+            .map(|(i, d)| if d { &u[i] ^ &t[i] } else { t[i].clone() })
+            .collect();
+
+        let q = q.transpose();
+        Ok((q, delta))
+    }
+
+    #[inline(always)]
+    fn correlation_check(
+        &self,
+        l: usize,
+        q: &BitMatrix,
+        delta: &BitVector,
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<(), Error> {
+        const K: usize = COMP_SEC; // kappa
+        const S: usize = STAT_SEC;
+        let (_, r) = channel;
+        let seed = coinflip_receiver::<32>(channel)?;
+        let mut prg = ChaCha20Rng::from_seed(seed);
+        let chi: BitMatrix = (0..l)
+            .map(|_| {
+                let v: [Block; K / BLOCK_SIZE] = prg.gen();
+                BitVector::from_vec(v.to_vec())
+            })
+            .collect();
+        let mut q_sum = Polynomial::new();
+        for (q, chi) in izip!(q, &chi) {
+            let q = <&Polynomial>::from(q);
+            let chi = <&Polynomial>::from(chi);
+
+            q_sum.mul_add_assign(q, chi);
+        }
+        let x_sum: Polynomial = bincode::deserialize(&r.recv_raw()?)?;
+        let t_sum: Polynomial = bincode::deserialize(&r.recv_raw()?)?;
+        let delta_ = <&Polynomial>::from(delta);
+        q_sum.mul_add_assign(&x_sum, delta_);
+
+        if t_sum != q_sum {
+            return Err(Box::new(OTError::PolychromaticInput()));
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn de_rot(
+        &self,
+        q: BitMatrix,
+        delta: &BitVector,
+        msg: &Message,
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<(), Error> {
+        // -- Randomize --
+        let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
+            .par_iter()
+            .enumerate()
+            .map(|(j, q)| {
+                let v0 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
+                let q = q ^ delta;
+                let v1 = hash!(j.to_le_bytes(), q.as_bytes()).to_vec();
+                (v0, v1)
+            })
+            .unzip();
+
+        // -- DeROT --
+        // TODO: parallelize
+        let (d0, d1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1)
+            .map(|([m0, m1], v0, v1)| {
+                // encrypt the messages.
+                let size = m0.len();
+                let mut rng = ChaCha8Rng::from_seed(v0.try_into().unwrap());
+                let cipher: Vec<u8> = (0..size).map(|_| rng.gen::<u8>()).collect();
+                let c0 = xor_bytes(m0, &cipher);
+
+                let size = m1.len();
+                let mut rng = ChaCha8Rng::from_seed(v1.try_into().unwrap());
+                let cipher: Vec<u8> = (0..size).map(|_| rng.gen::<u8>()).collect();
+                let c1 = xor_bytes(m1, &cipher);
+
+                (c0, c1)
+            })
+            .unzip();
+
+        let (s, _) = channel;
+        let d0 = bincode::serialize(&d0)?;
+        let d1 = bincode::serialize(&d1)?;
+        s.send_raw(&d0)?;
+        s.send_raw(&d1)?;
+
+        Ok(())
+    }
+}
+
+impl Receiver {
+    #[inline]
+    pub fn new(bootstrap: Box<dyn ObliviousSender>) -> Self {
+        Self { bootstrap }
+    }
+
+    #[inline(always)]
+    fn cote(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<BitMatrix, Error> {
+        const K: usize = COMP_SEC; // kappa
+        const S: usize = STAT_SEC;
+        let l = choices.len();
+        let mut rng = ChaCha20Rng::from_entropy();
+        let seed0: [[u8; 32]; K] = rng.gen();
+        let seed1: [[u8; 32]; K] = rng.gen();
+
+        let msg = Message::from_unzipped(&seed0, &seed1);
+        self.bootstrap.exchange(&msg, channel)?;
+
+        // EXTENSION
+
+        let x = BitMatrix::monochrome(choices, K);
+
+        let t0: BitMatrix = seed0
+            .par_iter()
+            .map(|&s| {
+                let mut prg = ChaCha20Rng::from_seed(s);
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                BitVector::from_vec(v)
+            })
+            .collect();
+
+        let t1: BitMatrix = seed1
+            .par_iter()
+            .map(|&s| {
+                let mut prg = ChaCha20Rng::from_seed(s);
+                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
+                BitVector::from_vec(v)
+            })
+            .collect();
+
+        let u: BitMatrix = izip!(x, &t0, &t1)
+            .map(|(x, t0, t1)| {
+                let mut u = x;
+                u ^= t0;
+                u ^= t1;
+                u
+            })
+            .collect();
+
+        let (s, _) = channel;
+        let u = bincode::serialize(&u)?;
+        s.send_raw(&u)?;
+
+        let t = t0.transpose();
+        Ok(t)
+    }
+
+    #[inline(always)]
+    fn correlation_check(
+        &self,
+        t: &BitMatrix,
+        choices: &[bool],
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<(), Error> {
+        const K: usize = COMP_SEC; // kappa
+        let (s, _) = channel;
+        let l = choices.len();
+        let seed = coinflip_sender::<32>(channel)?;
+        let mut prg = ChaCha20Rng::from_seed(seed);
+        let chi: BitMatrix = (0..l)
+            .map(|_| {
+                let v: [Block; K / BLOCK_SIZE] = prg.gen();
+                BitVector::from_vec(v.to_vec())
+            })
+            .collect();
+
+        let mut x_sum = Polynomial::new();
+        let mut t_sum = Polynomial::new();
+        // PERF: Parallelize.
+        for (x, t, chi) in izip!(choices, t, &chi) {
+            let t = <&Polynomial>::from(t);
+            let chi = <&Polynomial>::from(chi);
+            if *x {
+                x_sum += chi
+            }
+
+            // PERF: Reduce last.
+            t_sum.mul_add_assign(t, chi);
+        }
+
+        s.send_raw(&bincode::serialize(&x_sum)?)?;
+        s.send_raw(&bincode::serialize(&t_sum)?)?;
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn de_rot(
+        &self,
+        choices: &[bool],
+        t: BitMatrix,
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<Payload, Error> {
+        let v: Vec<Vec<u8>> = t
+            .into_par_iter()
+            .enumerate()
+            .map(|(j, t)| hash!(j.to_le_bytes(), t.as_bytes()).to_vec())
+            .collect();
+
+        // -- DeROT --
+        let (_, r) = channel;
+        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
+        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
+
+        // PERF: parallelize
+        let y = izip!(v, choices, d0, d1)
+            .map(|(v, c, d0, d1)| {
+                let d = if *c { d1 } else { d0 };
+                let size = d.len();
+                let mut rng = ChaCha8Rng::from_seed(v.try_into().unwrap());
+                let cipher: Vec<u8> = (0..size).map(|_| rng.gen::<u8>()).collect();
+                xor_bytes(&d, &cipher)
+            })
+            .collect();
+        Ok(y)
+    }
+}
 
 impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+        const K: usize = COMP_SEC; // kappa
+        const S: usize = STAT_SEC;
         assert!(
             msg.len() >= BLOCK_SIZE,
             "Message length must be larger than {BLOCK_SIZE}"
@@ -31,105 +303,26 @@ impl ObliviousSender for Sender {
             msg.len() % BLOCK_SIZE == 0,
             "Message length must be a multiple of {BLOCK_SIZE}"
         );
-        let pb = TransactionProperties{msg_size: msg.len()};
+        let pb = TransactionProperties {
+            msg_size: msg.len(),
+            protocol: "Apricot".to_string(),
+        };
         validate_properties(&pb, channel)?;
 
-        let l = msg.len(); // 8 bits stored in a byte.
-
-        // The parameter kappa.
-        const K: usize = COMP_SEC;
-
-        // COTe
-        use rand::Rng;
-        use rand::SeedableRng;
-
-        // receiver:
-        // sample k pairs of k-bit seeds.
-        use rand_chacha::ChaCha20Rng;
-        let mut rng = ChaCha20Rng::from_entropy();
-
-        // INITIALIZATION
-        let delta: [u8; K / 8] = rng.gen();
-
-        // do OT.
-        let payload = self
-            .bootstrap
-            .exchange(&u8_vec_to_bool_vec(&delta), channel)?;
-        let mut seed = [[0u8; K / 8]; K];
-        for (i, p) in payload.iter().enumerate() {
-            seed[i].copy_from_slice(p);
-        }
-
-        let delta = BitVec::from_vec(delta.to_vec());
-        // EXTENSION
-        let t: BitMatrix = seed
-            .iter()
-            .map(|&s| {
-                let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
-                BitVec::from_vec(v)
-            })
-            .collect();
-
-        let (_, r) = channel;
-        let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
-
-        let mut q = Vec::with_capacity(K);
-        for i in 0..K {
-            if delta[i] {
-                q.push(u[i].clone() ^ t[i].clone());
-            } else {
-                q.push(t[i].clone());
-            }
-        }
-        let q = BitMatrix::new(q);
-
-        // Sender outputs `q_j`
-        let q = q.transpose();
-
-        // -- Check correlation --
-        // TODO: this
-
-        // -- Randomize --
-        let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q
-            .into_iter()
-            .enumerate()
-            .map(|(j, q)| {
-                let v0 = hash!(j.to_be_bytes(), q.as_raw_slice()).to_vec();
-                let q = q ^ &delta;
-                let v1 = hash!(j.to_be_bytes(), q.as_raw_slice()).to_vec();
-                (v0, v1)
-            })
-            .unzip();
-
-        // -- DeROT --
-        use aes_gcm::aead::{Aead, NewAead};
-        use aes_gcm::{Aes256Gcm, Key, Nonce};
-        let (d0, d1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = izip!(&msg.0, v0, v1)
-            .map(|([m0, m1], v0, v1)| {
-                // encrypt the messages.
-                let nonce = Nonce::from_slice(b"unique nonce");
-                let cipher = Aes256Gcm::new(Key::from_slice(&v0));
-                let c0 = cipher.encrypt(nonce, m0.as_slice()).unwrap();
-                let cipher = Aes256Gcm::new(Key::from_slice(&v1));
-                let c1 = cipher.encrypt(nonce, m1.as_slice()).unwrap();
-                (c0, c1) // TODO: Proper error handling.
-            })
-            .unzip();
-
-        let (s, _) = channel;
-        let d0 = bincode::serialize(&d0)?;
-        let d1 = bincode::serialize(&d1)?;
-        s.send(d0)?;
-        s.send(d1)?;
-
-        Ok(())
+        let l = msg.len();
+        let l = l + K + S; // refit with security padding
+        let (q, delta) = self.cote(l, channel)?;
+        self.correlation_check(l, &q, &delta, channel)?;
+        self.de_rot(q, &delta, msg, channel)
     }
 }
 
 impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
-        let pb = TransactionProperties{msg_size: choices.len()};
+        let pb = TransactionProperties {
+            msg_size: choices.len(),
+            protocol: "Apricot".to_string(),
+        };
         validate_properties(&pb, channel)?;
         assert!(
             choices.len() >= BLOCK_SIZE,
@@ -140,107 +333,14 @@ impl ObliviousReceiver for Receiver {
             "Message length must be a multiple of {BLOCK_SIZE}"
         );
         const K: usize = COMP_SEC;
-        let l = choices.len();
-        // TODO: Extend l to l' = l + K + s, padded with random choices.
-
-        // COTe
-
-        // receiver:
-        // sample k pairs of k-bit seeds.
-        use rand::Rng;
-        use rand::SeedableRng;
-        use rand_chacha::ChaCha20Rng;
+        const S: usize = STAT_SEC;
         let mut rng = ChaCha20Rng::from_entropy();
+        let bonus: [bool; K + S] = rng.gen();
+        let padded_choices = [choices, &bonus].concat();
 
-        // INITIALIZATION
-        let seed0: [u8; K * K / 8] = rng.gen();
-        let seed1: [u8; K * K / 8] = rng.gen();
-        // do OT.
-        let seed0: [[u8; K / 8]; K] = unsafe { std::mem::transmute(seed0) };
-        let seed1: [[u8; K / 8]; K] = unsafe { std::mem::transmute(seed1) };
-
-        let msg = Message::new(&seed0, &seed1);
-        self.bootstrap.exchange(&msg, channel)?;
-
-        // EXTENSION
-
-        let x: BitMatrix = choices
-            .iter()
-            .map(|b| {
-                if !*b {
-                    vec![0x00u8; K / 8]
-                } else {
-                    vec![0xFFu8; K / 8]
-                }
-            })
-            .map(BitVec::from_vec)
-            .collect();
-        let x = x.transpose();
-
-        let t0: BitMatrix = seed0
-            .iter()
-            .map(|&s| {
-                let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
-                BitVec::from_vec(v)
-            })
-            .collect();
-
-        let t1: BitMatrix = seed1
-            .iter()
-            .map(|&s| {
-                let mut prg = ChaCha20Rng::from_seed(s);
-                let v = (0..l / BLOCK_SIZE).map(|_| prg.gen::<Block>()).collect();
-                BitVec::from_vec(v)
-            })
-            .collect();
-
-        let t = t0.transpose(); // saving this for later
-
-        let u: BitMatrix = izip!(x.into_iter(), t0.into_iter(), t1.into_iter())
-            .map(|(x, t0, t1)| {
-                let mut u = x;
-                u ^= &t0;
-                u ^= &t1;
-                u
-            })
-            .collect();
-
-        let (s, _) = channel;
-        let u = bincode::serialize(&u)?;
-        s.send(u)?;
-
-        // Receiver outputs `t_j`
-
-        // -- Check correlation --
-        // TODO: this
-        // let chi : Vec<_> = (0..128).map(|_| rng.gen::<[u8; COMP_SEC/8]>()).collect();
-
-        // let xsum = izip!(x, chi).map(|(x,chi)| x * chi).sum();
-
-        // -- Randomize --
-        let v: Vec<Vec<u8>> = t
-            .into_iter()
-            .enumerate()
-            .map(|(j, t)| hash!(j.to_be_bytes(), t.as_raw_slice()).to_vec())
-            .collect();
-
-        // -- DeROT --
-        use aes_gcm::aead::{Aead, NewAead};
-        use aes_gcm::{Aes256Gcm, Key, Nonce};
-        let (_, r) = channel;
-        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
-        let y = izip!(v, choices, d0, d1)
-            .map(|(v, c, d0, d1)| {
-                let nonce = Nonce::from_slice(b"unique nonce");
-                let cipher = Aes256Gcm::new(Key::from_slice(&v));
-                let d = if *c { d1 } else { d0 };
-                let c = cipher.decrypt(nonce, d.as_slice()).unwrap();
-                c // TODO: Proper error handling.
-            })
-            .collect();
-        Ok(y)
+        let t = self.cote(&padded_choices, channel)?;
+        self.correlation_check(&t, &padded_choices, channel)?;
+        self.de_rot(choices, t, channel)
     }
 }
 
@@ -253,8 +353,10 @@ mod tests {
         use crate::ot::chou_orlandi::{OTReceiver, OTSender};
         let (s1, r1) = ductile::new_local_channel();
         let (s2, r2) = ductile::new_local_channel();
+        const N: usize = 8 << 8;
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
+        println!("N = {}", N);
 
         use std::thread;
         let h1 = thread::Builder::new()
@@ -263,7 +365,7 @@ mod tests {
                 let sender = Sender {
                     bootstrap: Box::new(OTReceiver),
                 };
-                let msg = Message::new(&[b"Hello"; 8 << 8], &[b"World"; 8 << 8]);
+                let msg = Message::from_unzipped(&[b"Hello"; N], &[b"World"; N]);
                 sender.exchange(&msg, &ch1).unwrap();
             });
 
@@ -273,7 +375,7 @@ mod tests {
                 let receiver = Receiver {
                     bootstrap: Box::new(OTSender),
                 };
-                let choices = [true; 8 << 8];
+                let choices = [true; N];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
                 assert_eq!(msg[0], b"World");
             });

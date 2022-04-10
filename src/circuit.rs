@@ -35,7 +35,7 @@ pub enum GateKind {
 }
 
 impl Gate {
-    pub fn output_domain(&self) -> u16 {
+    pub const fn output_domain(&self) -> u16 {
         match self.kind {
             GateKind::Add | GateKind::Mul(_) => self.domain,
             GateKind::Proj(proj) => match proj {
@@ -55,7 +55,7 @@ pub enum ProjKind {
 
 impl ProjKind {
     #[inline]
-    pub fn project(&self, x: u16) -> u16 {
+    pub const fn project(&self, x: u16) -> u16 {
         use ProjKind::*;
         match *self {
             Map(m) => x % m,
@@ -64,7 +64,7 @@ impl ProjKind {
     }
 
     #[inline]
-    pub fn domain(&self) -> u16 {
+    pub const fn domain(&self) -> u16 {
         use ProjKind::*;
         match *self {
             Map(m) => m,
@@ -81,8 +81,8 @@ pub struct CircuitBuilder {
 }
 
 impl CircuitBuilder {
-    pub fn new(num_inputs: usize) -> CircuitBuilder {
-        CircuitBuilder {
+    pub fn new(num_inputs: usize) -> Self {
+        Self {
             gates: Vec::new(),
             next_wire: 0,
             num_inputs,
@@ -93,7 +93,7 @@ impl CircuitBuilder {
     /// Offset circuit wires by `amount`.
     ///
     /// * `amount`: The amount to offset the circuit by.
-    pub fn offset(mut self, amount: usize) -> CircuitBuilder {
+    pub fn offset(mut self, amount: usize) -> Self {
         self.gates.iter_mut().for_each(|g| {
             g.output += amount;
             g.inputs.iter_mut().for_each(|i| {
@@ -108,7 +108,7 @@ impl CircuitBuilder {
     /// Add a new gate to the circuit.
     ///
     /// * `gate`: The gate to add.
-    pub fn add_gate(mut self, gate: Gate) -> CircuitBuilder {
+    pub fn add_gate(mut self, gate: Gate) -> Self {
         self.next_wire = gate.output;
         self.unread_wires.insert(gate.output);
         gate.inputs.iter().for_each(|i| {

@@ -22,7 +22,7 @@ pub enum Domain {
 }
 
 impl Domain {
-    fn num(self) -> u16 {
+    const fn num(self) -> u16 {
         match self {
             Domain::Binary => 2,
             Domain::U8(m) => m as u16,
@@ -32,19 +32,19 @@ impl Domain {
         }
     }
 
-    fn new(m: u16) -> Domain {
+    fn new(m: u16) -> Self {
         const U8_MAX: u16 = u8::max_value() as u16;
         const U16_MAX: u16 = u16::max_value();
         if m == 0 {
-            Domain::U16MAX
+            Self::U16MAX
         } else if m == 2 {
-            Domain::Binary
+            Self::Binary
         } else if m < U8_MAX {
-            Domain::U8(m as u8)
+            Self::U8(m as u8)
         } else if m == U8_MAX + 1 {
-            Domain::U8MAX
+            Self::U8MAX
         } else if m < U16_MAX {
-            Domain::U16(m)
+            Self::U16(m)
         } else {
             panic!("Bad Domain: {}", m);
         }
@@ -80,8 +80,8 @@ impl ops::Neg for &Wire {
     fn neg(self) -> Wire {
         match self.domain {
             Domain::Binary => self.map(|x: u8| 0xFF ^ x),
-            Domain::U8(m) => self.map(|x: u8| m - x),
-            Domain::U16(m) => self.map_as_u16(|x: u16| m - x),
+            Domain::U8(m) => self.map(|x: u8| (m - x) % m),
+            Domain::U16(m) => self.map_as_u16(|x: u16| (m - x) % m),
             _ => panic!("Neg not defined for this domain {}", self.domain()),
         }
     }
@@ -106,19 +106,19 @@ impl ops::Mul<u16> for &Wire {
 impl iter::Sum for Wire {
     fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Self {
         let init = iter.next().unwrap();
-        iter.fold(init, |acc: Wire, w: Wire| &acc + &w)
+        iter.fold(init, |acc: Self, w: Self| &acc + &w)
     }
 }
 
 impl Wire {
-    pub(crate) fn empty() -> Wire {
-        Wire {
+    pub(crate) const fn empty() -> Self {
+        Self {
             domain: Domain::Binary,
             values: [0; LENGTH],
         }
     }
 
-    fn map<F>(&self, op: F) -> Wire
+    fn map<F>(&self, op: F) -> Self
     where
         F: Fn(u8) -> u8,
     {
@@ -128,10 +128,10 @@ impl Wire {
         for i in 0..values.len() {
             values[i] = op(input[i]);
         }
-        Wire { domain, values }
+        Self { domain, values }
     }
 
-    fn map_as_u16<F>(&self, op: F) -> Wire
+    fn map_as_u16<F>(&self, op: F) -> Self
     where
         F: Fn(u16) -> u16,
     {
@@ -148,23 +148,23 @@ impl Wire {
             output
         );
         let values = bytemuck::cast(output);
-        Wire { domain, values }
+        Self { domain, values }
     }
 
-    fn map_with<F>(&self, other: &Wire, op: F) -> Wire
+    fn map_with<F>(&self, other: &Self, op: F) -> Self
     where
         F: Fn(u8, u8) -> u8,
     {
         debug_assert_eq!(self.domain, other.domain, "Domain not matching");
         let mut values = [0u8; LENGTH];
-        for i in 0..values.len() {
-            values[i] = op(self.values[i], other.values[i]);
+        for (i, v) in values.iter_mut().enumerate() {
+            *v = op(self.values[i], other.values[i]);
         }
         let domain = self.domain;
-        Wire { domain, values }
+        Self { domain, values }
     }
 
-    fn map_with_as_u16<F>(&self, other: &Wire, op: F) -> Wire
+    fn map_with_as_u16<F>(&self, other: &Self, op: F) -> Self
     where
         F: Fn(u16, u16) -> u16,
     {
@@ -184,10 +184,10 @@ impl Wire {
         );
         let values = bytemuck::cast(output);
         let domain = self.domain;
-        Wire { domain, values }
+        Self { domain, values }
     }
 
-    pub fn new(domain: u16) -> Wire {
+    pub fn new(domain: u16) -> Self {
         let domain = Domain::new(domain);
         let mut values = [0u8; LENGTH];
         match domain {
@@ -195,23 +195,23 @@ impl Wire {
                 values = rand::random();
             }
             Domain::U8(m) => {
-                for i in 0..values.len() {
-                    values[i] = rand::thread_rng().gen_range(0..m);
+                for v in values.iter_mut() {
+                    *v = rand::thread_rng().gen_range(0..m);
                 }
             }
             Domain::U16(m) => {
-                let mut v: [u16; LENGTH / 2] = bytemuck::cast(values);
-                for i in 0..v.len() {
-                    v[i] = rand::thread_rng().gen_range(0..m);
+                let mut val: [u16; LENGTH / 2] = bytemuck::cast(values);
+                for v in val.iter_mut() {
+                    *v = rand::thread_rng().gen_range(0..m);
                 }
-                values = bytemuck::cast(v);
+                values = bytemuck::cast(val);
             }
         }
-        Wire { values, domain }
+        Self { values, domain }
     }
 
-    pub fn delta(domain: u16) -> Wire {
-        let mut wire = Wire::new(domain);
+    pub fn delta(domain: u16) -> Self {
+        let mut wire = Self::new(domain);
         match wire.domain {
             Domain::Binary => {
                 // endianness?
@@ -242,12 +242,12 @@ impl Wire {
     }
 
     #[inline]
-    pub fn domain(&self) -> u16 {
+    pub const fn domain(&self) -> u16 {
         self.domain.num()
     }
 
-    pub fn from_bytes(values: WireBytes, domain: Domain) -> Wire {
-        let wire = Wire { domain, values };
+    pub fn from_array(values: WireBytes, domain: Domain) -> Self {
+        let wire = Self { domain, values };
         match domain {
             Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,
             Domain::U8(m) => wire.map(|x| x % m),
@@ -255,7 +255,19 @@ impl Wire {
         }
     }
 
-    pub fn to_bytes(&self) -> WireBytes {
+    pub fn from_bytes(values: &[u8], domain: Domain) -> Self {
+        let wire = Self {
+            domain,
+            values: values.try_into().unwrap(),
+        };
+        match domain {
+            Domain::Binary | Domain::U8MAX | Domain::U16MAX => wire,
+            Domain::U8(m) => wire.map(|x| x % m),
+            Domain::U16(m) => wire.map_as_u16(|x| x % m),
+        }
+    }
+
+    pub const fn to_bytes(&self) -> WireBytes {
         self.values
     }
 }
@@ -276,7 +288,7 @@ pub fn hash_wire(index: usize, wire: &Wire, target: &Wire) -> Wire {
     // Makes values for the wire of target size from the output of the hash function, recall that
     // the hash function outputs 256 bits, which means that the number of values * the number of
     // bits in a value must be less than or equal to 256.
-    Wire::from_bytes(bytes, target.domain)
+    Wire::from_array(bytes, target.domain)
 }
 
 pub fn hash(index: usize, x: u16, wire: &Wire) -> WireBytes {

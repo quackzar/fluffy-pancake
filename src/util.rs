@@ -7,12 +7,12 @@ pub const LENGTH: usize = SECURITY_PARAM / 8; // bytes used
 pub type WireBytes = [u8; LENGTH];
 
 #[inline]
-pub fn rng(max: u16) -> u16 {
+pub fn random_number(max: u16) -> u16 {
     rand::thread_rng().gen_range(0..max)
 }
 
 #[inline]
-pub fn random_bytes(bytes: &mut Vec<u8>) {
+pub fn random_bytes(bytes: &mut [u8]) {
     rand::thread_rng().fill_bytes(bytes)
 }
 
@@ -85,7 +85,7 @@ macro_rules! hash {
         $hasher.update($e);
     }};
 }
-pub(crate) use hash;
+pub use hash;
 
 pub fn xor(a: WireBytes, b: WireBytes) -> WireBytes {
     let mut result = [0u8; LENGTH];
@@ -104,6 +104,47 @@ pub fn xor_bytes(left: &[u8], right: &[u8]) -> Vec<u8> {
     }
 
     result
+}
+
+pub fn xor_bytes_inplace(left: &mut [u8], right: &[u8]) {
+    debug_assert_eq!(left.len(), right.len());
+
+    for i in 0..left.len() {
+        left[i] ^= right[i];
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// PTR helpers
+#[inline]
+pub const fn index_1d(row: usize, column: usize, width: usize) -> usize {
+    width * row + column
+}
+#[inline]
+pub unsafe fn vector_row(vector: &[u8], row: usize, width: usize) -> &[u8] {
+    let ptr = vector.as_ptr();
+    let offset = (width * row) as isize;
+    let into = ptr.offset(offset);
+    std::slice::from_raw_parts(into, width)
+}
+#[inline]
+pub unsafe fn vector_row_mut(vector: &mut [u8], row: usize, width: usize) -> &mut [u8] {
+    let ptr = vector.as_mut_ptr();
+    let offset = (width * row) as isize;
+    let into = ptr.offset(offset);
+    std::slice::from_raw_parts_mut(into, width)
+}
+#[inline]
+pub unsafe fn vector_slice(vector: &[u8], offset: usize, length: usize) -> &[u8] {
+    let ptr = vector.as_ptr();
+    let into = ptr.add(offset);
+    std::slice::from_raw_parts(into, length)
+}
+#[inline]
+pub unsafe fn vector_slice_mut(vector: &mut [u8], offset: usize, length: usize) -> &mut [u8] {
+    let ptr = vector.as_mut_ptr();
+    let into = ptr.add(offset);
+    std::slice::from_raw_parts_mut(into, length)
 }
 
 #[cfg(test)]

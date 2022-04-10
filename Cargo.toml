@@ -9,7 +9,6 @@ categories = ["cryptography"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-
 [dependencies]
 aes-gcm = "0.9.4"
 sha2 = "0.10.1"
@@ -18,17 +17,21 @@ rand = {version = "0.8.4", features = ["min_const_gen"]}
 rand_chacha = "0.3.1"
 curve25519-dalek = {version = "4.0.0-pre.1", features = ["std"]}
 bytemuck = "1.7.3"
-num-traits = "0.2.14"
 bincode = "1.0"
 serde = {version = "1.0.136",  features = ["derive"]}
-crossbeam-channel = "0.5"
 rayon = "1.5.1"
 ductile = "0.2.0"
-bitvec = {version = "1.0.0", features = ["alloc", "serde"]}
+num-traits = "0.2"
+num-integer = "0.1.44"
+superluminal-perf = "0.1.1"
+firestorm = { version="0.5", features=["enable_system_time"] }
+
 
 [features]
 simd = ["curve25519-dalek/simd_backend", "rand/simd_support"]
 
+[profile.release]
+debug = 2
 
 [dev-dependencies]
 criterion = "0.3"
@@ -39,6 +42,9 @@ harness = false
 
 [[bench]]
 name = "apricot"
+harness = false
+[[bench]]
+name = "apricot_avx2"
 harness = false
 
 [[bench]]
@@ -51,4 +57,8 @@ harness = false
 
 [[bench]]
 name = "fpake"
+harness = false
+
+[[bench]]
+name = "polynomial"
 harness = false

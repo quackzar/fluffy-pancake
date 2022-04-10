@@ -1,23 +1,23 @@
-use ductile::{ChannelReceiver, ChannelSender};
-use serde::{Serialize, Deserialize};
-pub type Channel<S> = (ChannelSender<S>, ChannelReceiver<S>);
-
-pub type Error = Box<dyn std::error::Error>;
+use crate::common::*;
+use serde::{Deserialize, Serialize};
 
 /// Pair of plaintexts
-pub type PlaintextPair = [Vec<u8>; 2];
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TransactionProperties {
-    pub msg_size : usize,
+    pub msg_size: usize,
+    pub protocol: String,
 }
 
-pub(crate) fn validate_properties(pb : &TransactionProperties, (s,r) : &Channel<Vec<u8>>) -> Result<(), Error> {
+pub(crate) fn validate_properties(
+    pb: &TransactionProperties,
+    (s, r): &Channel<Vec<u8>>,
+) -> Result<(), Error> {
     s.send(bincode::serialize(pb)?)?;
     let pb2 = r.recv()?;
     let pb2 = bincode::deserialize(&pb2)?;
     if pb2 != *pb {
-        Err(Box::new(OTError::BadProperties(*pb, pb2)))
+        Err(Box::new(OTError::BadProperties(pb.clone(), pb2)))
     } else {
         Ok(())
     }
@@ -26,6 +26,7 @@ pub(crate) fn validate_properties(pb : &TransactionProperties, (s,r) : &Channel<
 #[derive(Debug)]
 pub enum OTError {
     BadProperties(TransactionProperties, TransactionProperties),
+    PolychromaticInput(),
 }
 
 impl std::error::Error for OTError {}
@@ -33,31 +34,31 @@ impl std::fmt::Display for OTError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OTError::BadProperties(pb1, pb2) => write!(f, "Bad properties: {:?} != {:?}", pb1, pb2),
+            OTError::PolychromaticInput() => write!(f, "Polychromatic input, cheating receiver."),
         }
     }
 }
 
-
 /// Set of message
 #[derive(Debug, Clone)]
-pub struct Message(pub Vec<PlaintextPair>);
+pub struct Message<'a>(pub Vec<[&'a [u8]; 2]>);
 
-impl Message {
-    pub fn new2<T: AsRef<[u8]>>(msg: &[[T; 2]]) -> Self {
+impl<'a> Message<'a> {
+    pub fn from_zipped<T: AsRef<[u8]>>(msg: &'a [[T; 2]]) -> Self {
         let mut vec = Vec::with_capacity(msg.len());
         for m in msg {
-            vec.push([m[0].as_ref().to_vec(), m[1].as_ref().to_vec()]);
+            vec.push([m[0].as_ref(), m[1].as_ref()]);
         }
-        Message(vec)
+        Self(vec)
     }
 
-    pub fn new<T: AsRef<[u8]>>(m0: &[T], m1: &[T]) -> Self {
+    pub fn from_unzipped<T: AsRef<[u8]>>(m0: &'a [T], m1: &'a [T]) -> Self {
         assert!(m0.len() == m1.len());
         let mut m = Vec::with_capacity(m0.len());
         for i in 0..m0.len() {
-            m.push([m0[i].as_ref().to_vec(), m1[i].as_ref().to_vec()]);
+            m.push([m0[i].as_ref(), m1[i].as_ref()]);
         }
-        Message(m)
+        Self(m)
     }
 
     pub fn len(&self) -> usize {
