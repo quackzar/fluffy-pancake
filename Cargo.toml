@@ -24,8 +24,6 @@ ductile = "0.2.0"
 num-traits = "0.2"
 num-integer = "0.1.44"
 superluminal-perf = "0.1.1"
-firestorm = { version="0.5", features=["enable_system_time"] }
-
 
 [features]
 simd = ["curve25519-dalek/simd_backend", "rand/simd_support"]
