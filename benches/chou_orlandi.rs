@@ -1,3 +1,4 @@
+/*
 use criterion::{criterion_group, criterion_main, Criterion};
 use magic_pake::{
     fpake::build_circuit,
@@ -37,8 +38,8 @@ fn bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("Chou-Orlandi OT");
     group.sample_size(10);
 
-    // Local
-    for i in 1..=16 {
+    / Local
+    for i in 1..=24 {
         let n = 1 << i;
         let name: String = format!("Local, {} messages", n);
         let circuit = build_circuit(n / 2, 0);
@@ -50,15 +51,17 @@ fn bench(c: &mut Criterion) {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
         let choices = vec![false; n];
-        let msg = Message::from_zipped(&enc);
-        group.bench_function(&name, |b| b.iter(|| run_ot(&msg, &choices)));
+        let msg = Message::new2(&enc);
+        group.bench_with_input(&name, &i, |b, _| b.iter(|| run_ot(&msg, &choices)));
     }
 
-    // TODO: LAN
-    // TODO: WAN
+    / TODO: LAN
+    / TODO: WAN
 
     group.finish();
 }
 
 criterion_group!(benches, bench,);
 criterion_main!(benches);
+*/
+fn main() {}

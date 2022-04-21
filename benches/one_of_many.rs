@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use magic_pake::ot::one_of_many::*;
 use magic_pake::util::SECURITY_PARAM;
 
@@ -51,7 +51,9 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
             messages.push(vec![0u8; 2048 * (SECURITY_PARAM / 8)]);
         }
 
-        group.bench_function(&format!("Local 1-to-{}", n), |b| {
+        group.throughput(criterion::Throughput::Elements(i as u64));
+        //group.bench_with_input(&format!("Local 1-to-{}", n), &i, |b, _| {
+        group.bench_with_input(BenchmarkId::from_parameter(i), &i, |b, _| {
             b.iter(|| {
                 one_of_many_local(n, domain, messages.clone());
             })

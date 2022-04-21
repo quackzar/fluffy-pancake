@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use ductile::new_local_channel;
 use magic_pake::fpake::*;
 use std::thread;
@@ -46,7 +46,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
     let mut group = c.benchmark_group("fPAKE One of Many");
     group.sample_size(10);
 
-    for i in 13..=13u32 {
+    for i in 8..=15u32 {
         let number_of_passwords = (1 << i) as u32;
 
         // garbler server, evaluator client
@@ -133,10 +133,11 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
         */
 
         // Both parts
-        group.bench_function(
-            &format!("2048-bit ({} passwords)", number_of_passwords),
-            |b| {
-                b.iter(|| {
+        group.throughput(criterion::Throughput::Elements(i as u64));
+        group.bench_with_input(
+            //&format!("2048-bit ({} passwords)", number_of_passwords),
+            BenchmarkId::from_parameter(i),
+            &i, |b, _| b.iter(|| {
                     let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
                     let passwords_2 = passwords.clone();
                     let index = 1;
@@ -179,9 +180,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
                     let _k1 = h1.join().unwrap();
                     let _k2 = h2.join().unwrap();
-                })
-            },
-        );
+                }));
     }
 
     group.finish();
