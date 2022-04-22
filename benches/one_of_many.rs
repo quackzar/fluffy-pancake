@@ -53,7 +53,7 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
 
         group.throughput(criterion::Throughput::Elements(i as u64));
         //group.bench_with_input(&format!("Local 1-to-{}", n), &i, |b, _| {
-        group.bench_with_input(BenchmarkId::from_parameter(i), &i, |b, _| {
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, _| {
             b.iter(|| {
                 one_of_many_local(n, domain, messages.clone());
             })

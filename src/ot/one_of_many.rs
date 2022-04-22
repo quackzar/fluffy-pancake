@@ -1,3 +1,4 @@
+use std::thread;
 use crate::common::{Channel, Error};
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
@@ -17,35 +18,6 @@ fn array<const N: usize>(vector: &Vec<u8>) -> [u8; N] {
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
 fn fk(key: &[u8], choice: u32, length: usize, buffer: &mut [u8]) {
-    /*
-    let chunks = key.len() / 32;
-    let excess = key.len() % 32;
-    let mut result = Vec::with_capacity(key.len());
-
-    // Fill in the excess first
-    let mut hasher = Sha256::new();
-    hasher.update(choice.to_be_bytes());
-    hasher.update(key);
-    let mut intermediate = hasher.finalize().to_vec();
-    for i in 0..excess {
-        result.push(intermediate[i]);
-    }
-
-    // Fill in the chunks
-    for _ in 0..chunks {
-        let mut hasher = Sha256::new();
-        hasher.update(&intermediate);
-        intermediate = hasher.finalize().to_vec();
-
-        for j in 0..32 {
-            result.push(intermediate[j]);
-        }
-    }
-
-    debug_assert!(key.len() == result.len());
-    result
-    */
-
     let mut hasher = Sha256::new();
     hasher.update(choice.to_be_bytes());
     hasher.update(key);
@@ -88,38 +60,70 @@ impl ManyOTSender {
         instrument::begin("Compute y", E_COMP_COLOR);
         let domain_max = 1 << domain; // 2^domain
         let mut y = vec![0u8; domain_max * byte_length];
-        let mut hash = vec![0u8; byte_length];
-        for i in 0..domain_max {
-            let y_value = unsafe { vector_row_mut(&mut y, i, byte_length) };
-            xor_bytes_inplace(y_value, messages[i].as_slice());
 
-            for j in 0..domain {
-                let bit = (i >> j) & 1;
-                fk(&keys[j as usize][bit as usize], i as u32, byte_length, &mut hash);
-                xor_bytes_inplace(y_value, &hash);
+        // In this case is does not make sense to multi-thread when the number of rows in y is
+        // relatively small, if this is the case we do it the "single-threaded" way instead.
+        if domain <= 2 {
+            let mut hash = vec![0u8; byte_length];
+            for i in 0..domain_max {
+                let y_value = unsafe { vector_row_mut(&mut y, i, byte_length) };
+                xor_bytes_inplace(y_value, messages[i].as_slice());
+
+                for j in 0..domain {
+                    let bit = (i >> j) & 1;
+                    fk(&keys[j as usize][bit as usize], i as u32, byte_length, &mut hash);
+                    xor_bytes_inplace(y_value, &hash);
+                }
             }
+        } else {
+            let desired_thread_count = num_cpus::get();
+            let actual_thread_count = if domain_max <= desired_thread_count { domain_max as usize } else { desired_thread_count };
+            debug_assert_eq!(0, domain_max % actual_thread_count);
+
+            let rows_in_chunk = domain_max / actual_thread_count;
+            let bytes_in_chunk = rows_in_chunk * byte_length;
+
+            // NOTE: This is slightly slower for very small domain, but the difference shouldn't matter
+            thread::scope(|s| {
+                let keys = &keys;
+                let mut handles = Vec::with_capacity(actual_thread_count);
+
+                let y_chunks = y.chunks_mut(bytes_in_chunk);
+                for (chunk_idx, chunk) in y_chunks.enumerate() {
+                    let handle = s.spawn(move |_| {
+                        instrument::begin("Compute y - worker", E_COMP_COLOR);
+
+                        let mut hash = vec![0u8; byte_length];
+
+                        for i in 0..rows_in_chunk {
+                            let y_value = unsafe { vector_row_mut(chunk, i, byte_length) };
+                            let domain_index = rows_in_chunk * chunk_idx + i;
+                            xor_bytes_inplace(y_value, messages[domain_index].as_slice());
+
+                            for j in 0..domain {
+                                let bit = (domain_index >> j) & 1;
+                                fk(&keys[j as usize][bit as usize], domain_index as u32, byte_length, &mut hash);
+                                xor_bytes_inplace(y_value, &hash);
+                            }
+                        }
+
+                        instrument::end();
+                        ()
+                    });
+
+                    handles.push(handle);
+                }
+
+                for handle in handles {
+                    let _ = handle.join();
+                }
+                instrument::end();
+            });
         }
-        /*
-        // TODO: Parallelization is one way to speed this up (about 50%), but due to how things are
-                 allocated and things not being flat this is still a bad way of doing it (threads
-                 are around %50 idle, and we spend a ton of time serializing).
-        use rayon::prelude::*;
-        let y: Vec<Vec<u8>> = (0..domain_max).into_par_iter().map(|i| {
-            let mut value = messages[i].to_vec();
-            for j in 0..domain {
-                let bit = (i >> j) & 1;
-                let hash = fk(&keys[j as usize][bit as usize], i as u32);
-                xor_bytes_inplace(&mut value, &hash);
-            }
-
-            value
-        }).collect();
-        */
-        instrument::end();
 
         let (s, _r) = ch;
         instrument::begin("Send y", E_SEND_COLOR);
-        s.send_raw(y.as_slice())?;
+        s.send_raw(y.as_mut_slice())?;
         instrument::end();
 
         // 2. Initiate 1-out-of-2 OTs by sending challenges
@@ -138,6 +142,7 @@ impl ManyOTSender {
         instrument::end();
 
         instrument::end();
+
         Ok(())
     }
 }

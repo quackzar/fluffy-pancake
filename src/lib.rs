@@ -4,6 +4,7 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::must_use_unit)]
+#![feature(scoped_threads)]
 // #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 

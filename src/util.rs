@@ -122,17 +122,15 @@ pub const fn index_1d(row: usize, column: usize, width: usize) -> usize {
 }
 #[inline]
 pub unsafe fn vector_row(vector: &[u8], row: usize, width: usize) -> &[u8] {
-    let ptr = vector.as_ptr();
-    let offset = (width * row) as isize;
-    let into = ptr.offset(offset);
-    std::slice::from_raw_parts(into, width)
+    let start = width * row;
+    let end = start + width;
+    vector.get_unchecked(start..end)
 }
 #[inline]
 pub unsafe fn vector_row_mut(vector: &mut [u8], row: usize, width: usize) -> &mut [u8] {
-    let ptr = vector.as_mut_ptr();
-    let offset = (width * row) as isize;
-    let into = ptr.offset(offset);
-    std::slice::from_raw_parts_mut(into, width)
+    let start = width * row;
+    let end = start + width;
+    vector.get_unchecked_mut(start..end)
 }
 #[inline]
 pub unsafe fn vector_slice(vector: &[u8], offset: usize, length: usize) -> &[u8] {
