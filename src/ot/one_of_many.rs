@@ -16,7 +16,7 @@ fn array<const N: usize>(vector: &Vec<u8>) -> [u8; N] {
 
 // 1-to-n extensions for OT :D
 // https://dl.acm.org/doi/pdf/10.1145/301250.301312
-fn fk(key: &[u8], choice: u32, length: usize) -> Vec<u8> {
+fn fk(key: &[u8], choice: u32, length: usize, buffer: &mut [u8]) {
     /*
     let chunks = key.len() / 32;
     let excess = key.len() % 32;
@@ -52,10 +52,7 @@ fn fk(key: &[u8], choice: u32, length: usize) -> Vec<u8> {
     let seed = array(&hasher.finalize().to_vec());
 
     let mut prg = ChaCha20Rng::from_seed(seed);
-    let mut result = vec![0u8; length];
-    prg.fill_bytes(result.as_mut_slice());
-
-    result
+    prg.fill_bytes(buffer);
 }
 
 pub struct ManyOTSender {
@@ -91,13 +88,14 @@ impl ManyOTSender {
         instrument::begin("Compute y", E_COMP_COLOR);
         let domain_max = 1 << domain; // 2^domain
         let mut y = vec![0u8; domain_max * byte_length];
+        let mut hash = vec![0u8; byte_length];
         for i in 0..domain_max {
             let y_value = unsafe { vector_row_mut(&mut y, i, byte_length) };
             xor_bytes_inplace(y_value, messages[i].as_slice());
 
             for j in 0..domain {
                 let bit = (i >> j) & 1;
-                let hash = fk(&keys[j as usize][bit as usize], i as u32, byte_length);
+                fk(&keys[j as usize][bit as usize], i as u32, byte_length, &mut hash);
                 xor_bytes_inplace(y_value, &hash);
             }
         }
@@ -196,8 +194,9 @@ impl ManyOTReceiver {
         instrument::begin("Reconstruct value", E_COMP_COLOR);
         let byte_length = y.len() / (1 << domain);
         let x = unsafe { vector_row_mut(&mut y, choice as usize, byte_length) };
+        let mut hash = vec![0u8; byte_length];
         for i in 0..domain {
-            let hash = fk(&keys[i as usize], choice, byte_length);
+            fk(&keys[i as usize], choice, byte_length, &mut hash);
             xor_bytes_inplace(x, &hash);
         }
         instrument::end();
