@@ -10,6 +10,7 @@ use rand_chacha::ChaCha20Rng;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+use std::thread;
 
 const K: usize = 128;
 const S: usize = 128;
@@ -152,8 +153,65 @@ impl ObliviousSender for Sender {
 
         // Randomize
         instrument::begin("Randomize", E_COMP_COLOR);
-        let msg_total_size = msg_size * msg.len();
-        let mut d = vec![0u8; msg_total_size * 2];
+        let msg_count = msg.len();
+        let msg_pair_size = msg_size * 2;
+        let mut d = vec![0u8; msg_count * msg_pair_size];
+
+        let thread_count = pick_suitable_thread_count(msg_count);
+        let rows_in_chunk = msg_count / thread_count;
+        let bytes_in_chunk = rows_in_chunk * msg_pair_size;
+        thread::scope(|s| {
+            let mut handles = Vec::with_capacity(thread_count);
+            let q_transposed = &q_transposed;
+            let delta = &delta;
+
+            let d_chunks = d.chunks_mut(bytes_in_chunk);
+            for (chunk_idx, chunk) in d_chunks.enumerate() {
+                let handle = s.spawn(move |_| {
+                    instrument::begin("Randomize - worker", E_COMP_COLOR);
+
+                    let mut q_buffer = vec![0u8; matrix_w];
+                    let q_buffer = q_buffer.as_mut_slice();
+
+                    let rows_in_this_chunk = chunk.len() / msg_pair_size;
+                    for i in 0..rows_in_this_chunk {
+                        let row_idx = chunk_idx * rows_in_chunk + i;
+
+                        let q_row = unsafe { vector_row(q_transposed, row_idx, matrix_w) };
+                        let v0 = hash!(row_idx.to_be_bytes(), q_row);
+
+                        let d0_idx = i * msg_pair_size;
+                        let d1_idx = d0_idx + msg_size;
+
+                        let m0 = msg.0[row_idx][0];
+                        let mut chacha = ChaCha20Rng::from_seed(v0);
+                        let plain = unsafe { vector_slice_mut(chunk, d0_idx, msg_size) };
+                        chacha.fill_bytes(plain);
+                        xor_inplace(plain, m0);
+
+                        zero_inplace(q_buffer);
+                        xor(q_buffer, q_row, delta);
+                        let v1 = hash!(row_idx.to_be_bytes(), &q_buffer);
+
+                        let m1 = msg.0[row_idx][1];
+                        let mut chacha = ChaCha20Rng::from_seed(v1);
+                        let plain = unsafe { vector_slice_mut(chunk, d1_idx, msg_size) };
+                        chacha.fill_bytes(plain);
+                        xor_inplace(plain, m1);
+                    }
+
+                    instrument::end();
+                    ()
+                });
+
+                handles.push(handle);
+            }
+
+            for handle in handles {
+                let _ = handle.join();
+            }
+        });
+        /*
         for row_idx in 0..msg.len() {
             let q_row = unsafe { vector_row(&q_transposed, row_idx, matrix_w) };
             let v0 = hash!(row_idx.to_be_bytes(), q_row);
@@ -177,6 +235,7 @@ impl ObliviousSender for Sender {
             chacha.fill_bytes(plain);
             xor_inplace(plain, m1);
         }
+        */
         instrument::end();
 
         instrument::begin("Send d", E_SEND_COLOR);
@@ -333,16 +392,53 @@ impl ObliviousReceiver for Receiver {
 
         instrument::begin("Compute v", E_COMP_COLOR);
         let mut v = vec![0u8; 32 * matrix_h];
+        let thread_count = pick_suitable_thread_count(matrix_h);
+        let rows_in_chunk = matrix_h / thread_count;
+        let bytes_in_chunk = rows_in_chunk * 32;
+        thread::scope(|s| {
+            let mut handles = Vec::with_capacity(thread_count);
+            let t = &t;
+
+            let chunks = v.chunks_mut(bytes_in_chunk);
+            for (chunk_idx, chunk) in chunks.enumerate() {
+                let handle = s.spawn(move |_| {
+                    instrument::begin("Compute v - worker", E_COMP_COLOR);
+
+                    let rows_in_this_chunk = chunk.len() / 32;
+                    for i in 0..rows_in_this_chunk {
+                        let row_idx = chunk_idx * rows_in_chunk + i;
+
+                        let row = unsafe { vector_row_mut(chunk, i, 32) };
+                        let t_row = unsafe { vector_row(&t, row_idx, matrix_w) };
+                        let hash = hash!(row_idx.to_be_bytes(), t_row);
+                        xor_inplace(row, &hash);
+                    }
+
+                    instrument::end();
+                    ()
+                });
+
+                handles.push(handle);
+            }
+
+            for handle in handles {
+                let _ = handle.join();
+            }
+        });
+        /*
         for row_idx in 0..matrix_h {
             let row = unsafe { vector_row_mut(&mut v, row_idx, 32) };
             let t_row = unsafe { vector_row(&t, row_idx, matrix_w) };
             let hash = hash!(row_idx.to_be_bytes(), t_row);
             xor_inplace(row, &hash);
         }
+        */
         instrument::end();
 
         instrument::begin("Allocate y", E_COMP_COLOR);
-        let mut y = vec![vec![0u8; msg_size as usize]; choices.len()];
+        let choices_count = choices.len();
+        // TODO: Flatten y
+        let mut y = vec![vec![0u8; msg_size as usize]; choices_count];
         instrument::end();
 
         instrument::begin("Receive d", E_RECV_COLOR);
@@ -350,7 +446,54 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("De-randomize", E_COMP_COLOR);
+        let msg_count = choices.len() / 8;
         let msg_size = (d.len() / 2) / choices.len();
+
+        //*
+        let thread_count = pick_suitable_thread_count(choices_count);
+        let rows_in_chunk = choices_count / thread_count;
+        thread::scope(|s| {
+            let mut handles = Vec::with_capacity(thread_count);
+            let d = &d;
+            let v = &v;
+            let packed_choices = &packed_choices;
+
+            let chunks = y.chunks_mut(rows_in_chunk);
+            for (chunk_idx, chunk) in chunks.enumerate() {
+                let handle = s.spawn(move |_| {
+                    instrument::begin("De-randomize - worker", E_COMP_COLOR);
+
+                    let rows_in_this_chunk = chunk.len();
+                    for i in 0..rows_in_this_chunk {
+                        let row_idx = chunk_idx * rows_in_chunk + i;
+
+                        let j = row_idx;
+                        let b = j % 8;
+                        let i_actual = (j - b) / 8;
+
+                        let v_row = unsafe { vector_row(&v, j, 32) };
+                        let mut chacha = ChaCha20Rng::from_seed(*array_from_slice(v_row));
+                        chacha.fill_bytes(chunk[i].as_mut_slice());
+
+                        let choice = ((packed_choices[i_actual] >> b) & 1) as usize;
+                        let d_idx = (j * msg_size * 2) + choice * msg_size;
+                        let d = unsafe { vector_slice(&d, d_idx, msg_size) };
+
+                        xor_inplace(chunk[i].as_mut_slice(), d);
+                    }
+
+                    instrument::end();
+                    ()
+                });
+
+                handles.push(handle);
+            }
+
+            for handle in handles {
+                let _ = handle.join();
+            }
+        });
+        /*
         for i in 0..(choices.len() / 8) {
             for b in 0..8 {
                 let j = i * 8 + b;
@@ -366,6 +509,7 @@ impl ObliviousReceiver for Receiver {
                 xor_inplace(y[j].as_mut_slice(), d);
             }
         }
+        */
         instrument::end();
         instrument::end();
         instrument::end();
@@ -432,6 +576,14 @@ fn xor_inplace(destination: &mut [u8], right: &[u8]) {
 }
 
 #[inline]
+fn zero_inplace(destination: &mut [u8]) {
+    // TODO: Vectorize this!
+    for i in 0..destination.len() {
+        destination[i] ^= 0;
+    }
+}
+
+#[inline]
 fn eq(left: &[u8], right: &[u8]) -> bool {
     debug_assert_eq!(left.len(), right.len());
 
@@ -468,6 +620,21 @@ fn transpose_matrix(
             }
         }
     }
+}
+
+#[inline]
+fn pick_suitable_thread_count(rows: usize) -> usize {
+    let logical_cores = num_cpus::get();
+
+    if rows < logical_cores {
+        return rows;
+    }
+
+    if rows % logical_cores == 0 {
+        return logical_cores;
+    }
+
+    return rows / logical_cores;
 }
 
 // -------------------------------------------------------------------------------------------------

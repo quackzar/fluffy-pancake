@@ -44,7 +44,7 @@ fn bench(c: &mut Criterion) {
     group.sample_size(10);
 
     // Local
-    for i in 8..=24 {
+    for i in 20..=20 {
         let n = 1 << i;
         //let name: String = format!("Local, {} messages", n);
         let circuit = build_circuit(n / 2, 0);
