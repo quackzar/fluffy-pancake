@@ -13,7 +13,7 @@ use crate::wires::*;
 
 pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     let mut gates: Vec<Gate> = Vec::new();
-    let comparison_domain = bitsize as u16 / 2 + 1;
+    let comparison_domain = bitsize as u16 + 1;
     let bitdomain = 2;
 
     // xor gates
@@ -43,7 +43,7 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
         kind: GateKind::Add,
         inputs: (3 * bitsize..4 * bitsize).collect(),
         output: 4 * bitsize,
-        domain: bitsize as u16,
+        domain: comparison_domain,
     };
     gates.push(gate);
 
