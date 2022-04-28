@@ -607,22 +607,20 @@ mod tests {
         let h1 = thread::spawn(move || {
             // Party 1
             let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-            let k2 = OneOfManyKey::garbler_client(
-                &password,
-                index,
-                number_of_passwords,
-                threshold,
-                &ch1,
-            )
-            .unwrap();
+            let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
             k1.combine(k2)
         });
 
         let h2 = thread::spawn(move || {
             // Party 1
-            let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2)
-                .unwrap();
-            let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
+            let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+            let k2 = OneOfManyKey::garbler_client(
+                &password,
+                index,
+                number_of_passwords,
+                threshold,
+                &ch2,
+            ).unwrap();
             k1.combine(k2)
         });
 
