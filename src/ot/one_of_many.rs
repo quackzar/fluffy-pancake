@@ -1,4 +1,3 @@
-use std::thread;
 use crate::common::{Channel, Error};
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
@@ -84,9 +83,8 @@ impl ManyOTSender {
             let bytes_in_chunk = rows_in_chunk * byte_length;
 
             // NOTE: This is slightly slower for very small domain, but the difference shouldn't matter
-            thread::scope(|s| {
+            rayon::scope(|s| {
                 let keys = &keys;
-                let mut handles = Vec::with_capacity(actual_thread_count);
 
                 let y_chunks = y.chunks_mut(bytes_in_chunk);
                 for (chunk_idx, chunk) in y_chunks.enumerate() {
@@ -110,13 +108,8 @@ impl ManyOTSender {
                         instrument::end();
                         ()
                     });
-
-                    handles.push(handle);
                 }
 
-                for handle in handles {
-                    let _ = handle.join();
-                }
                 instrument::end();
             });
         }

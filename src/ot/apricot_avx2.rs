@@ -10,7 +10,6 @@ use rand_chacha::ChaCha20Rng;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
-use std::thread;
 
 const K: usize = 128;
 const S: usize = 128;
@@ -160,8 +159,7 @@ impl ObliviousSender for Sender {
         let thread_count = pick_suitable_thread_count(msg_count);
         let rows_in_chunk = msg_count / thread_count;
         let bytes_in_chunk = rows_in_chunk * msg_pair_size;
-        thread::scope(|s| {
-            let mut handles = Vec::with_capacity(thread_count);
+        rayon::scope(|s| {
             let q_transposed = &q_transposed;
             let delta = &delta;
 
@@ -203,12 +201,6 @@ impl ObliviousSender for Sender {
                     instrument::end();
                     ()
                 });
-
-                handles.push(handle);
-            }
-
-            for handle in handles {
-                let _ = handle.join();
             }
         });
         /*
@@ -395,8 +387,7 @@ impl ObliviousReceiver for Receiver {
         let thread_count = pick_suitable_thread_count(matrix_h);
         let rows_in_chunk = matrix_h / thread_count;
         let bytes_in_chunk = rows_in_chunk * 32;
-        thread::scope(|s| {
-            let mut handles = Vec::with_capacity(thread_count);
+        rayon::scope(|s| {
             let t = &t;
 
             let chunks = v.chunks_mut(bytes_in_chunk);
@@ -417,12 +408,6 @@ impl ObliviousReceiver for Receiver {
                     instrument::end();
                     ()
                 });
-
-                handles.push(handle);
-            }
-
-            for handle in handles {
-                let _ = handle.join();
             }
         });
         /*
@@ -452,8 +437,7 @@ impl ObliviousReceiver for Receiver {
         //*
         let thread_count = pick_suitable_thread_count(choices_count);
         let rows_in_chunk = choices_count / thread_count;
-        thread::scope(|s| {
-            let mut handles = Vec::with_capacity(thread_count);
+        rayon::scope(|s| {
             let d = &d;
             let v = &v;
             let packed_choices = &packed_choices;
@@ -485,12 +469,6 @@ impl ObliviousReceiver for Receiver {
                     instrument::end();
                     ()
                 });
-
-                handles.push(handle);
-            }
-
-            for handle in handles {
-                let _ = handle.join();
             }
         });
         /*
