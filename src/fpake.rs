@@ -64,6 +64,125 @@ pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     }
 }
 
+// Inputs for the circuit: masked password, mask, other password
+pub fn build_circuit_v2(bitsize: usize, threshold: u16) -> Circuit {
+    let mut gates: Vec<Gate> = Vec::new();
+    let comparison_domain = bitsize as u16 + 1;
+    let bitdomain = 2;
+
+    // xor: unmask
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i, i + bitsize],
+            output: i + 3 * bitsize,
+            kind: GateKind::Add,
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // xor: compare
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i + 2 * bitsize, i + 3 * bitsize],
+            output: i + 4 * bitsize,
+            kind: GateKind::Add,
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // proj gates
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i + 4 * bitsize],
+            output: i + 5 * bitsize,
+            kind: GateKind::Proj(ProjKind::Map(comparison_domain)),
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // sum
+    let gate = Gate {
+        kind: GateKind::Add,
+        inputs: (5 * bitsize..6 * bitsize).collect(),
+        output: 6 * bitsize,
+        domain: comparison_domain,
+    };
+    gates.push(gate);
+
+    // comparison
+    let gate = Gate {
+        kind: GateKind::Proj(ProjKind::Less(threshold + 1)),
+        inputs: vec![6 * bitsize],
+        output: 6 * bitsize + 1,
+        domain: comparison_domain,
+    };
+    gates.push(gate);
+    Circuit {
+        gates,
+        num_inputs: bitsize * 3,
+        num_outputs: 1,
+        num_wires: 6 * bitsize + 2,
+        input_domains: vec![bitdomain; bitsize * 3],
+    }
+}
+
+// Inputs for the circuit: masked password, mask, other password
+pub fn build_circuit_v3(bitsize: usize, threshold: u16) -> Circuit {
+    let mut gates: Vec<Gate> = Vec::new();
+    let comparison_domain = bitsize as u16 + 1;
+    let bitdomain = 2;
+
+    // xor: unmask & compare
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i, i + bitsize, i + 2 * bitsize],
+            output: i + 3 * bitsize,
+            kind: GateKind::Add,
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // proj gates
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i + 3 * bitsize],
+            output: i + 4 * bitsize,
+            kind: GateKind::Proj(ProjKind::Map(comparison_domain)),
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // sum
+    let gate = Gate {
+        kind: GateKind::Add,
+        inputs: (4 * bitsize..5 * bitsize).collect(),
+        output: 5 * bitsize,
+        domain: comparison_domain,
+    };
+    gates.push(gate);
+
+    // comparison
+    let gate = Gate {
+        kind: GateKind::Proj(ProjKind::Less(threshold + 1)),
+        inputs: vec![5 * bitsize],
+        output: 5 * bitsize + 1,
+        domain: comparison_domain,
+    };
+    gates.push(gate);
+    Circuit {
+        gates,
+        num_inputs: bitsize * 3,
+        num_outputs: 1,
+        num_wires: 5 * bitsize + 2,
+        input_domains: vec![bitdomain; bitsize * 3],
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct HalfKey(WireBytes);
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -321,13 +440,8 @@ impl OneOfManyKey {
         )))
     }
 
-    pub fn garbler_client(
-        password: &[u8],
-        index: u32,
-        number_of_passwords: u32,
-        threshold: u16,
-        channel: &Channel<Vec<u8>>,
-    ) -> Result<Self, Error> {
+    // First (and slower) implementation of garbler_client and evaluator_server
+    pub fn garbler_client(password: &[u8], index: u32, number_of_passwords: u32, threshold: u16, channel: &Channel<Vec<u8>>) -> Result<Self, Error> {
         instrument::begin("garbler_client", E_FUNC_COLOR);
 
         let (sender, _r) = channel;
@@ -436,10 +550,7 @@ impl OneOfManyKey {
         Ok(Self(decoding.hashes[0][1]))
     }
 
-    pub fn evaluator_server(
-        passwords: &[Vec<u8>],
-        channel: &Channel<Vec<u8>>,
-    ) -> Result<Self, Error> {
+    pub fn evaluator_server(passwords: &[Vec<u8>], channel: &Channel<Vec<u8>>) -> Result<Self, Error> {
         instrument::begin("evaluator_server", E_FUNC_COLOR);
 
         let (_, r) = channel;
@@ -476,6 +587,7 @@ impl OneOfManyKey {
 
         // 4. Compute the encoding for the input from the result
         instrument::begin("Compute encoding for server password", E_COMP_COLOR);
+        // TODO: Allocate flat, don't push to vec
         let mut encoding_bytes = vec![vec![0u8; LENGTH]; password_bits];
         for i in 0..passwords.len() {
             for j in 0..password_bits {
@@ -509,8 +621,201 @@ impl OneOfManyKey {
         )))
     }
 
+    // Second (faster) implementation of garbler_client and evaluator_server
+    pub fn garbler_client_v2(password: &[u8], index: u32, number_of_passwords: u32, threshold: u16, channel: &Channel<Vec<u8>>) -> Result<Self, Error> {
+        instrument::begin("garbler_client", E_FUNC_COLOR);
+
+        let (sender, _r) = channel;
+        let password_bytes = password.len();
+        let password_bits = password_bytes * 8;
+
+        // 1. Garble the circuit and encode our password
+        instrument::begin("Build circuit", E_COMP_COLOR);
+        let circuit = build_circuit_v3(password_bits, threshold);
+        instrument::end();
+
+        instrument::begin("Garble circuit", E_PROT_COLOR);
+        let (gc, encoding, decoding) = garble(&circuit);
+        instrument::end();
+
+        instrument::begin("Encode client password", E_COMP_COLOR);
+        let encoding = BinaryEncodingKey::from(encoding).zipped();
+        let mut garbler_input = Vec::with_capacity(password_bits);
+        for i in 0..password_bytes {
+            for j in 0..8 {
+                let bit_index = (i * 8 + j) as usize;
+                let bit = (((password[i] >> j) & 1) == 1) as usize;
+
+                let encoded = &encoding[password_bits * 2 + bit_index][bit];
+                garbler_input.push(encoded.clone());
+            }
+        }
+        instrument::end();
+
+        instrument::begin("Send garbled circuit", E_SEND_COLOR);
+        sender.send(bincode::serialize(&gc)?)?;
+        instrument::end();
+
+        instrument::begin("Send encoded password", E_SEND_COLOR);
+        sender.send(bincode::serialize(&garbler_input)?)?;
+        instrument::end();
+
+        // 2. OT Encoding of the mask
+        instrument::begin("OT Encoding of mask", E_PROT_COLOR);
+        let mut mask_encoding = Vec::with_capacity(password_bits);
+        for i in 0..password_bits {
+            let bit_encoding = [
+                encoding[password_bits + i][0].to_bytes().to_vec(),
+                encoding[password_bits + i][1].to_bytes().to_vec(),
+            ];
+            mask_encoding.push(bit_encoding);
+        }
+
+        let message = MessagePair::from_zipped(mask_encoding.as_slice());
+        let ot = Sender {
+            bootstrap: Box::new(OTReceiver),
+        };
+        ot.exchange(&message, channel)?;
+        instrument::end();
+
+        // 3. Do a 1-to-n OT to get a masked version of the servers password corresponding to this client
+        instrument::begin("1-to-n OT Masked password", E_COMP_COLOR);
+        let many_receiver = ManyOTReceiver {
+            internal_receiver: OTReceiver,
+        };
+        let domain = log2(number_of_passwords);
+        let masked_password = many_receiver.exchange(index, domain, channel)?;
+        instrument::end();
+
+        instrument::begin("Encode Masked password", E_COMP_COLOR);
+        let encoding_length = encoding[0][0].to_bytes().len();
+        let mut evaluator_encoding = vec![0u8; password_bits * encoding_length];
+        for i in 0..password_bits {
+            let byte = masked_password[i / 8];
+            let bit = (byte >> i % 8) & 1;
+
+            let encoded_row = unsafe { vector_row_mut(&mut evaluator_encoding, i, encoding_length) };
+            xor_bytes_inplace(encoded_row, encoding[i][bit as usize].to_bytes().as_slice());
+        }
+        instrument::end();
+
+        instrument::begin("Send encoding of masked password", E_SEND_COLOR);
+        sender.send_raw(evaluator_encoding.as_slice())?;
+        instrument::end();
+
+        instrument::end();
+        Ok(Self(decoding.hashes[0][1]))
+    }
+
+    pub fn evaluator_server_v2(passwords: &[Vec<u8>], channel: &Channel<Vec<u8>>) -> Result<Self, Error> {
+        instrument::begin("evaluator_server", E_FUNC_COLOR);
+
+        let (_, r) = channel;
+        let password_bytes = passwords[0].len();
+        let password_bits = password_bytes * 8;
+
+        // 1. Get the garbled circuit and input from the client
+        instrument::begin("Receive garbled circuit", E_RECV_COLOR);
+        let gc = bincode::deserialize(&r.recv()?)?;
+        instrument::end();
+
+        instrument::begin("Receive encoded client password", E_RECV_COLOR);
+        let client_encoding: Vec<Wire> = bincode::deserialize(&r.recv()?)?;
+        instrument::end();
+
+        // 3. Mask all server passwords and get encoding of mask
+        instrument::begin("Generate mask", E_COMP_COLOR);
+        let mut mask = vec![0u8; password_bytes];
+        //random_bytes(&mut mask);
+        mask[0] = 0x01;
+
+        let mut mask_choices = vec![false; password_bits];
+        for i in 0..password_bytes {
+            let byte = mask[i];
+            for b in 0..8 {
+                let choice = ((byte >> i) & 1) == 1;
+                mask_choices[i * 8 + b] = choice;
+            }
+        }
+        instrument::end();
+
+        instrument::begin("Mask server passwords", E_COMP_COLOR);
+        let mut masked_passwords = vec![vec![0u8; password_bytes]; passwords.len()];
+        for i in 0..passwords.len() {
+            let masked_password = masked_passwords[i].as_mut_slice();
+            xor_bytes_inplace(masked_password, mask.as_slice());
+
+            let password = passwords[i].as_slice();
+            xor_bytes_inplace(masked_password, password);
+        }
+        instrument::end();
+
+        instrument::begin("OT Mask", E_PROT_COLOR);
+        let ot = Receiver {
+            bootstrap: Box::new(OTSender)
+        };
+        let encoded_mask = ot.exchange(mask_choices.as_slice(), channel)?;
+        instrument::end();
+
+        // 4. 1-to-n OT the masked password to the client
+        instrument::begin("1-to-n OT of Masked password", E_PROT_COLOR);
+        let many_sender = ManyOTSender {
+            interal_sender: OTSender
+        };
+        let domain = log2(passwords.len());
+        many_sender.exchange(masked_passwords.as_slice(), domain, channel)?;
+        instrument::end();
+
+        instrument::begin("Receive encoded client password", E_RECV_COLOR);
+        let server_encoded = r.recv_raw()?;
+        instrument::end();
+
+        //
+        // By now the evaluator should have both the encoding of the users password from the database and the encoding of the password they input
+        //
+
+        instrument::begin("Build encodings from data", E_COMP_COLOR);
+        let mut mask_encoding = Vec::with_capacity(password_bits);
+        for i in 0..password_bits {
+            let encoded_bytes = &encoded_mask[i];
+            mask_encoding.push(Wire::from_bytes(encoded_bytes, Domain::Binary));
+        }
+
+        let encoding_length = encoded_mask[0].len();
+        let mut server_encoding = Vec::with_capacity(password_bits);
+        for i in 0..password_bits {
+            let encoded_bytes = unsafe { vector_row(&server_encoded, i, encoding_length)};
+            server_encoding.push(Wire::from_bytes(encoded_bytes, Domain::Binary));
+        }
+        instrument::end();
+
+        // 6. Evaluate the circuit
+        instrument::begin("Evaluate circuit", E_PROT_COLOR);
+        let input = [server_encoding, mask_encoding, client_encoding].concat();
+        let output = evaluate(&gc, &input);
+        instrument::end();
+
+        instrument::end();
+        Ok(Self(hash!(
+            (gc.circuit.num_wires - 1).to_be_bytes(),
+            1u16.to_be_bytes(),
+            &output[0]
+        )))
+    }
+
     pub fn combine(self, other: Self) -> Key {
         Key(xor(self.0, other.0))
+    }
+}
+
+fn print_bytes(bytes: &[u8], newline: bool) {
+    for i in 0..bytes.len() {
+        print!("{:02X} ", bytes[i]);
+    }
+
+    if newline
+    {
+        println!();
     }
 }
 
@@ -587,6 +892,36 @@ mod tests {
     }
 
     #[test]
+    fn test_fpake_one_of_many_client_garbler_v2() {
+        use std::thread;
+
+        // Setup for client / server
+        let passwords = [vec![0u8; 8], vec![1u8; 8], vec![2u8; 8], vec![3u8; 8]];
+        let number_of_passwords = passwords.len() as u32;
+        let index = 1u32;
+        let password = passwords[index as usize].clone();
+        let threshold = 0;
+
+        // Do the thing
+        let (s1, r1) = new_local_channel();
+        let (s2, r2) = new_local_channel();
+        let client_channel = (s2, r1);
+        let server_channel = (s1, r2);
+
+        let client = thread::spawn(move || {
+            OneOfManyKey::garbler_client_v2(&password, index, number_of_passwords, threshold, &client_channel).unwrap()
+        });
+
+        let server = thread::spawn(move || {
+            OneOfManyKey::evaluator_server_v2(&passwords, &server_channel).unwrap()
+        });
+
+        let k1 = client.join().unwrap();
+        let k2 = server.join().unwrap();
+        assert_eq!(k1, k2);
+    }
+
+    #[test]
     fn test_fpake_one_of_many() {
         use std::thread;
 
@@ -628,6 +963,51 @@ mod tests {
         let k2 = h2.join().unwrap();
         assert_eq!(k1, k2);
     }
+
+    /* TODO: Uncomment!
+    #[test]
+    fn test_fpake_one_of_many_v2() {
+        use std::thread;
+
+        // Setup for client / server
+        let passwords = [vec![0u8; 8], vec![1u8; 8], vec![2u8; 8], vec![3u8; 8]];
+        let passwords_2 = passwords.clone();
+        let number_of_passwords = passwords.len() as u32;
+        let index = 1u32;
+        let password = passwords[index as usize].clone();
+        let password_2 = password.clone();
+        let threshold = 0;
+
+        // Do the thing
+        let (s1, r1) = new_local_channel();
+        let (s2, r2) = new_local_channel();
+        let ch1 = (s2, r1);
+        let ch2 = (s1, r2);
+        let h1 = thread::spawn(move || {
+            // Party 1
+            let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
+            let k2 = OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
+            k1.combine(k2)
+        });
+
+        let h2 = thread::spawn(move || {
+            // Party 1
+            let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+            let k2 = OneOfManyKey::garbler_client_v2(
+                &password,
+                index,
+                number_of_passwords,
+                threshold,
+                &ch2,
+            ).unwrap();
+            k1.combine(k2)
+        });
+
+        let k1 = h1.join().unwrap();
+        let k2 = h2.join().unwrap();
+        assert_eq!(k1, k2);
+    }
+    */
 
     #[test]
     fn test_fpake_api() {

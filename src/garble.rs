@@ -428,6 +428,31 @@ mod tests {
     }
 
     #[test]
+    fn sum_consecutive_circuit() {
+        let domain = 128;
+        let circuit = Circuit {
+            gates: vec![Gate {
+                kind: GateKind::Add,
+                inputs: vec![0, 1],
+                output: 3,
+                domain,
+            }, Gate {
+                kind: GateKind::Add,
+                inputs: vec![2, 3],
+                output: 4,
+                domain,
+            }],
+            num_inputs: 3,
+            num_outputs: 1,
+            num_wires: 5,
+            input_domains: vec![domain, domain, domain],
+        };
+        let inputs = vec![13, 26, 13];
+        let outputs = garble_encode_eval_decode(&circuit, &inputs);
+        assert_eq!(outputs[0], 13 + 26 + 13);
+    }
+
+    #[test]
     fn sum_multiple_circuit() {
         let domain = 128;
         let circuit = Circuit {

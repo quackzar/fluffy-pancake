@@ -158,7 +158,7 @@ impl Circuit {
         for gate in &self.gates {
             let inputs = gate.inputs.iter().map(|&i| wires[i]);
             let output: u16 = match gate.kind {
-                GateKind::Add => inputs.sum(),
+                GateKind::Add => inputs.sum::<u16>() % gate.domain,
                 GateKind::Mul(m) => inputs.map(|x| x * m).next().unwrap(),
                 GateKind::Proj(ref p) => inputs.map(|x| p.project(x)).next().unwrap(),
                 GateKind::And => inputs.map(|x| x & 1).next().unwrap(),
