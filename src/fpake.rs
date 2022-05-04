@@ -899,7 +899,7 @@ mod tests {
         let number_of_passwords = passwords.len() as u32;
         let index = 1u32;
         let password = passwords[index as usize].clone();
-        let threshold = 0;
+        let threshold = 2;
 
         // Do the thing
         let (s1, r1) = new_local_channel();
@@ -963,7 +963,54 @@ mod tests {
         assert_eq!(k1, k2);
     }
 
-    /* TODO: Uncomment!
+    #[test]
+    fn test_fpake_one_of_many_fuzzy() {
+        use std::thread;
+
+        // Setup for client / server
+        let passwords = [vec![0u8; 8], vec![1u8; 8], vec![2u8; 8], vec![3u8; 8]];
+        let passwords_2 = passwords.clone();
+        let number_of_passwords = passwords.len() as u32;
+        let index = 1u32;
+        let mut password = passwords[index as usize].clone();
+        let mut password_2 = password.clone();
+
+        // Flip 2 bits in each copy of the client password
+        password[0] ^= 0x88;
+        password_2[0] ^= 0x88;
+
+        let threshold = 2;
+
+        // Do the thing
+        let (s1, r1) = new_local_channel();
+        let (s2, r2) = new_local_channel();
+        let ch1 = (s2, r1);
+        let ch2 = (s1, r2);
+        let h1 = thread::spawn(move || {
+            // Party 1
+            let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
+            let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
+            k1.combine(k2)
+        });
+
+        let h2 = thread::spawn(move || {
+            // Party 1
+            let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+            let k2 = OneOfManyKey::garbler_client(
+                &password,
+                index,
+                number_of_passwords,
+                threshold,
+                &ch2,
+            ).unwrap();
+            k1.combine(k2)
+        });
+
+        let k1 = h1.join().unwrap();
+        let k2 = h2.join().unwrap();
+        assert_eq!(k1, k2);
+    }
+
     #[test]
     fn test_fpake_one_of_many_v2() {
         use std::thread;
@@ -1006,7 +1053,6 @@ mod tests {
         let k2 = h2.join().unwrap();
         assert_eq!(k1, k2);
     }
-    */
 
     #[test]
     fn test_fpake_api() {
