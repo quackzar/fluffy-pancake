@@ -964,6 +964,34 @@ mod tests {
         assert_eq!(k1, k2);
     }
 
+    #[test]
+    fn test_masking_circuit() {
+        use rand::Rng;
+        let rng = &mut rand::thread_rng();
+        let p0 : [bool; 16] = rng.gen();
+        let p1 : [bool; 16] = p0.clone();
+
+        let mask : [bool; 16] = rng.gen();
+
+        let masked_p0 : [bool; 16] = itertools::izip!(p0, mask.clone())
+            .map(|(a,b)| a^b)
+            .collect::<Vec<bool>>()
+            .try_into().unwrap();
+
+        let circuit = build_circuit_v3(16, 1);
+        let (gc, enc, dec) = garble(&circuit);
+
+        let input = &[p1, masked_p0, mask].concat();
+        let enc =  BinaryEncodingKey::from(enc);
+        let input = enc.encode(input);
+        let res = evaluate(&gc, &input);
+        let res = decode(&dec, &res).unwrap();
+
+        println!("{:?}", res);
+        assert!(res[0], 1);
+
+    }
+
     /* TODO: Uncomment!
     #[test]
     fn test_fpake_one_of_many_v2() {
