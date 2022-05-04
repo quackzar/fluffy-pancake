@@ -726,14 +726,13 @@ impl OneOfManyKey {
         // 3. Mask all server passwords and get encoding of mask
         instrument::begin("Generate mask", E_COMP_COLOR);
         let mut mask = vec![0u8; password_bytes];
-        //random_bytes(&mut mask);
-        mask[0] = 0x01;
+        random_bytes(&mut mask);
 
         let mut mask_choices = vec![false; password_bits];
         for i in 0..password_bytes {
             let byte = mask[i];
             for b in 0..8 {
-                let choice = ((byte >> i) & 1) == 1;
+                let choice = ((byte >> b) & 1) == 1;
                 mask_choices[i * 8 + b] = choice;
             }
         }
