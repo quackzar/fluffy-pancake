@@ -28,12 +28,12 @@ pub fn coinflip_sender<const N: usize>((s, r): &Channel<Vec<u8>>) -> Result<[u8;
     let mut rng = rand::thread_rng();
     let v: [u8; N] = rng.gen();
     let commit = hash!(v);
-    s.send(commit.to_vec())?;
-    let u = r.recv()?;
+    s.send_raw(&commit.to_vec())?;
+    let u = r.recv_raw()?;
     if u.len() != N {
         return Err(CoinFlipError::WrongMessageLength.into());
     }
-    s.send(v.to_vec())?;
+    s.send_raw(&v.to_vec())?;
     let mut w = [0u8; N];
     for i in 0..N {
         // You could vectorize this more but I'm not sure it's worth it.
@@ -49,9 +49,9 @@ pub fn coinflip_sender<const N: usize>((s, r): &Channel<Vec<u8>>) -> Result<[u8;
 pub fn coinflip_receiver<const N: usize>((s, r): &Channel<Vec<u8>>) -> Result<[u8; N], Error> {
     let mut rng = rand::thread_rng();
     let u: [u8; N] = rng.gen();
-    let commit = r.recv()?;
-    s.send(u.to_vec())?;
-    let v = r.recv()?;
+    let commit = r.recv_raw()?;
+    s.send_raw(&u.to_vec())?;
+    let v = r.recv_raw()?;
     if v.len() != N {
         return Err(CoinFlipError::WrongMessageLength.into());
     }
