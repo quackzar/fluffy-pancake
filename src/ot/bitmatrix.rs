@@ -17,7 +17,7 @@ use rayon::prelude::IntoParallelIterator;
 // BitMatrix and BitVector
 use serde::{Deserialize, Serialize};
 
-pub type Block = u64;
+pub type Block = u8;
 pub const BLOCK_SIZE: usize = mem::size_of::<Block>() * 8;
 
 #[repr(transparent)]

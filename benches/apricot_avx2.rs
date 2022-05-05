@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},
@@ -7,7 +7,6 @@ use magic_pake::{
 };
 
 use std::thread;
-
 
 fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
     use magic_pake::ot::chou_orlandi::{OTReceiver, OTSender};
@@ -57,7 +56,9 @@ fn bench(c: &mut Criterion) {
             .collect();
         let choices = vec![false; n];
         group.throughput(criterion::Throughput::Elements(i));
-        group.bench_with_input(BenchmarkId::from_parameter(i), &i, |b, _| b.iter(|| run_ot(enc.clone(), choices.clone())));
+        group.bench_with_input(BenchmarkId::from_parameter(i), &i, |b, _| {
+            b.iter(|| run_ot(enc.clone(), choices.clone()))
+        });
     }
 
     // TODO: LAN

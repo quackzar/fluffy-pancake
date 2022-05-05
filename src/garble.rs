@@ -431,17 +431,20 @@ mod tests {
     fn sum_consecutive_circuit() {
         let domain = 128;
         let circuit = Circuit {
-            gates: vec![Gate {
-                kind: GateKind::Add,
-                inputs: vec![0, 1],
-                output: 3,
-                domain,
-            }, Gate {
-                kind: GateKind::Add,
-                inputs: vec![2, 3],
-                output: 4,
-                domain,
-            }],
+            gates: vec![
+                Gate {
+                    kind: GateKind::Add,
+                    inputs: vec![0, 1],
+                    output: 3,
+                    domain,
+                },
+                Gate {
+                    kind: GateKind::Add,
+                    inputs: vec![2, 3],
+                    output: 4,
+                    domain,
+                },
+            ],
             num_inputs: 3,
             num_outputs: 1,
             num_wires: 5,
