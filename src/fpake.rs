@@ -70,71 +70,6 @@ pub fn build_circuit_v2(bitsize: usize, threshold: u16) -> Circuit {
     let comparison_domain = bitsize as u16 + 1;
     let bitdomain = 2;
 
-    // xor: unmask
-    for i in 0..bitsize {
-        let gate = Gate {
-            inputs: vec![i, i + bitsize],
-            output: i + 3 * bitsize,
-            kind: GateKind::Add,
-            domain: bitdomain,
-        };
-        gates.push(gate);
-    }
-
-    // xor: compare
-    for i in 0..bitsize {
-        let gate = Gate {
-            inputs: vec![i + 2 * bitsize, i + 3 * bitsize],
-            output: i + 4 * bitsize,
-            kind: GateKind::Add,
-            domain: bitdomain,
-        };
-        gates.push(gate);
-    }
-
-    // proj gates
-    for i in 0..bitsize {
-        let gate = Gate {
-            inputs: vec![i + 4 * bitsize],
-            output: i + 5 * bitsize,
-            kind: GateKind::Proj(ProjKind::Map(comparison_domain)),
-            domain: bitdomain,
-        };
-        gates.push(gate);
-    }
-
-    // sum
-    let gate = Gate {
-        kind: GateKind::Add,
-        inputs: (5 * bitsize..6 * bitsize).collect(),
-        output: 6 * bitsize,
-        domain: comparison_domain,
-    };
-    gates.push(gate);
-
-    // comparison
-    let gate = Gate {
-        kind: GateKind::Proj(ProjKind::Less(threshold + 1)),
-        inputs: vec![6 * bitsize],
-        output: 6 * bitsize + 1,
-        domain: comparison_domain,
-    };
-    gates.push(gate);
-    Circuit {
-        gates,
-        num_inputs: bitsize * 3,
-        num_outputs: 1,
-        num_wires: 6 * bitsize + 2,
-        input_domains: vec![bitdomain; bitsize * 3],
-    }
-}
-
-// Inputs for the circuit: masked password, mask, other password
-pub fn build_circuit_v3(bitsize: usize, threshold: u16) -> Circuit {
-    let mut gates: Vec<Gate> = Vec::new();
-    let comparison_domain = bitsize as u16 + 1;
-    let bitdomain = 2;
-
     // xor: unmask & compare
     for i in 0..bitsize {
         let gate = Gate {
@@ -631,7 +566,7 @@ impl OneOfManyKey {
 
         // 1. Garble the circuit and encode our password
         instrument::begin("Build circuit", E_COMP_COLOR);
-        let circuit = build_circuit_v3(password_bits, threshold);
+        let circuit = build_circuit_v2(password_bits, threshold);
         instrument::end();
 
         instrument::begin("Garble circuit", E_PROT_COLOR);
@@ -1024,7 +959,7 @@ mod tests {
             .collect::<Vec<bool>>()
             .try_into().unwrap();
 
-        let circuit = build_circuit_v3(16, 1);
+        let circuit = build_circuit_v2(16, 1);
         let (gc, enc, dec) = garble(&circuit);
 
         let input = &[p1, masked_p0, mask].concat();
