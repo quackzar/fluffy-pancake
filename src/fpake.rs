@@ -152,12 +152,12 @@ impl HalfKey {
         let (s, _) = ch;
 
         // send garbled circuit.
-        s.send(bincode::serialize(&gc)?)?;
+        s.send_raw(&bincode::serialize(&gc)?)?;
 
         let e_own = BinaryEncodingKey::unzipped(&e_own);
         let enc_password = e_own.encode(&password);
         // send garbled password.
-        s.send(bincode::serialize(&enc_password)?)?;
+        s.send_raw(&bincode::serialize(&enc_password)?)?;
 
         instrument::end();
         Ok(Self(d.hashes[0][1]))
@@ -181,9 +181,9 @@ impl HalfKey {
 
         let our_password = enc_password;
         // receive garbled circuit.
-        let gc = bincode::deserialize(&r.recv()?)?;
+        let gc = bincode::deserialize(&r.recv_raw()?)?;
         // receive garbled password.
-        let their_password: Vec<Wire> = bincode::deserialize(&r.recv()?)?;
+        let their_password: Vec<Wire> = bincode::deserialize(&r.recv_raw()?)?;
 
         // eval circuit
         let mut input = Vec::<Wire>::new();
@@ -241,7 +241,7 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("Send garbled circuit", E_SEND_COLOR);
-        s.send(bincode::serialize(&gc)?)?;
+        s.send_raw(&bincode::serialize(&gc)?)?;
         instrument::end();
 
         // 2. Use regular OT to get the encoded password for the server
@@ -316,7 +316,7 @@ impl OneOfManyKey {
 
         // 1. Receive the garbled circuit from the other party
         instrument::begin("Receive gc", E_RECV_COLOR);
-        let gc = bincode::deserialize(&r.recv()?)?;
+        let gc = bincode::deserialize(&r.recv_raw()?)?;
         instrument::end();
 
         // 2. Respond to the OT challenge for the encoding of our copy of the key
@@ -398,7 +398,7 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("Send garbled circuit", E_SEND_COLOR);
-        s.send(bincode::serialize(&gc)?)?;
+        s.send_raw(&bincode::serialize(&gc)?)?;
         instrument::end();
 
         // 2. OT for encoding of client password
@@ -504,7 +504,7 @@ impl OneOfManyKey {
 
         // 1. Receive the garbled circuit from the other party
         instrument::begin("Receive garbled circuit", E_RECV_COLOR);
-        let gc = bincode::deserialize(&r.recv()?)?;
+        let gc = bincode::deserialize(&r.recv_raw()?)?;
         instrument::end();
 
         // 2. OT Encoding of client password
@@ -632,11 +632,11 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("Send garbled circuit", E_SEND_COLOR);
-        sender.send(bincode::serialize(&gc)?)?;
+        sender.send_raw(&bincode::serialize(&gc)?)?;
         instrument::end();
 
         instrument::begin("Send encoded password", E_SEND_COLOR);
-        sender.send(bincode::serialize(&encoded_password)?)?;
+        sender.send_raw(&bincode::serialize(&encoded_password)?)?;
         instrument::end();
 
         // We now need to do a series of OTs for each possible password in the database for the so
@@ -711,11 +711,11 @@ impl OneOfManyKey {
 
         // 1. Get the garbled circuit and input from the client
         instrument::begin("Receive garbled circuit", E_RECV_COLOR);
-        let gc = bincode::deserialize(&r.recv()?)?;
+        let gc = bincode::deserialize(&r.recv_raw()?)?;
         instrument::end();
 
         instrument::begin("Receive encoded client password", E_RECV_COLOR);
-        let input_encoding: Vec<Wire> = bincode::deserialize(&r.recv()?)?;
+        let input_encoding: Vec<Wire> = bincode::deserialize(&r.recv_raw()?)?;
         instrument::end();
 
         instrument::begin("Build vec of choices", E_COMP_COLOR);
@@ -811,11 +811,11 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("Send garbled circuit", E_SEND_COLOR);
-        sender.send(bincode::serialize(&gc)?)?;
+        sender.send_raw(&bincode::serialize(&gc)?)?;
         instrument::end();
 
         instrument::begin("Send encoded password", E_SEND_COLOR);
-        sender.send(bincode::serialize(&garbler_input)?)?;
+        sender.send_raw(&bincode::serialize(&garbler_input)?)?;
         instrument::end();
 
         // 2. OT Encoding of the mask
@@ -877,11 +877,11 @@ impl OneOfManyKey {
 
         // 1. Get the garbled circuit and input from the client
         instrument::begin("Receive garbled circuit", E_RECV_COLOR);
-        let gc = bincode::deserialize(&r.recv()?)?;
+        let gc = bincode::deserialize(&r.recv_raw()?)?;
         instrument::end();
 
         instrument::begin("Receive encoded client password", E_RECV_COLOR);
-        let client_encoding: Vec<Wire> = bincode::deserialize(&r.recv()?)?;
+        let client_encoding: Vec<Wire> = bincode::deserialize(&r.recv_raw()?)?;
         instrument::end();
 
         // 3. Mask all server passwords and get encoding of mask
