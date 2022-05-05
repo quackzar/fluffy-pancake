@@ -56,7 +56,7 @@ impl ObliviousSender for OTSender {
         // round 2
         let n = msg.0.len();
         let pb = (0..n)
-            .map(|_| r.recv_raw().unwrap() )
+            .map(|_| r.recv_raw().unwrap())
             .map(|p| CompressedEdwardsY::from_slice(&p))
             .collect();
         let pb = Public(pb);
@@ -64,7 +64,7 @@ impl ObliviousSender for OTSender {
         // round 3
         let their_public = &pb;
         assert!(publics.0.len() == their_public.0.len());
-        let payload : Vec<_> = msg
+        let payload: Vec<_> = msg
             .0
             .par_iter()
             .enumerate()
@@ -152,7 +152,7 @@ impl ObliviousReceiver for OTReceiver {
 
         // round 3
         let payload = r.recv_raw()?;
-        let payload : EncryptedPayload = bincode::deserialize(&payload)?;
+        let payload: EncryptedPayload = bincode::deserialize(&payload)?;
 
         let msg = payload
             .0
@@ -169,7 +169,6 @@ impl ObliviousReceiver for OTReceiver {
             .collect();
 
         Ok(msg)
-
     }
 }
 
@@ -271,7 +270,6 @@ mod tests {
         h1.join().unwrap();
         h2.join().unwrap();
     }
-
 
     #[allow(non_snake_case)]
     #[test]

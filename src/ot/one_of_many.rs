@@ -70,13 +70,22 @@ impl ManyOTSender {
 
                 for j in 0..domain {
                     let bit = (i >> j) & 1;
-                    fk(&keys[j as usize][bit as usize], i as u32, byte_length, &mut hash);
+                    fk(
+                        &keys[j as usize][bit as usize],
+                        i as u32,
+                        byte_length,
+                        &mut hash,
+                    );
                     xor_bytes_inplace(y_value, &hash);
                 }
             }
         } else {
             let desired_thread_count = num_cpus::get();
-            let actual_thread_count = if domain_max <= desired_thread_count { domain_max as usize } else { desired_thread_count };
+            let actual_thread_count = if domain_max <= desired_thread_count {
+                domain_max as usize
+            } else {
+                desired_thread_count
+            };
             debug_assert_eq!(0, domain_max % actual_thread_count);
 
             let rows_in_chunk = domain_max / actual_thread_count;
@@ -100,7 +109,12 @@ impl ManyOTSender {
 
                             for j in 0..domain {
                                 let bit = (domain_index >> j) & 1;
-                                fk(&keys[j as usize][bit as usize], domain_index as u32, byte_length, &mut hash);
+                                fk(
+                                    &keys[j as usize][bit as usize],
+                                    domain_index as u32,
+                                    byte_length,
+                                    &mut hash,
+                                );
                                 xor_bytes_inplace(y_value, &hash);
                             }
                         }

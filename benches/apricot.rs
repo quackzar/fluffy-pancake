@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},
@@ -55,7 +55,9 @@ fn bench(c: &mut Criterion) {
             .collect();
         let choices = vec![false; n];
         group.throughput(criterion::Throughput::Elements(i));
-        group.bench_with_input(BenchmarkId::from_parameter(i), &i, |b, _| b.iter(|| run_ot(enc.clone(), choices.clone())));
+        group.bench_with_input(BenchmarkId::from_parameter(i), &i, |b, _| {
+            b.iter(|| run_ot(enc.clone(), choices.clone()))
+        });
     }
 
     // TODO: LAN

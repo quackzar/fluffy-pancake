@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ductile::new_local_channel;
 use magic_pake::fpake::*;
 use std::thread;
@@ -137,7 +137,9 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
         group.bench_with_input(
             //&format!("2048-bit ({} passwords)", number_of_passwords),
             BenchmarkId::from_parameter(i),
-            &i, |b, _| b.iter(|| {
+            &i,
+            |b, _| {
+                b.iter(|| {
                     let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
                     let passwords_2 = passwords.clone();
                     let index = 1;
@@ -153,7 +155,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
                     let h1 = thread::spawn(move || {
                         // Party 1
-                        let k1 = OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1).unwrap();
+                        let k1 =
+                            OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1).unwrap();
                         let k2 = OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
@@ -180,7 +183,9 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
                     let _k1 = h1.join().unwrap();
                     let _k2 = h2.join().unwrap();
-                }));
+                })
+            },
+        );
     }
 
     group.finish();

@@ -19,7 +19,6 @@ impl Polynomial {
     pub fn mul_add_assign(&mut self, a: &Self, b: &Self) {
         gf128_mul_acc(&mut self.0, &a.0, &b.0);
     }
-
 }
 
 impl From<BitVector> for Polynomial {

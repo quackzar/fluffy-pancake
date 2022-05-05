@@ -866,7 +866,9 @@ mod tests {
                 for i in 0..CASES {
                     if choices[i] {
                         assert_eq!(
-                            (0xFFFF_FFFF_FFFF_FFFF_u64 - i as u64).to_be_bytes().to_vec(),
+                            (0xFFFF_FFFF_FFFF_FFFF_u64 - i as u64)
+                                .to_be_bytes()
+                                .to_vec(),
                             msg[i]
                         );
                     } else {

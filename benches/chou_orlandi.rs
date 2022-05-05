@@ -50,7 +50,9 @@ fn bench(c: &mut Criterion) {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
         let choices = vec![false; n];
-        group.bench_with_input(&name, &i, |b, _| b.iter(|| run_ot(enc.clone(), choices.clone())));
+        group.bench_with_input(&name, &i, |b, _| {
+            b.iter(|| run_ot(enc.clone(), choices.clone()))
+        });
     }
 
     // TODO: LAN

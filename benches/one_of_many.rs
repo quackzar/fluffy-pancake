@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::ot::one_of_many::*;
 use magic_pake::util::SECURITY_PARAM;
 
