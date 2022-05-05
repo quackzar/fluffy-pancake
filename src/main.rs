@@ -1,40 +1,39 @@
-use ductile::new_local_channel;
-use magic_pake::fpake::OneOfManyKey;
-use std::thread;
+use clap::Parser;
+use ductile::connect_channel;
+use magic_pake::common::Channel;
+use magic_pake::fpake::HalfKey;
+
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Address of where to connect.
+    #[clap(short, long, default_value="localhost:8080")]
+    address: String,
+
+    #[clap(short, long)]
+    server: bool,
+
+    #[clap(short, long)]
+    oblivous: bool,
+
+    #[clap(short, long)]
+    password: Vec<u8>,
+
+    #[clap(short, long)]
+    threadshold: u16,
+}
 
 fn main() {
-    let number_of_passwords = 1 << 13;
-    let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
-    let passwords_2 = passwords.clone();
-    let index = 1;
-    let password = passwords[index as usize].clone();
-    let password_2 = password.clone();
-    let threshold = 0;
-
-    // Do the thing
-    let (s1, r1) = new_local_channel();
-    let (s2, r2) = new_local_channel();
-    let ch1 = (s2, r1);
-    let ch2 = (s1, r2);
-
-    let h1 = thread::spawn(move || {
-        // Party 1
-        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-        let k2 = OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
-        k1.combine(k2);
-    });
-
-    let h2 = thread::spawn(move || {
-        // Party 1
-        let k1 =
-            OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
-
-        let k2 =
-            OneOfManyKey::garbler_client_v2(&password, index, number_of_passwords, threshold, &ch2)
-                .unwrap();
-        k1.combine(k2);
-    });
-
-    let _k1 = h1.join().unwrap();
-    let _k2 = h2.join().unwrap();
+    let args = Args::parse();
+    let ch : Channel<Vec<u8>> = connect_channel(args.address).unwrap();
+    if args.server {
+        let hk1 = HalfKey::garbler(&args.password, args.threadshold, &ch).unwrap();
+        let hk2 = HalfKey::evaluator(&args.password, &ch).unwrap();
+        println!("Derived Key: {:?}", hk1.combine(hk2));
+    } else {
+        let hk2 = HalfKey::evaluator(&args.password, &ch).unwrap();
+        let hk1 = HalfKey::garbler(&args.password, args.threadshold, &ch).unwrap();
+        println!("Derived Key: {:?}", hk1.combine(hk2));
+    }
 }
