@@ -42,147 +42,86 @@ fn bench_fpake(c: &mut Criterion) {
     group.finish();
 }
 
+const ITERATIONS: u32 = 16;
 fn bench_fpake_one_of_many(c: &mut Criterion) {
-    let mut group = c.benchmark_group("fPAKE One of Many");
+    let mut group = c.benchmark_group("One-of-many fPAKE v1,v1");
     group.sample_size(10);
-
-    for i in 8..=15u32 {
+    for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
-        // garbler server, evaluator client
-        /*
-        group.bench_function(
-            &format!(
-                "2048-bit ({} passwords) - garbler client",
-                number_of_passwords
-            ),
-            |b| {
-                b.iter(|| {
-                    let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
-                    let passwords_2 = passwords.clone();
-                    let index = 1;
-                    let password = passwords[index as usize].clone();
-                    let threshold = 0;
+        group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(number_of_passwords), &number_of_passwords, |b, _| b.iter(|| {
+            let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
+            let passwords_2 = passwords.clone();
+            let index = 1;
+            let password = passwords[index as usize].clone();
+            let password_2 = password.clone();
+            let threshold = 0;
 
-                    // Do the thing
-                    let (s1, r1) = new_local_channel();
-                    let (s2, r2) = new_local_channel();
-                    let ch1 = (s2, r1);
-                    let ch2 = (s1, r2);
+            // Do the thing
+            let (s1, r1) = new_local_channel();
+            let (s2, r2) = new_local_channel();
+            let ch1 = (s2, r1);
+            let ch2 = (s1, r2);
 
-                    let h1 = thread::spawn(move || {
-                        let _ = OneOfManyKey::garbler_client(
-                            &password,
-                            index,
-                            number_of_passwords,
-                            threshold,
-                            &ch1,
-                        ).unwrap();
-                    });
+            let h1 = thread::spawn(move || {
+                // Party 1
+                let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
+                let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
+                k1.combine(k2);
+            });
 
-                    let h2 = thread::spawn(move || {
-                        let _ = OneOfManyKey::evaluator_server(&passwords_2, &ch2).unwrap();
-                    });
+            let h2 = thread::spawn(move || {
+                // Party 1
+                let k1 = OneOfManyKey::evaluator_client(&password_2, number_of_passwords, index, &ch2).unwrap();
+                let k2 = OneOfManyKey::garbler_client(&password, index, number_of_passwords, threshold, &ch2).unwrap();
+                k1.combine(k2);
+            });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
-                })
-            },
-        );
-
-        // garbler client, evaluator server
-        group.bench_function(
-            &format!(
-                "2048-bit ({} passwords) - garbler server",
-                number_of_passwords
-            ),
-            |b| {
-                b.iter(|| {
-                    let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
-                    let index = 1;
-                    let password = passwords[index as usize].clone();
-                    let password_2 = password.clone();
-                    let threshold = 0;
-
-                    // Do the thing
-                    let (s1, r1) = new_local_channel();
-                    let (s2, r2) = new_local_channel();
-                    let ch1 = (s2, r1);
-                    let ch2 = (s1, r2);
-
-                    let h1 = thread::spawn(move || {
-                        // Party 1
-                        let _ = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-                    });
-
-                    let h2 = thread::spawn(move || {
-                        // Party 1
-                        let _ = OneOfManyKey::evaluator_client(
-                            &password_2,
-                            number_of_passwords,
-                            index,
-                            &ch2,
-                        ).unwrap();
-                    });
-
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
-                })
-            },
-        );
-        */
-
-        // Both parts
-        group.throughput(criterion::Throughput::Elements(i as u64));
-        group.bench_with_input(
-            //&format!("2048-bit ({} passwords)", number_of_passwords),
-            BenchmarkId::from_parameter(i),
-            &i, |b, _| b.iter(|| {
-                    let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
-                    let passwords_2 = passwords.clone();
-                    let index = 1;
-                    let password = passwords[index as usize].clone();
-                    let password_2 = password.clone();
-                    let threshold = 0;
-
-                    // Do the thing
-                    let (s1, r1) = new_local_channel();
-                    let (s2, r2) = new_local_channel();
-                    let ch1 = (s2, r1);
-                    let ch2 = (s1, r2);
-
-                    let h1 = thread::spawn(move || {
-                        // Party 1
-                        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-                        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
-                        k1.combine(k2);
-                    });
-
-                    let h2 = thread::spawn(move || {
-                        // Party 1
-                        let k1 = OneOfManyKey::evaluator_client(
-                            &password_2,
-                            number_of_passwords,
-                            index,
-                            &ch2,
-                        )
-                        .unwrap();
-                        let k2 = OneOfManyKey::garbler_client(
-                            &password,
-                            index,
-                            number_of_passwords,
-                            threshold,
-                            &ch2,
-                        )
-                        .unwrap();
-                        k1.combine(k2);
-                    });
-
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
-                }));
+            let _k1 = h1.join().unwrap();
+            let _k2 = h2.join().unwrap();
+        }));
     }
+    group.finish();
 
+    let mut group = c.benchmark_group("One-of-many fPAKE v2,v2");
+    group.sample_size(10);
+    for i in 8..=ITERATIONS {
+        let number_of_passwords = (1 << i) as u32;
+
+        group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(number_of_passwords), &number_of_passwords, |b, _| b.iter(|| {
+            let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
+            let passwords_2 = passwords.clone();
+            let index = 1;
+            let password = passwords[index as usize].clone();
+            let password_2 = password.clone();
+            let threshold = 0;
+
+            // Do the thing
+            let (s1, r1) = new_local_channel();
+            let (s2, r2) = new_local_channel();
+            let ch1 = (s2, r1);
+            let ch2 = (s1, r2);
+
+            let h1 = thread::spawn(move || {
+                // Party 1
+                let k1 = OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1).unwrap();
+                let k2 = OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
+                k1.combine(k2);
+            });
+
+            let h2 = thread::spawn(move || {
+                // Party 1
+                let k1 = OneOfManyKey::evaluator_client_v2(&password_2, number_of_passwords, index, &ch2).unwrap();
+                let k2 = OneOfManyKey::garbler_client_v2(&password, index, number_of_passwords, threshold, &ch2).unwrap();
+                k1.combine(k2);
+            });
+
+            let _k1 = h1.join().unwrap();
+            let _k2 = h2.join().unwrap();
+        }));
+    }
     group.finish();
 }
 
