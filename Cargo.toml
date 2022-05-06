@@ -59,7 +59,3 @@ harness = false
 [[bench]]
 name = "fpake"
 harness = false
-
-[[bench]]
-name = "polynomial"
-harness = false
