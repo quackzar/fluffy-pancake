@@ -187,26 +187,55 @@ internal static class Program
         // Generate plots for each group
         foreach (var group in groups.Values)
         {
-            var plotFileName = Path.Combine(plotsFolder, NormalizeName(group.Name) + ".plt");
-            using var plotFile = File.CreateText(plotFileName);
+            var entry = group.Benchmarks.Values.First().Entries.First();
             
-            plotFile.WriteLine(@"set timestamp");
-            plotFile.WriteLine(@$"set title ""{group.Name}""");
-            plotFile.WriteLine(@"set key default");
-            plotFile.WriteLine(@"set xlabel ""Runtime (ms)""");
-            plotFile.WriteLine(@"set logscale x 2");
-            plotFile.WriteLine(@$"set ylabel ""Number of X""");
-            plotFile.WriteLine(@"set logscale y 2");
-            plotFile.WriteLine();
+            // Time plot
+            {
+                var plotFileName = Path.Combine(plotsFolder, NormalizeName(group.Name) + ".plt");
+                using var plotFile = File.CreateText(plotFileName);
 
-            var benches = group.Benchmarks.Values.AsEnumerable();
-            var plotFiles = from bench in benches
-                                           let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile)
-                                           select @$"""{relativePath}"" title ""{bench.Name}"" with lines";
-            var plotLine = string.Join(',', plotFiles);
-            plotFile.WriteLine(@"plot " + plotLine);
+                plotFile.WriteLine(@"set timestamp");
+                plotFile.WriteLine(@$"set title ""{group.Name}""");
+                plotFile.WriteLine(@"set key default");
+                plotFile.WriteLine(@$"set xlabel ""Number of {entry.ElementUnit}s""");
+                plotFile.WriteLine(@"set logscale x 2");
+                plotFile.WriteLine(@$"set ylabel ""Runtime (ms)""");
+                plotFile.WriteLine(@"set logscale y 2");
+                plotFile.WriteLine();
+
+                var benches = group.Benchmarks.Values.AsEnumerable();
+                var plotFiles = from bench in benches
+                    let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile)
+                    select @$"""{relativePath}"" using 1:2 title ""{bench.Name}"" with lines";
+                var plotLine = string.Join(',', plotFiles);
+                plotFile.WriteLine(@"plot " + plotLine);
+
+                plotFile.Close();
+            }
             
-            plotFile.Close();
+            // Throughput plot
+            {
+                var plotFileName = Path.Combine(plotsFolder, NormalizeName(group.Name) + "_throughput.plt");
+                using var plotFile = File.CreateText(plotFileName);
+
+                plotFile.WriteLine(@"set timestamp");
+                plotFile.WriteLine(@$"set title ""{group.Name}""");
+                plotFile.WriteLine(@"set key default");
+                plotFile.WriteLine(@$"set xlabel ""Number of {entry.ElementUnit}s""");
+                plotFile.WriteLine(@"set logscale x 2");
+                plotFile.WriteLine(@$"set ylabel ""Throughput in {entry.ElementUnit}/s""");
+                plotFile.WriteLine(@"set logscale y 2");
+                plotFile.WriteLine();
+
+                var benches = group.Benchmarks.Values.AsEnumerable();
+                var plotFiles = from bench in benches
+                    let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile)
+                    select @$"""{relativePath}"" using 1:3 title ""{bench.Name}"" with lines";
+                var plotLine = string.Join(',', plotFiles);
+                plotFile.WriteLine(@"plot " + plotLine);
+
+                plotFile.Close();
+            }
         }
         
         // Write aggregated results to the console
