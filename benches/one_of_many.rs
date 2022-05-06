@@ -6,7 +6,7 @@ fn log2(x: u32) -> u32 {
     ((std::mem::size_of::<u32>() * 8) as u32 - (x - 1).leading_zeros()) as u32
 }
 
-fn one_of_many_local(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
+fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
     let choice = n / 2;
 
     let (s1, r1) = ductile::new_local_channel();
@@ -41,8 +41,7 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
     let mut group = c.benchmark_group("1-to-n OT");
     group.sample_size(10);
 
-    // Local
-    for i in 1..=16u32 {
+    for i in 2..=20u32 {
         let n = 1 << i;
         let domain = log2(n);
 
@@ -51,17 +50,13 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
             messages.push(vec![0u8; 2048 * (SECURITY_PARAM / 8)]);
         }
 
-        group.throughput(criterion::Throughput::Elements(i as u64));
-        //group.bench_with_input(&format!("Local 1-to-{}", n), &i, |b, _| {
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, _| {
+        group.throughput(criterion::Throughput::Elements(n as u64));
+        group.bench_with_input(BenchmarkId::new("Chou-Orlandi", n), &n, |b, _| {
             b.iter(|| {
-                one_of_many_local(n, domain, messages.clone());
+                one_of_many_chour_orlandi(n, domain, messages.clone());
             })
         });
     }
-
-    // TODO: LAN
-    // TODO: WAN
 
     group.finish();
 }

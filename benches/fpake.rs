@@ -1,10 +1,12 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use ductile::new_local_channel;
 use magic_pake::fpake::*;
 use std::thread;
 
-fn fpake(password: &'static [u8]) {
+fn fpake(password_size: usize) {
     let threshold = 0;
+    let password1 = vec![42u8; password_size];
+    let password2 = vec![42u8; password_size];
 
     let (s1, r1) = new_local_channel();
     let (s2, r2) = new_local_channel();
@@ -12,15 +14,15 @@ fn fpake(password: &'static [u8]) {
     let ch2 = (s1, r2);
     let h1 = thread::spawn(move || {
         // Party 1
-        let k1 = HalfKey::garbler(password, threshold, &ch1).unwrap();
-        let k2 = HalfKey::evaluator(password, &ch1).unwrap();
+        let k1 = HalfKey::garbler(&password1, threshold, &ch1).unwrap();
+        let k2 = HalfKey::evaluator(&password1, &ch1).unwrap();
         k1.combine(k2)
     });
 
     let h2 = thread::spawn(move || {
         // Party 2
-        let k2 = HalfKey::evaluator(password, &ch2).unwrap();
-        let k1 = HalfKey::garbler(password, threshold, &ch2).unwrap();
+        let k2 = HalfKey::evaluator(&password2, &ch2).unwrap();
+        let k1 = HalfKey::garbler(&password2, threshold, &ch2).unwrap();
         k1.combine(k2)
     });
 
@@ -32,26 +34,31 @@ fn bench_fpake(c: &mut Criterion) {
     let mut group = c.benchmark_group("fPAKE");
     group.sample_size(10);
 
-    group.bench_function("64-bit password", |b| b.iter(|| fpake(&[42u8; 8])));
-    group.bench_function("128-bit password", |b| b.iter(|| fpake(&[42u8; 16])));
-    group.bench_function("256-bit password", |b| b.iter(|| fpake(&[42u8; 32])));
-    group.bench_function("512-bit password", |b| b.iter(|| fpake(&[42u8; 64])));
-    group.bench_function("1024-bit password", |b| b.iter(|| fpake(&[42u8; 128])));
-    group.bench_function("2048-bit password", |b| b.iter(|| fpake(&[42u8; 256])));
+    for i in 6..=12 {
+        let bits = 1 << i;
+        let bytes = bits / 8;
+
+        group.throughput(Throughput::Bytes(bytes as u64));
+        let id = BenchmarkId::new("Password", bits);
+        group.bench_with_input(id, &bits, |b, _| b.iter(|| fpake(bytes)));
+    }
 
     group.finish();
 }
 
-const ITERATIONS: u32 = 16;
+const ITERATIONS: u32 = 14;
 fn bench_fpake_one_of_many(c: &mut Criterion) {
-    let mut group = c.benchmark_group("One-of-many fPAKE v1,v1");
+    let mut group = c.benchmark_group("One-of-many fPAKE");
     group.sample_size(10);
+
+    // v1, v1
     for i in 8..=15u32 {
+    //for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
         group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(number_of_passwords),
+            BenchmarkId::new("v1,v1", number_of_passwords),
             &number_of_passwords,
             |b, _| {
                 b.iter(|| {
@@ -101,15 +108,14 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
             },
         );
     }
-    group.finish();
 
-    let mut group = c.benchmark_group("One-of-many fPAKE v2,v1");
-    group.sample_size(10);
+    // v2, v1
     for i in 8..=15u32 {
+    //for i in 8..=ITERATIONSu32 {
         let number_of_passwords = (1 << i) as u32;
 
         group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(number_of_passwords), &number_of_passwords, |b, _| b.iter(|| {
+        group.bench_with_input(BenchmarkId::new("v2,v1", number_of_passwords), &number_of_passwords, |b, _| b.iter(|| {
             let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
             let passwords_2 = passwords.clone();
             let index = 1;
@@ -141,15 +147,14 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
             let _k2 = h2.join().unwrap();
         }));
     }
-    group.finish();
 
-    let mut group = c.benchmark_group("One-of-many fPAKE v1,v2");
-    group.sample_size(10);
+    // v1,v2
     for i in 8..=22u32 {
+    //for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
         group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(number_of_passwords), &number_of_passwords, |b, _| b.iter(|| {
+        group.bench_with_input(BenchmarkId::new("v1,v2", number_of_passwords), &number_of_passwords, |b, _| b.iter(|| {
             let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
             let passwords_2 = passwords.clone();
             let index = 1;
@@ -181,16 +186,15 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
             let _k2 = h2.join().unwrap();
         }));
     }
-    group.finish();
 
-    let mut group = c.benchmark_group("One-of-many fPAKE v2,v2");
-    group.sample_size(10);
+    // v2,v2
     for i in 8..=22u32 {
+    //for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
         group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(number_of_passwords),
+            BenchmarkId::new("v2,v2", number_of_passwords),
             &number_of_passwords,
             |b, _| {
                 b.iter(|| {
@@ -244,5 +248,5 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_fpake_one_of_many, bench_fpake);
+criterion_group!(benches, bench_fpake, bench_fpake_one_of_many);
 criterion_main!(benches);

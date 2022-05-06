@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},
@@ -34,13 +34,12 @@ fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
 }
 
 fn bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Chou-Orlandi OT");
+    let mut group = c.benchmark_group("OT");
     group.sample_size(10);
 
     // Local
-    for i in 1..=24 {
+    for i in 1..=20 {
         let n = 1 << i;
-        let name: String = format!("Local, {} messages", n);
         let circuit = build_circuit(n / 2, 0);
         let (_, enc, _) = garble::garble(&circuit);
         let enc = BinaryEncodingKey::from(enc);
@@ -50,7 +49,9 @@ fn bench(c: &mut Criterion) {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
         let choices = vec![false; n];
-        group.bench_with_input(&name, &i, |b, _| {
+
+        group.throughput(criterion::Throughput::Elements(n as u64));
+        group.bench_with_input(BenchmarkId::new("Chou-Orlandi", n), &i, |b, _| {
             b.iter(|| run_ot(enc.clone(), choices.clone()))
         });
     }

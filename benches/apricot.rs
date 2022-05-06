@@ -38,11 +38,11 @@ fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
 }
 
 fn bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Apricot");
+    let mut group = c.benchmark_group("OT");
     group.sample_size(10);
 
     // Local
-    for i in 8..=24 {
+    for i in 8..=20 {
         let n = 1 << i;
         //let name: String = format!("Local, {} messages", n);
         let circuit = build_circuit(n / 2, 0);
@@ -54,8 +54,9 @@ fn bench(c: &mut Criterion) {
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
         let choices = vec![false; n];
-        group.throughput(criterion::Throughput::Elements(i));
-        group.bench_with_input(BenchmarkId::from_parameter(i), &i, |b, _| {
+
+        group.throughput(criterion::Throughput::Elements(n as u64));
+        group.bench_with_input(BenchmarkId::new("Apricot", n), &n, |b, _| {
             b.iter(|| run_ot(enc.clone(), choices.clone()))
         });
     }
