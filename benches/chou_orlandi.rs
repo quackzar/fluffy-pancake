@@ -38,7 +38,7 @@ fn bench(c: &mut Criterion) {
     group.sample_size(10);
 
     // Local
-    for i in 1..=20 {
+    for i in 1..=18 {
         let n = 1 << i;
         let circuit = build_circuit(n / 2, 0);
         let (_, enc, _) = garble::garble(&circuit);
@@ -55,9 +55,6 @@ fn bench(c: &mut Criterion) {
             b.iter(|| run_ot(enc.clone(), choices.clone()))
         });
     }
-
-    // TODO: LAN
-    // TODO: WAN
 
     group.finish();
 }

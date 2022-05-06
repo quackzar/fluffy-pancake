@@ -149,7 +149,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
     }
 
     // v1,v2
-    for i in 8..=22u32 {
+    for i in 8..=18u32 {
     //for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
