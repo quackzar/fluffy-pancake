@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Globalization;
+using System.Text;
 
 namespace magic;
 
@@ -163,6 +164,7 @@ internal static class Program
         }
 
         // Output the data as .dat files
+        var outputCulture = CultureInfo.GetCultureInfo("en-US");
         foreach (var group in groups.Values)
         {
             foreach (var benchmark in group.Benchmarks.Values)
@@ -177,7 +179,7 @@ internal static class Program
                 dataFile.WriteLine("#Input Size\tAverage Time (ns)\tThroughput (elements/s)");
                 foreach(var entry in benchmark.Entries)
                 {
-                    dataFile.WriteLine($"{Math.Floor(entry.Elements)}\t{entry.TimeSpan.TotalMilliseconds:F2}\t{entry.Throughput:F2}");
+                    dataFile.WriteLine($"{Math.Floor(entry.Elements).ToString(outputCulture)}\t{entry.TimeSpan.TotalMilliseconds.ToString(outputCulture)}\t{entry.Throughput.ToString(outputCulture)}");
                 }
 
                 dataFile.Close();
@@ -205,7 +207,7 @@ internal static class Program
 
                 var benches = group.Benchmarks.Values.AsEnumerable();
                 var plotFiles = from bench in benches
-                    let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile)
+                    let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile).Replace("\\", "/")
                     select @$"""{relativePath}"" using 1:2 title ""{bench.Name}"" with lines";
                 var plotLine = string.Join(',', plotFiles);
                 plotFile.WriteLine(@"plot " + plotLine);
