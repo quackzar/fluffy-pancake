@@ -222,11 +222,11 @@ impl OneOfManyKey {
     pub fn garbler_server(
         passwords: &[Vec<u8>],
         threshold: u16,
-        ch: &Channel<Vec<u8>>,
+        channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("garbler_server", E_FUNC_COLOR);
+        instrument::begin("Garbler: Server", E_FUNC_COLOR);
 
-        let (s, _r) = ch;
+        let (sender, _) = channel;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
 
@@ -236,39 +236,38 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("Garble circuit", E_PROT_COLOR);
-        let (gc, encoding, decoding) = garble(&circuit);
+        let (garbled_circuit, encoding, decoding) = garble(&circuit);
         let encoding = BinaryEncodingKey::from(encoding).zipped();
         instrument::end();
 
-        instrument::begin("Send garbled circuit", E_SEND_COLOR);
-        s.send_raw(&bincode::serialize(&gc)?)?;
+        instrument::begin("S: Garbled circuit", E_SEND_COLOR);
+        sender.send_raw(&bincode::serialize(&garbled_circuit)?)?;
         instrument::end();
 
         // 2. Use regular OT to get the encoded password for the server
-        instrument::begin("Build message for OT", E_COMP_COLOR);
-        let mut key = Vec::with_capacity(password_bits);
+        instrument::begin("Encoding key for client password", E_COMP_COLOR);
+        let mut client_password_key = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
-            key.push([
+            client_password_key.push([
                 encoding[i][0].to_bytes().to_vec(),
                 encoding[i][1].to_bytes().to_vec(),
             ])
         }
-        let key_message = MessagePair::from_zipped(key.as_slice());
-        let key_sender = Sender {
-            bootstrap: Box::new(OTReceiver),
-        };
         instrument::end();
 
-        instrument::begin("OT Sender", E_PROT_COLOR);
-        key_sender.exchange(&key_message, ch)?;
+        instrument::begin("OT: Client password", E_PROT_COLOR);
+        let client_password_message = MessagePair::from_zipped(client_password_key.as_slice());
+        let client_password_ot = Sender {
+            bootstrap: Box::new(OTReceiver),
+        };
+        client_password_ot.exchange(&client_password_message, channel)?;
         instrument::end();
 
         // 4. Encode all passwords
-        instrument::begin("Encode all passwords", E_COMP_COLOR);
+        instrument::begin("Encode passwords", E_COMP_COLOR);
         let domain = log2(passwords.len());
-        let mut encodings: Vec<Vec<u8>> = Vec::with_capacity(passwords.len());
-        let e_theirs = encoding[password_bits..].to_vec(); // encoding for receiver's password'
-        let e_theirs: Vec<_> = e_theirs
+        let mut server_encodings: Vec<Vec<u8>> = Vec::with_capacity(passwords.len());
+        let encoding_key: Vec<_> = encoding[password_bits..].to_vec()
             .iter()
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
@@ -279,22 +278,23 @@ impl OneOfManyKey {
                     let bit_index = (i * 8 + j) as usize;
                     let bit = (((password[i] >> j) & 1) == 1) as usize;
 
-                    let encoded = &e_theirs[bit_index][bit];
+                    let encoded = &encoding_key[bit_index][bit];
                     encoding.extend(encoded);
                 }
             }
 
-            encodings.push(encoding);
+            server_encodings.push(encoding);
         }
         instrument::end();
 
         // 5. Send 1-to-n challenge and Y to s and get response
-        instrument::begin("1-to-n OT Sender", E_PROT_COLOR);
-        let many_sender = ManyOTSender {
+        instrument::begin("1-to-n OT: Server password", E_PROT_COLOR);
+        let server_password_ot = ManyOTSender {
             interal_sender: OTSender,
         };
-        many_sender.exchange(&encodings, domain, ch)?;
+        server_password_ot.exchange(&server_encodings, domain, channel)?;
         instrument::end();
+
         //
         // At this point the s should have an encoding of both their own version and the servers version of the password.
         //
@@ -306,21 +306,21 @@ impl OneOfManyKey {
         password: &[u8],
         number_of_password: u32,
         index: u32,
-        ch: &Channel<Vec<u8>>,
+        channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("evaluator_client", E_FUNC_COLOR);
+        instrument::begin("Evaluator: Client", E_FUNC_COLOR);
 
-        let (_s, r) = ch;
+        let (_, receiver) = channel;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
 
         // 1. Receive the garbled circuit from the other party
-        instrument::begin("Receive gc", E_RECV_COLOR);
-        let gc = bincode::deserialize(&r.recv_raw()?)?;
+        instrument::begin("R: Garbled circuit", E_RECV_COLOR);
+        let garbled_circuit = bincode::deserialize(&receiver.recv_raw()?)?;
         instrument::end();
 
         // 2. Respond to the OT challenge for the encoding of our copy of the key
-        instrument::begin("Build response for OT", E_COMP_COLOR);
+        instrument::begin("OT: Client password", E_PROT_COLOR);
         let mut choices = Vec::with_capacity(password_bits);
         for i in 0..password_bytes {
             for j in 0..8 {
@@ -328,34 +328,29 @@ impl OneOfManyKey {
                 choices.push(bit)
             }
         }
-        instrument::end();
 
-        instrument::begin("OT Receiver", E_PROT_COLOR);
-        let key_receiver = Receiver {
+        let client_password_ot = Receiver {
             bootstrap: Box::new(OTSender),
         };
-        let key_encoding = key_receiver.exchange(&choices, ch)?;
-        instrument::end();
-
-        instrument::begin("Compute encoded server password", E_COMP_COLOR);
-        let input_encoding = key_encoding
-            .iter()
-            .map(|k| Wire::from_array(util::to_array(k), Domain::Binary))
-            .collect();
+        let client_password = client_password_ot.exchange(&choices, channel)?;
         instrument::end();
 
         // 4. Receive and respond to the 1-to-n challenge from the r
-        instrument::begin("1-to-n OT Receiver", E_PROT_COLOR);
+        instrument::begin("1-to-n OT: Server password", E_PROT_COLOR);
         let many_receiver = ManyOTReceiver {
             internal_receiver: OTReceiver,
         };
         let domain = log2(number_of_password);
-        let encodings = many_receiver.exchange(index, domain, ch)?;
+        let server_password_ot = many_receiver.exchange(index, domain, channel)?;
         instrument::end();
 
-        instrument::begin("Encode server version of password", E_COMP_COLOR);
-        let database_encoding = wires_from_bytes(encodings.as_slice(), Domain::Binary);
-        let input = [database_encoding, input_encoding].concat();
+        instrument::begin("Build encodings", E_COMP_COLOR);
+        let client_encoding = client_password
+            .iter()
+            .map(|k| Wire::from_array(util::to_array(k), Domain::Binary))
+            .collect();
+        let server_encoding = wires_from_bytes(server_password_ot.as_slice(), Domain::Binary);
+        let input = [server_encoding, client_encoding].concat();
         instrument::end();
 
         //
@@ -364,12 +359,12 @@ impl OneOfManyKey {
 
         // 6. Evaluate the circuit
         instrument::begin("Evaluate circuit", E_PROT_COLOR);
-        let output = evaluate(&gc, &input);
+        let output = evaluate(&garbled_circuit, &input);
         instrument::end();
 
         instrument::end();
         Ok(Self(hash!(
-            (gc.circuit.num_wires - 1).to_be_bytes(),
+            (garbled_circuit.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
             &output[0]
         )))
@@ -379,11 +374,11 @@ impl OneOfManyKey {
     pub fn garbler_server_v2(
         passwords: &[Vec<u8>],
         threshold: u16,
-        ch: &Channel<Vec<u8>>,
+        channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("garbler_server", E_FUNC_COLOR);
+        instrument::begin("Garbler: Server", E_FUNC_COLOR);
 
-        let (s, _r) = ch;
+        let (sender, _s) = channel;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
 
@@ -393,12 +388,12 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("Garble circuit", E_PROT_COLOR);
-        let (gc, encoding, decoding) = garble(&circuit);
+        let (garbled_circuit, encoding, decoding) = garble(&circuit);
         let encoding = BinaryEncodingKey::from(encoding).zipped();
         instrument::end();
 
-        instrument::begin("Send garbled circuit", E_SEND_COLOR);
-        s.send_raw(&bincode::serialize(&gc)?)?;
+        instrument::begin("S: garbled circuit", E_SEND_COLOR);
+        sender.send_raw(&bincode::serialize(&garbled_circuit)?)?;
         instrument::end();
 
         // 2. OT for encoding of client password
@@ -416,8 +411,8 @@ impl OneOfManyKey {
         };
         instrument::end();
 
-        instrument::begin("OT Client password", E_PROT_COLOR);
-        client_encoding_ot.exchange(&client_encoding_message, ch)?;
+        instrument::begin("OT: Client password", E_PROT_COLOR);
+        client_encoding_ot.exchange(&client_encoding_message, channel)?;
         instrument::end();
 
         // 3. Generate and encode the mask
@@ -441,8 +436,8 @@ impl OneOfManyKey {
         }
         instrument::end();
 
-        instrument::begin("Send encoded mask", E_COMP_COLOR);
-        s.send_raw(&encoded_mask)?;
+        instrument::begin("S: encoded mask", E_SEND_COLOR);
+        sender.send_raw(&encoded_mask)?;
         instrument::end();
 
         // 4. Mask all passwords
@@ -457,11 +452,11 @@ impl OneOfManyKey {
         instrument::end();
 
         // 5. 1-n-OT masked server password to client
-        instrument::begin("OT Masked password", E_PROT_COLOR);
-        let many_sender = ManyOTSender {
+        instrument::begin("OT: Masked password", E_PROT_COLOR);
+        let masked_passwords_ot = ManyOTSender {
             interal_sender: OTSender,
         };
-        many_sender.exchange(&masked_passwords, domain, ch)?;
+        masked_passwords_ot.exchange(&masked_passwords, domain, channel)?;
         instrument::end();
 
         // 6. OT For encoding of masked server password
@@ -479,8 +474,8 @@ impl OneOfManyKey {
         };
         instrument::end();
 
-        instrument::begin("OT Masked password", E_PROT_COLOR);
-        masked_encoding_ot.exchange(&masked_encoding_message, ch)?;
+        instrument::begin("OT: Encoded masked password", E_PROT_COLOR);
+        masked_encoding_ot.exchange(&masked_encoding_message, channel)?;
         instrument::end();
 
         //
@@ -494,21 +489,21 @@ impl OneOfManyKey {
         password: &[u8],
         number_of_password: u32,
         index: u32,
-        ch: &Channel<Vec<u8>>,
+        channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("evaluator_client", E_FUNC_COLOR);
+        instrument::begin("Evaluator: Client v2", E_FUNC_COLOR);
 
-        let (_s, r) = ch;
+        let (_, receiver) = channel;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
 
         // 1. Receive the garbled circuit from the other party
-        instrument::begin("Receive garbled circuit", E_RECV_COLOR);
-        let gc = bincode::deserialize(&r.recv_raw()?)?;
+        instrument::begin("R: garbled circuit", E_RECV_COLOR);
+        let gc = bincode::deserialize(&receiver.recv_raw()?)?;
         instrument::end();
 
         // 2. OT Encoding of client password
-        instrument::begin("Choices for client password", E_COMP_COLOR);
+        instrument::begin("OT: Client password", E_PROT_COLOR);
         let mut password_choices = Vec::with_capacity(password_bits);
         for i in 0..password_bytes {
             for j in 0..8 {
@@ -516,31 +511,29 @@ impl OneOfManyKey {
                 password_choices.push(bit)
             }
         }
-        instrument::end();
 
-        instrument::begin("OT Client password", E_PROT_COLOR);
         let password_receiver = Receiver {
             bootstrap: Box::new(OTSender),
         };
-        let client_encoding = password_receiver.exchange(&password_choices, ch)?;
+        let client_encoding = password_receiver.exchange(&password_choices, channel)?;
         instrument::end();
 
         // 3. Receive encoded mask
         instrument::begin("Receive encoded mask", E_RECV_COLOR);
-        let encoded_mask_bytes = r.recv_raw()?;
+        let encoded_mask_bytes = receiver.recv_raw()?;
         instrument::end();
 
         // 4. Receive masked server password
-        instrument::begin("OT Masked password", E_PROT_COLOR);
+        instrument::begin("OT: Masked password", E_PROT_COLOR);
         let many_receiver = ManyOTReceiver {
             internal_receiver: OTReceiver,
         };
         let domain = log2(number_of_password);
-        let masked_password = many_receiver.exchange(index, domain, ch)?;
+        let masked_password = many_receiver.exchange(index, domain, channel)?;
         instrument::end();
 
         // 5. Encode masked password
-        instrument::begin("Choices for masked password", E_COMP_COLOR);
+        instrument::begin("OT: Encoded masked password", E_PROT_COLOR);
         let mut masked_choices = Vec::with_capacity(password_bits);
         for i in 0..password_bytes {
             for j in 0..8 {
@@ -548,13 +541,11 @@ impl OneOfManyKey {
                 masked_choices.push(bit)
             }
         }
-        instrument::end();
 
-        instrument::begin("OT Masked password", E_PROT_COLOR);
         let password_receiver = Receiver {
             bootstrap: Box::new(OTSender),
         };
-        let masked_encoding = password_receiver.exchange(&masked_choices, ch)?;
+        let masked_encoding = password_receiver.exchange(&masked_choices, channel)?;
         instrument::end();
 
         //
@@ -565,8 +556,7 @@ impl OneOfManyKey {
         instrument::begin("Building encodings", E_COMP_COLOR);
         let encoded_row_length = masked_encoding[0].len();
         let client_encoding = payload_to_encoding(client_encoding, password_bits);
-        let mask_encoding =
-            bytes_to_encoding(&encoded_mask_bytes, password_bits, encoded_row_length);
+        let mask_encoding = bytes_to_encoding(&encoded_mask_bytes, password_bits, encoded_row_length);
         let server_encoding = payload_to_encoding(masked_encoding, password_bits);
         instrument::end();
 
@@ -592,9 +582,9 @@ impl OneOfManyKey {
         threshold: u16,
         channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("garbler_client", E_FUNC_COLOR);
+        instrument::begin("Garbler: Client", E_FUNC_COLOR);
 
-        let (sender, _r) = channel;
+        let (sender, _) = channel;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
 
@@ -604,10 +594,10 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("Garble circuit", E_PROT_COLOR);
-        let (gc, encoding, decoding) = garble(&circuit);
+        let (garbled_circuit, encoding, decoding) = garble(&circuit);
         instrument::end();
 
-        instrument::begin("Encode client password", E_COMP_COLOR);
+        instrument::begin("Encode password", E_COMP_COLOR);
         let encoding = BinaryEncodingKey::from(encoding).zipped();
 
         let mut evaluator_encoding = Vec::with_capacity(password_bits);
@@ -631,11 +621,11 @@ impl OneOfManyKey {
         }
         instrument::end();
 
-        instrument::begin("Send garbled circuit", E_SEND_COLOR);
-        sender.send_raw(&bincode::serialize(&gc)?)?;
+        instrument::begin("S: Garbled circuit", E_SEND_COLOR);
+        sender.send_raw(&bincode::serialize(&garbled_circuit)?)?;
         instrument::end();
 
-        instrument::begin("Send encoded password", E_SEND_COLOR);
+        instrument::begin("S: Encoded password", E_SEND_COLOR);
         sender.send_raw(&bincode::serialize(&encoded_password)?)?;
         instrument::end();
 
@@ -684,7 +674,7 @@ impl OneOfManyKey {
         instrument::end();
 
         // 3. Initiate the OTs for all of the passwords
-        instrument::begin("OT Server passwords", E_PROT_COLOR);
+        instrument::begin("OT: Server passwords", E_PROT_COLOR);
         let message = MessagePair::from_zipped(keys.as_slice());
         let sender = Sender {
             bootstrap: Box::new(OTReceiver),
@@ -703,22 +693,22 @@ impl OneOfManyKey {
         passwords: &[Vec<u8>],
         channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("evaluator_server", E_FUNC_COLOR);
+        instrument::begin("Evaluator: Server", E_FUNC_COLOR);
 
-        let (_, r) = channel;
+        let (_, receiver) = channel;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
 
         // 1. Get the garbled circuit and input from the client
-        instrument::begin("Receive garbled circuit", E_RECV_COLOR);
-        let gc = bincode::deserialize(&r.recv_raw()?)?;
+        instrument::begin("R: Garbled circuit", E_RECV_COLOR);
+        let garbled_circuit = bincode::deserialize(&receiver.recv_raw()?)?;
         instrument::end();
 
-        instrument::begin("Receive encoded client password", E_RECV_COLOR);
-        let input_encoding: Vec<Wire> = bincode::deserialize(&r.recv_raw()?)?;
+        instrument::begin("R: Client password", E_RECV_COLOR);
+        let input_encoding: Vec<Wire> = bincode::deserialize(&receiver.recv_raw()?)?;
         instrument::end();
 
-        instrument::begin("Build vec of choices", E_COMP_COLOR);
+        instrument::begin("OT: Server passwords", E_PROT_COLOR);
         let mut choices = Vec::with_capacity(password_bits * passwords.len());
         for i in 0..passwords.len() {
             for j in 0..password_bytes {
@@ -728,17 +718,15 @@ impl OneOfManyKey {
                 }
             }
         }
-        instrument::end();
 
-        instrument::begin("OT Server passwords", E_PROT_COLOR);
-        let receiver = Receiver {
+        let server_password_ot = Receiver {
             bootstrap: Box::new(OTSender),
         };
-        let result = receiver.exchange(&choices, channel)?;
+        let result = server_password_ot.exchange(&choices, channel)?;
         instrument::end();
 
         // 4. Compute the encoding for the input from the result
-        instrument::begin("Compute encoding for server password", E_COMP_COLOR);
+        instrument::begin("Encode server password", E_COMP_COLOR);
         // TODO: Allocate flat, don't push to vec
         let mut encoding_bytes = vec![vec![0u8; LENGTH]; password_bits];
         for i in 0..passwords.len() {
@@ -747,11 +735,11 @@ impl OneOfManyKey {
             }
         }
 
-        let mut database_encoding = Vec::with_capacity(password_bits);
+        let mut server_encoding = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
             let bytes = &encoding_bytes[i];
             let wire = Wire::from_bytes(bytes, Domain::Binary);
-            database_encoding.push(wire);
+            server_encoding.push(wire);
         }
         instrument::end();
 
@@ -761,13 +749,13 @@ impl OneOfManyKey {
 
         // 6. Evaluate the circuit
         instrument::begin("Evaluate circuit", E_PROT_COLOR);
-        let input = [database_encoding, input_encoding].concat();
-        let output = evaluate(&gc, &input);
+        let input = [server_encoding, input_encoding].concat();
+        let output = evaluate(&garbled_circuit, &input);
         instrument::end();
 
         instrument::end();
         Ok(Self(hash!(
-            (gc.circuit.num_wires - 1).to_be_bytes(),
+            (garbled_circuit.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
             &output[0]
         )))
@@ -781,9 +769,9 @@ impl OneOfManyKey {
         threshold: u16,
         channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("garbler_client", E_FUNC_COLOR);
+        instrument::begin("Garbler: Client v2", E_FUNC_COLOR);
 
-        let (sender, _r) = channel;
+        let (sender, _) = channel;
         let password_bytes = password.len();
         let password_bits = password_bytes * 8;
 
@@ -793,7 +781,7 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("Garble circuit", E_PROT_COLOR);
-        let (gc, encoding, decoding) = garble(&circuit);
+        let (garbled_circuit, encoding, decoding) = garble(&circuit);
         instrument::end();
 
         instrument::begin("Encode client password", E_COMP_COLOR);
@@ -810,16 +798,16 @@ impl OneOfManyKey {
         }
         instrument::end();
 
-        instrument::begin("Send garbled circuit", E_SEND_COLOR);
-        sender.send_raw(&bincode::serialize(&gc)?)?;
+        instrument::begin("S: garbled circuit", E_SEND_COLOR);
+        sender.send_raw(&bincode::serialize(&garbled_circuit)?)?;
         instrument::end();
 
-        instrument::begin("Send encoded password", E_SEND_COLOR);
+        instrument::begin("S: encoded password", E_SEND_COLOR);
         sender.send_raw(&bincode::serialize(&garbler_input)?)?;
         instrument::end();
 
         // 2. OT Encoding of the mask
-        instrument::begin("OT Encoding of mask", E_PROT_COLOR);
+        instrument::begin("Encode mask", E_COMP_COLOR);
         let mut mask_encoding = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
             let bit_encoding = [
@@ -828,7 +816,9 @@ impl OneOfManyKey {
             ];
             mask_encoding.push(bit_encoding);
         }
+        instrument::end();
 
+        instrument::begin("OT: Encoded Mask", E_PROT_COLOR);
         let message = MessagePair::from_zipped(mask_encoding.as_slice());
         let ot = Sender {
             bootstrap: Box::new(OTReceiver),
@@ -837,7 +827,7 @@ impl OneOfManyKey {
         instrument::end();
 
         // 3. Do a 1-to-n OT to get a masked version of the servers password corresponding to this client
-        instrument::begin("1-to-n OT Masked password", E_COMP_COLOR);
+        instrument::begin("1-to-n OT: Masked password", E_COMP_COLOR);
         let many_receiver = ManyOTReceiver {
             internal_receiver: OTReceiver,
         };
@@ -845,20 +835,19 @@ impl OneOfManyKey {
         let masked_password = many_receiver.exchange(index, domain, channel)?;
         instrument::end();
 
-        instrument::begin("Encode Masked password", E_COMP_COLOR);
+        instrument::begin("Encode masked password", E_COMP_COLOR);
         let encoding_length = encoding[0][0].to_bytes().len();
         let mut evaluator_encoding = vec![0u8; password_bits * encoding_length];
         for i in 0..password_bits {
             let byte = masked_password[i / 8];
             let bit = (byte >> i % 8) & 1;
 
-            let encoded_row =
-                unsafe { vector_row_mut(&mut evaluator_encoding, i, encoding_length) };
+            let encoded_row = unsafe { vector_row_mut(&mut evaluator_encoding, i, encoding_length) };
             xor_bytes_inplace(encoded_row, encoding[i][bit as usize].to_bytes().as_slice());
         }
         instrument::end();
 
-        instrument::begin("Send encoding of masked password", E_SEND_COLOR);
+        instrument::begin("S: Masked password", E_SEND_COLOR);
         sender.send_raw(evaluator_encoding.as_slice())?;
         instrument::end();
 
@@ -869,19 +858,19 @@ impl OneOfManyKey {
         passwords: &[Vec<u8>],
         channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("evaluator_server", E_FUNC_COLOR);
+        instrument::begin("Evaluator: Server v2", E_FUNC_COLOR);
 
-        let (_, r) = channel;
+        let (_, receiver) = channel;
         let password_bytes = passwords[0].len();
         let password_bits = password_bytes * 8;
 
         // 1. Get the garbled circuit and input from the client
-        instrument::begin("Receive garbled circuit", E_RECV_COLOR);
-        let gc = bincode::deserialize(&r.recv_raw()?)?;
+        instrument::begin("R: Garbled circuit", E_RECV_COLOR);
+        let garbled_circuit = bincode::deserialize(&receiver.recv_raw()?)?;
         instrument::end();
 
-        instrument::begin("Receive encoded client password", E_RECV_COLOR);
-        let client_encoding: Vec<Wire> = bincode::deserialize(&r.recv_raw()?)?;
+        instrument::begin("R: Client password", E_RECV_COLOR);
+        let client_encoding: Vec<Wire> = bincode::deserialize(&receiver.recv_raw()?)?;
         instrument::end();
 
         // 3. Mask all server passwords and get encoding of mask
@@ -900,7 +889,7 @@ impl OneOfManyKey {
         }
         instrument::end();
 
-        instrument::begin("Mask server passwords", E_COMP_COLOR);
+        instrument::begin("Mask passwords", E_COMP_COLOR);
         let mut masked_passwords = vec![vec![0u8; password_bytes]; passwords.len()];
         for i in 0..passwords.len() {
             let masked_password = masked_passwords[i].as_mut_slice();
@@ -911,15 +900,15 @@ impl OneOfManyKey {
         }
         instrument::end();
 
-        instrument::begin("OT Mask", E_PROT_COLOR);
-        let ot = Receiver {
+        instrument::begin("OT: Encoded Mask", E_PROT_COLOR);
+        let encoded_mask_ot = Receiver {
             bootstrap: Box::new(OTSender),
         };
-        let encoded_mask = ot.exchange(mask_choices.as_slice(), channel)?;
+        let encoded_mask = encoded_mask_ot.exchange(mask_choices.as_slice(), channel)?;
         instrument::end();
 
         // 4. 1-to-n OT the masked password to the client
-        instrument::begin("1-to-n OT of Masked password", E_PROT_COLOR);
+        instrument::begin("1-to-n OT: Masked password", E_PROT_COLOR);
         let many_sender = ManyOTSender {
             interal_sender: OTSender,
         };
@@ -927,15 +916,15 @@ impl OneOfManyKey {
         many_sender.exchange(masked_passwords.as_slice(), domain, channel)?;
         instrument::end();
 
-        instrument::begin("Receive encoded client password", E_RECV_COLOR);
-        let server_encoded = r.recv_raw()?;
+        instrument::begin("R: Encoded masked password", E_RECV_COLOR);
+        let server_encoded = receiver.recv_raw()?;
         instrument::end();
 
         //
         // By now the evaluator should have both the encoding of the users password from the database and the encoding of the password they input
         //
 
-        instrument::begin("Build encodings from data", E_COMP_COLOR);
+        instrument::begin("Build encodings", E_COMP_COLOR);
         let encoded_row_length = encoded_mask[0].len();
         let mask_encoding = payload_to_encoding(encoded_mask, password_bits);
         let server_encoding = bytes_to_encoding(&server_encoded, password_bits, encoded_row_length);
@@ -944,12 +933,13 @@ impl OneOfManyKey {
         // 6. Evaluate the circuit
         instrument::begin("Evaluate circuit", E_PROT_COLOR);
         let input = [server_encoding, mask_encoding, client_encoding].concat();
-        let output = evaluate(&gc, &input);
+        let output = evaluate(&garbled_circuit, &input);
         instrument::end();
 
         instrument::end();
+        instrument::end();
         Ok(Self(hash!(
-            (gc.circuit.num_wires - 1).to_be_bytes(),
+            (garbled_circuit.circuit.num_wires - 1).to_be_bytes(),
             1u16.to_be_bytes(),
             &output[0]
         )))
