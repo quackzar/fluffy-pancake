@@ -6,4 +6,4 @@ set logscale x 2
 set ylabel "Throughput in Element/s"
 set logscale y 2
 
-plot "data\1_to_n_ot_chou_orlandi.dat" using 1:3 title "Chou-Orlandi" with lines
+plot "data/1_to_n_ot_chou_orlandi.dat" using 1:3 title "Chou-Orlandi" with lines

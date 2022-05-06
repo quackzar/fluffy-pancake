@@ -231,7 +231,7 @@ internal static class Program
 
                 var benches = group.Benchmarks.Values.AsEnumerable();
                 var plotFiles = from bench in benches
-                    let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile)
+                    let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile).Replace("\\", "/")
                     select @$"""{relativePath}"" using 1:3 title ""{bench.Name}"" with lines";
                 var plotLine = string.Join(',', plotFiles);
                 plotFile.WriteLine(@"plot " + plotLine);
