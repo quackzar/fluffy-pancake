@@ -131,6 +131,7 @@ impl HalfKey {
 
         let password = u8_vec_to_bool_vec(password);
         let n = password.len();
+        dbg!(n);
 
         // Building circuit
         let circuit = build_circuit(n, threshold);
