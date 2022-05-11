@@ -11,6 +11,7 @@ extern crate core;
 
 pub mod circuit;
 pub mod common;
+pub mod many_fpake;
 pub mod fpake;
 pub mod garble;
 mod instrument;

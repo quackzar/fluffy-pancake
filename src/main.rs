@@ -1,7 +1,8 @@
 use clap::Parser;
 use ductile::{connect_channel, ChannelServer};
 use magic_pake::common::Channel;
-use magic_pake::fpake::{HalfKey, OneOfManyKey};
+use magic_pake::fpake::HalfKey;
+use magic_pake::many_fpake::OneOfManyKey;
 use magic_pake::common::Error;
 use std::fs;
 
