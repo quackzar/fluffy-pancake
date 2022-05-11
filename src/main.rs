@@ -1,9 +1,9 @@
 use clap::Parser;
 use ductile::{connect_channel, ChannelServer};
 use magic_pake::common::Channel;
+use magic_pake::common::Error;
 use magic_pake::fpake::HalfKey;
 use magic_pake::many_fpake::OneOfManyKey;
-use magic_pake::common::Error;
 use std::fs;
 
 /// Simple program to greet a person
@@ -11,7 +11,7 @@ use std::fs;
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// Address of where to connect.
-    #[clap(short, long, default_value="localhost:8080")]
+    #[clap(short, long, default_value = "localhost:8080")]
     address: String,
 
     /// Run in server mode (garbler first).
@@ -27,13 +27,13 @@ struct Args {
     password: String,
 
     /// Threadshold used.
-    #[clap(short, long, default_value="0")]
+    #[clap(short, long, default_value = "0")]
     threadshold: u16,
 
     #[clap(short, long)]
     password_file: String,
 
-    #[clap(long, default_value="2048")]
+    #[clap(long, default_value = "2048")]
     password_size: usize,
 
     // TODO: Make this option redundant.
@@ -44,15 +44,13 @@ struct Args {
     index: u32,
 }
 
-
-
-fn server(args : &Args) -> Result<(),Error> {
+fn server(args: &Args) -> Result<(), Error> {
     let pw = args.password.as_bytes();
     let mut server = ChannelServer::bind(&args.address)?;
     println!("Listening on {}...", &args.address);
 
     let (s, r, _addr) = server.next().unwrap();
-    let ch = (s,r);
+    let ch = (s, r);
 
     let hk1 = HalfKey::garbler(&pw, args.threadshold, &ch)?;
     let hk2 = HalfKey::evaluator(&pw, &ch)?;
@@ -64,27 +62,27 @@ fn server_many(args: &Args) -> Result<(), Error> {
     let filename = &args.password_file;
     println!("Loading passwords...");
     let pws = fs::read(filename)?;
-    let pws : Vec<Vec<u8>> = pws.chunks_exact(args.password_size)
+    let pws: Vec<Vec<u8>> = pws
+        .chunks_exact(args.password_size)
         .map(|s| s.into())
         .collect();
 
     let mut server = ChannelServer::bind(&args.address)?;
     println!("Listening on {}...", &args.address);
     let (s, r, _addr) = server.next().unwrap();
-    let ch = (s,r);
+    let ch = (s, r);
 
     // TODO: Redo to use new one of many fPAKE.
     let hk1 = OneOfManyKey::garbler_server(&pws, args.threadshold, &ch)?;
     let hk2 = OneOfManyKey::evaluator_server(&pws, &ch)?;
     println!("Derived Key: {:?}", hk1.combine(hk2));
     Ok(())
-
 }
 
-fn client(args : &Args) -> Result<(),Error> {
+fn client(args: &Args) -> Result<(), Error> {
     let pw = args.password.as_bytes();
     println!("Connecting to {}...", &args.address);
-    let ch : Channel<Vec<u8>> = connect_channel(&args.address)?;
+    let ch: Channel<Vec<u8>> = connect_channel(&args.address)?;
 
     let hk2 = HalfKey::evaluator(&pw, &ch)?;
     let hk1 = HalfKey::garbler(&pw, args.threadshold, &ch)?;
@@ -95,16 +93,17 @@ fn client(args : &Args) -> Result<(),Error> {
 fn client_many(args: &Args) -> Result<(), Error> {
     let pw = args.password.as_bytes();
     println!("Connecting to {}...", &args.address);
-    let ch : Channel<Vec<u8>> = connect_channel(&args.address)?;
+    let ch: Channel<Vec<u8>> = connect_channel(&args.address)?;
 
     // TODO: Redo to use new one of many fPAKE.
     let hk2 = OneOfManyKey::evaluator_client(&pw, args.total_passwords, args.index, &ch)?;
-    let hk1 = OneOfManyKey::garbler_client(&pw,args.index, args.total_passwords, args.threadshold, &ch)?;
+    let hk1 =
+        OneOfManyKey::garbler_client(&pw, args.index, args.total_passwords, args.threadshold, &ch)?;
     println!("Derived Key: {:?}", hk1.combine(hk2));
     Ok(())
 }
 
-fn main() -> Result<(),Error>  {
+fn main() -> Result<(), Error> {
     let args = Args::parse();
     if args.server && args.oblivous {
         server_many(&args)?;

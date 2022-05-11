@@ -1,3 +1,4 @@
+use crate::circuit::build_circuit;
 use crate::common::*;
 use crate::garble::*;
 use crate::instrument;
@@ -8,13 +9,11 @@ use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::util::*;
 use crate::wires::*;
-use crate::circuit::build_circuit;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct HalfKey(pub WireBytes);
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Key(pub WireBytes);
-
 
 impl HalfKey {
     pub fn garbler(password: &[u8], threshold: u16, ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
@@ -96,7 +95,6 @@ impl HalfKey {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,5 +149,4 @@ mod tests {
         let res = garble_encode_eval_decode(&circuit, &x);
         assert!(res[0] == 1);
     }
-
 }

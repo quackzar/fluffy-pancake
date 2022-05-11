@@ -53,8 +53,6 @@ pub fn to_array(bytes: &[u8]) -> WireBytes {
     array
 }
 
-
-
 // impl core::ops::BitXor for WireBytes {
 //     type Output = WireBytes;
 //     fn bitxor(self, rhs: Self) -> Self::Output {

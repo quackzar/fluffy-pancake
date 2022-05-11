@@ -217,7 +217,6 @@ pub fn verify_circuit(circuit: &Circuit) -> Result<(), CircuitError> {
     Ok(())
 }
 
-
 pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
     let mut gates: Vec<Gate> = Vec::new();
     let comparison_domain = bitsize as u16 + 1;

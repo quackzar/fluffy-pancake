@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::{
     fpake::build_circuit,
     garble::{self, BinaryEncodingKey},

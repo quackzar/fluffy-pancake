@@ -1,5 +1,6 @@
 use crate::circuit::*;
 use crate::common::*;
+use crate::fpake::Key;
 use crate::garble::*;
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
@@ -11,9 +12,6 @@ use crate::ot::one_of_many::*;
 use crate::util;
 use crate::util::*;
 use crate::wires::*;
-use crate::fpake::Key;
-
-
 
 #[inline]
 fn payload_to_encoding(payload: Payload, bit_count: usize) -> Vec<Wire> {
@@ -56,14 +54,11 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
     wires
 }
 
-
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct OneOfManyKey(WireBytes);
 
-
 // TODO: Remove redundant code.
-// TODO: Move this to a separate file. 
+// TODO: Move this to a separate file.
 // FIX: Make fPAKE secure by forcing same index.
 // Bob / server is Garbler
 impl OneOfManyKey {
@@ -116,7 +111,8 @@ impl OneOfManyKey {
         instrument::begin("Encode passwords", E_COMP_COLOR);
         let domain = log2(passwords.len());
         let mut server_encodings: Vec<Vec<u8>> = Vec::with_capacity(passwords.len());
-        let encoding_key: Vec<_> = encoding[password_bits..].to_vec()
+        let encoding_key: Vec<_> = encoding[password_bits..]
+            .to_vec()
             .iter()
             .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
             .collect();
@@ -405,7 +401,8 @@ impl OneOfManyKey {
         instrument::begin("Building encodings", E_COMP_COLOR);
         let encoded_row_length = masked_encoding[0].len();
         let client_encoding = payload_to_encoding(client_encoding, password_bits);
-        let mask_encoding = bytes_to_encoding(&encoded_mask_bytes, password_bits, encoded_row_length);
+        let mask_encoding =
+            bytes_to_encoding(&encoded_mask_bytes, password_bits, encoded_row_length);
         let server_encoding = payload_to_encoding(masked_encoding, password_bits);
         instrument::end();
 
@@ -691,7 +688,8 @@ impl OneOfManyKey {
             let byte = masked_password[i / 8];
             let bit = (byte >> i % 8) & 1;
 
-            let encoded_row = unsafe { vector_row_mut(&mut evaluator_encoding, i, encoding_length) };
+            let encoded_row =
+                unsafe { vector_row_mut(&mut evaluator_encoding, i, encoding_length) };
             xor_bytes_inplace(encoded_row, encoding[i][bit as usize].to_bytes().as_slice());
         }
         instrument::end();
@@ -1169,7 +1167,6 @@ mod tests {
         let k2 = h2.join().unwrap();
         assert_eq!(k1, k2);
     }
-
 
     #[test]
     fn test_masking_circuit() {
