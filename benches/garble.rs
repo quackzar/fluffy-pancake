@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
-use magic_pake::fpake::build_circuit;
+use magic_pake::circuit::build_circuit;
 use magic_pake::garble::{encode, evaluate, garble};
 
 fn bench_garble_eval(c: &mut Criterion) {

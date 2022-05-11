@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::{
-    fpake::build_circuit,
+    circuit::build_circuit,
     garble::{self, BinaryEncodingKey},
     ot::chou_orlandi::*,
     ot::common::*,
