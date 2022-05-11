@@ -58,7 +58,6 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
 pub struct OneOfManyKey(WireBytes);
 
 // TODO: Remove redundant code.
-// TODO: Move this to a separate file.
 // FIX: Make fPAKE secure by forcing same index.
 // Bob / server is Garbler
 impl OneOfManyKey {

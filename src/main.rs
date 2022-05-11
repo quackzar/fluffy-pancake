@@ -27,13 +27,13 @@ struct Args {
     password: String,
 
     /// Threadshold used.
-    #[clap(short, long, default_value = "0")]
+    #[clap(short, long, default_value_t = 0)]
     threadshold: u16,
 
     #[clap(short, long)]
     password_file: String,
 
-    #[clap(long, default_value = "2048")]
+    #[clap(long, default_value_t = 2048)]
     password_size: usize,
 
     // TODO: Make this option redundant.
