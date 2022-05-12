@@ -2,7 +2,7 @@ use crate::circuit::build_circuit;
 use crate::common::*;
 use crate::garble::*;
 use crate::instrument;
-use crate::instrument::{E_PROT_COLOR};
+use crate::instrument::E_PROT_COLOR;
 use crate::ot::apricot_avx2::{Receiver, Sender};
 use crate::ot::chou_orlandi::{OTReceiver, OTSender};
 use crate::ot::common::Message as MessagePair;
