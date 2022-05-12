@@ -242,14 +242,14 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
         );
     }
 
-    // v3,v3
+    // v3
     for i in 8..=22u32 {
         //for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
         group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
         group.bench_with_input(
-            BenchmarkId::new("v2,v2", number_of_passwords),
+            BenchmarkId::new("v3", number_of_passwords),
             &number_of_passwords,
             |b, _| {
                 b.iter(|| {
