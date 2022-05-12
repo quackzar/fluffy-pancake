@@ -3,7 +3,7 @@ use ductile::{connect_channel, ChannelServer};
 use magic_pake::common::Channel;
 use magic_pake::common::Error;
 use magic_pake::fpake::HalfKey;
-use magic_pake::many_fpake::OneOfManyKey;
+use magic_pake::legacy_fpake::OneOfManyKey;
 use std::fs;
 
 /// Simple program to greet a person

@@ -330,7 +330,14 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                     });
 
                     let h2 = thread::spawn(move || {
-                        OneOfManyKey::client_v4(&password, index, number_of_passwords, threshold, &ch2).unwrap()
+                        OneOfManyKey::client_v4(
+                            &password,
+                            index,
+                            number_of_passwords,
+                            threshold,
+                            &ch2,
+                        )
+                        .unwrap()
                     });
 
                     let _k1 = h1.join().unwrap();
