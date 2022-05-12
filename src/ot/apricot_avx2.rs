@@ -759,11 +759,12 @@ fn polynomial_mul_acc(destination: &mut [u8], left: &[u8], right: &[u8]) {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
     fn test_avx2_ot_receiver() {
-        use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+        use crate::ot::chou_orlandi;
         let (s1, r1) = ductile::new_local_channel();
         let (s2, r2) = ductile::new_local_channel();
         let ch1 = (s1, r2);
@@ -774,7 +775,7 @@ mod tests {
             .name("Sender".to_string())
             .spawn(move || {
                 let sender = Sender {
-                    bootstrap: Box::new(OTReceiver),
+                    bootstrap: Box::new(chou_orlandi::Receiver),
                 };
                 let msg = Message::from_unzipped(&[b"Hello"; 8 << 2], &[b"World"; 8 << 2]);
                 sender.exchange(&msg, &ch1).unwrap();
@@ -784,7 +785,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = Receiver {
-                    bootstrap: Box::new(OTSender),
+                    bootstrap: Box::new(chou_orlandi::Sender),
                 };
                 let choices = [true; 8 << 2];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
@@ -797,7 +798,7 @@ mod tests {
 
     #[test]
     fn test_avx2_ot_receiver_many() {
-        use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+        use crate::ot::chou_orlandi;
         let (s1, r1) = ductile::new_local_channel();
         let (s2, r2) = ductile::new_local_channel();
         let ch1 = (s1, r2);
@@ -822,7 +823,7 @@ mod tests {
             .name("Sender".to_string())
             .spawn(move || {
                 let sender = Sender {
-                    bootstrap: Box::new(OTReceiver),
+                    bootstrap: Box::new(chou_orlandi::Receiver),
                 };
 
                 let mut m0 = [[0u8; 8]; CASES];
@@ -848,7 +849,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = Receiver {
-                    bootstrap: Box::new(OTSender),
+                    bootstrap: Box::new(chou_orlandi::Sender),
                 };
                 let mut choices = vec![true; CASES];
                 for i in 0..CASES {

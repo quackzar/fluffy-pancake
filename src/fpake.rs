@@ -3,8 +3,8 @@ use crate::common::*;
 use crate::garble::*;
 use crate::instrument;
 use crate::instrument::E_PROT_COLOR;
-use crate::ot::apricot_avx2::{Receiver, Sender};
-use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+use crate::ot::apricot_avx2 as apricot;
+use crate::ot::chou_orlandi;
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::util::*;
@@ -35,8 +35,8 @@ impl HalfKey {
             .collect();
 
         let msg = MessagePair::from_zipped(&e_theirs);
-        let ot = Sender {
-            bootstrap: Box::new(OTReceiver),
+        let ot = apricot::Sender {
+            bootstrap: Box::new(chou_orlandi::Receiver),
         };
         ot.exchange(&msg, ch)?;
         let (s, _) = ch;
@@ -57,8 +57,8 @@ impl HalfKey {
         instrument::begin("Evaluator", E_PROT_COLOR);
 
         let password = u8_vec_to_bool_vec(password);
-        let ot = Receiver {
-            bootstrap: Box::new(OTSender),
+        let ot = apricot::Receiver {
+            bootstrap: Box::new(chou_orlandi::Sender),
         };
         let enc_password = ot.exchange(&password, ch)?;
         let (_, r) = ch;

@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use ductile::new_local_channel;
-use magic_pake::many_fpake::*;
 use magic_pake::legacy_fpake as legacy;
+use magic_pake::many_fpake::*;
 use std::thread;
 
 fn bench_fpake_one_of_many(c: &mut Criterion) {
@@ -34,8 +34,10 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
                     let h1 = thread::spawn(move || {
                         // Party 1
-                        let k1 = legacy::OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-                        let k2 = legacy::OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
+                        let k1 = legacy::OneOfManyKey::garbler_server(&passwords, threshold, &ch1)
+                            .unwrap();
+                        let k2 =
+                            legacy::OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
@@ -93,8 +95,10 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                     let h1 = thread::spawn(move || {
                         // Party 1
                         let k1 =
-                            legacy::OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1).unwrap();
-                        let k2 = legacy::OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
+                            legacy::OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1)
+                                .unwrap();
+                        let k2 =
+                            legacy::OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
@@ -151,8 +155,10 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
                     let h1 = thread::spawn(move || {
                         // Party 1
-                        let k1 = legacy::OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-                        let k2 = legacy::OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
+                        let k1 = legacy::OneOfManyKey::garbler_server(&passwords, threshold, &ch1)
+                            .unwrap();
+                        let k2 =
+                            legacy::OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
@@ -210,8 +216,10 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                     let h1 = thread::spawn(move || {
                         // Party 1
                         let k1 =
-                            legacy::OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1).unwrap();
-                        let k2 = legacy::OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
+                            legacy::OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1)
+                                .unwrap();
+                        let k2 =
+                            legacy::OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
@@ -325,19 +333,12 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                     let ch1 = (s2, r1);
                     let ch2 = (s1, r2);
 
-                    let h1 = thread::spawn(move || {
-                        server_v4(&passwords, threshold, &ch1).unwrap()
-                    });
+                    let h1 =
+                        thread::spawn(move || mfpake_many(&passwords, threshold, &ch1).unwrap());
 
                     let h2 = thread::spawn(move || {
-                        client_v4(
-                            &password,
-                            index,
-                            number_of_passwords,
-                            threshold,
-                            &ch2,
-                        )
-                        .unwrap()
+                        mfpake_single(&password, index, number_of_passwords, threshold, &ch2)
+                            .unwrap()
                     });
 
                     let _k1 = h1.join().unwrap();

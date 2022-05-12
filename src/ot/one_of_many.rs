@@ -1,7 +1,7 @@
 use crate::common::{Channel, Error};
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
-use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+use crate::ot::chou_orlandi::{Receiver, Sender};
 use crate::ot::common::*;
 use crate::util::*;
 use rand::RngCore;
@@ -27,7 +27,7 @@ fn fk(key: &[u8], choice: u32, length: usize, buffer: &mut [u8]) {
 }
 
 pub struct ManyOTSender {
-    pub interal_sender: OTSender,
+    pub interal_sender: Sender,
 }
 
 impl ManyOTSender {
@@ -154,7 +154,7 @@ impl ManyOTSender {
 }
 
 pub struct ManyOTReceiver {
-    pub internal_receiver: OTReceiver,
+    pub internal_receiver: Receiver,
 }
 
 impl ManyOTReceiver {
@@ -243,7 +243,7 @@ mod tests {
             .name("Sender".to_string())
             .spawn(move || {
                 let sender = ManyOTSender {
-                    interal_sender: crate::ot::chou_orlandi::OTSender,
+                    interal_sender: crate::ot::chou_orlandi::Sender,
                 };
                 sender.exchange(&messages, domain, &ch1).unwrap();
             });
@@ -252,7 +252,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = ManyOTReceiver {
-                    internal_receiver: crate::ot::chou_orlandi::OTReceiver,
+                    internal_receiver: crate::ot::chou_orlandi::Receiver,
                 };
                 receiver.exchange(choice, domain, &ch2).unwrap()
             });

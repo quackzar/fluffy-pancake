@@ -25,10 +25,10 @@ use crate::common::*;
 use crate::ot::common::*;
 
 // Channel Impl.
-pub struct OTSender;
-pub struct OTReceiver;
+pub struct Sender;
+pub struct Receiver;
 
-impl ObliviousSender for OTSender {
+impl ObliviousSender for Sender {
     fn exchange(&self, msg: &Message, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
         let pb = TransactionProperties {
             msg_size: msg.len(),
@@ -102,7 +102,7 @@ impl ObliviousSender for OTSender {
     }
 }
 
-impl ObliviousReceiver for OTReceiver {
+impl ObliviousReceiver for Receiver {
     fn exchange(&self, choices: &[bool], ch: &Channel<Vec<u8>>) -> Result<Payload, Error> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
@@ -255,13 +255,13 @@ mod tests {
 
         use std::thread;
         let h1 = thread::spawn(move || {
-            let sender = OTSender;
+            let sender = Sender;
             let msg = Message::from_unzipped(&[b"Hello"], &[b"World"]);
             sender.exchange(&msg, &ch1).unwrap();
         });
 
         let h2 = thread::spawn(move || {
-            let receiver = OTReceiver;
+            let receiver = Receiver;
             let choices = [true];
             let msg = receiver.exchange(&choices, &ch2).unwrap();
             assert_eq!(msg[0], b"World");

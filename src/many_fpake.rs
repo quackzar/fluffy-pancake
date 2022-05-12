@@ -5,13 +5,13 @@ use crate::garble::*;
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::apricot_avx2::{Receiver, Sender};
-use crate::ot::chou_orlandi::{OTReceiver, OTSender};
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::ot::one_of_many::*;
 use crate::util;
 use crate::util::*;
 use crate::wires::*;
+use crate::ot::chou_orlandi;
 
 #[inline]
 fn payload_to_encoding(payload: Payload, bit_count: usize) -> Vec<Wire> {
@@ -96,7 +96,7 @@ impl OneOfManyKey {
         }
         let client_encoding_message = MessagePair::from_zipped(client_password_encoding.as_slice());
         let client_encoding_ot = Sender {
-            bootstrap: Box::new(OTReceiver),
+            bootstrap: Box::new(chou_orlandi::Receiver),
         };
         instrument::end();
 
@@ -143,7 +143,7 @@ impl OneOfManyKey {
         // 5. 1-n-OT masked server password to client
         instrument::begin("OT: Masked password", E_PROT_COLOR);
         let masked_passwords_ot = ManyOTSender {
-            interal_sender: OTSender,
+            interal_sender: chou_orlandi::Sender,
         };
         masked_passwords_ot.exchange(&masked_passwords, domain, channel)?;
         instrument::end();
@@ -159,7 +159,7 @@ impl OneOfManyKey {
         }
         let masked_encoding_message = MessagePair::from_zipped(masked_password_encoding.as_slice());
         let masked_encoding_ot = Sender {
-            bootstrap: Box::new(OTReceiver),
+            bootstrap: Box::new(chou_orlandi::Receiver),
         };
         instrument::end();
 
@@ -203,7 +203,7 @@ impl OneOfManyKey {
         }
 
         let password_receiver = Receiver {
-            bootstrap: Box::new(OTSender),
+            bootstrap: Box::new(chou_orlandi::Sender),
         };
         let client_encoding = password_receiver.exchange(&password_choices, channel)?;
         instrument::end();
@@ -216,7 +216,7 @@ impl OneOfManyKey {
         // 4. Receive masked server password
         instrument::begin("OT: Masked password", E_PROT_COLOR);
         let many_receiver = ManyOTReceiver {
-            internal_receiver: OTReceiver,
+            internal_receiver: chou_orlandi::Receiver,
         };
         let domain = log2(number_of_password);
         let masked_password = many_receiver.exchange(index, domain, channel)?;
@@ -233,7 +233,7 @@ impl OneOfManyKey {
         }
 
         let password_receiver = Receiver {
-            bootstrap: Box::new(OTSender),
+            bootstrap: Box::new(chou_orlandi::Sender),
         };
         let masked_encoding = password_receiver.exchange(&masked_choices, channel)?;
         instrument::end();
@@ -327,7 +327,7 @@ impl OneOfManyKey {
         instrument::begin("OT: Encoded Mask", E_PROT_COLOR);
         let message = MessagePair::from_zipped(mask_encoding.as_slice());
         let ot = Sender {
-            bootstrap: Box::new(OTReceiver),
+            bootstrap: Box::new(chou_orlandi::Receiver),
         };
         ot.exchange(&message, channel)?;
         instrument::end();
@@ -384,7 +384,7 @@ impl OneOfManyKey {
             }
         }
         let encoded_mask_ot = Receiver {
-            bootstrap: Box::new(OTSender),
+            bootstrap: Box::new(chou_orlandi::Sender),
         };
         let encoded_mask = encoded_mask_ot.exchange(mask_choices.as_slice(), channel)?;
         instrument::end();
@@ -422,10 +422,14 @@ impl OneOfManyKey {
         Key(xor(self.0, other.0))
     }
 }
+
 // Fourth (and faster, but with restrictions) implementation of one of many fPAKE, does not
 // require two passes like the other 3 implementations. This version only works on distance
 // functions homomorphic under XOR
-pub fn client_v4(
+
+/// Client version of (one-out-of)-many-fpake,
+/// supplying a single key and an index.
+pub fn mfpake_single(
     password: &[u8],
     index: u32,
     number_of_passwords: u32,
@@ -439,7 +443,7 @@ pub fn client_v4(
     // 1. OT The a masked version of the servers version of our password
     instrument::begin("1-to-n OT: Masked password", E_COMP_COLOR);
     let many_receiver = ManyOTReceiver {
-        internal_receiver: OTReceiver,
+        internal_receiver: chou_orlandi::Receiver,
     };
     let domain = log2(number_of_passwords);
     let mut masked_password = many_receiver.exchange(index, domain, channel)?;
@@ -458,7 +462,10 @@ pub fn client_v4(
 
     return Ok(key);
 }
-pub fn server_v4(
+
+/// Server version of (one-out-of)-many-fpake.
+/// Supplying a key list and an index.
+pub fn mfpake_many(
     passwords: &[Vec<u8>],
     threshold: u16,
     channel: &Channel<Vec<u8>>,
@@ -488,7 +495,7 @@ pub fn server_v4(
     // 2. OT the masked password(s) to the client
     instrument::begin("1-to-n OT: Masked password", E_PROT_COLOR);
     let many_sender = ManyOTSender {
-        interal_sender: OTSender,
+        interal_sender: chou_orlandi::Sender,
     };
     let domain = log2(passwords.len());
     many_sender.exchange(masked_passwords.as_slice(), domain, channel)?;
@@ -647,10 +654,10 @@ mod tests {
         let ch1 = (s2, r1);
         let ch2 = (s1, r2);
 
-        let h1 = thread::spawn(move || server_v4(&passwords, threshold, &ch1).unwrap());
+        let h1 = thread::spawn(move || mfpake_many(&passwords, threshold, &ch1).unwrap());
 
         let h2 = thread::spawn(move || {
-            client_v4(&password, index, number_of_passwords, threshold, &ch2).unwrap()
+            mfpake_single(&password, index, number_of_passwords, threshold, &ch2).unwrap()
         });
 
         let k1 = h1.join().unwrap();

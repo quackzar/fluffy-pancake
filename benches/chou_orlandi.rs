@@ -18,14 +18,14 @@ fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
         .name("Sender".to_string())
         .spawn(move || {
             let msg = Message::from_zipped(&msg);
-            let sender = OTSender;
+            let sender = Sender;
             sender.exchange(&msg, &ch1).unwrap();
         });
 
     let h2 = thread::Builder::new()
         .name("Receiver".to_string())
         .spawn(move || {
-            let receiver = OTReceiver;
+            let receiver = Receiver;
             let _ = receiver.exchange(&choices, &ch2).unwrap();
         });
 

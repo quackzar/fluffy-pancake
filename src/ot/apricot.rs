@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn test_ot_receiver() {
-        use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+        use crate::ot::chou_orlandi;
         let (s1, r1) = ductile::new_local_channel();
         let (s2, r2) = ductile::new_local_channel();
         const N: usize = 8 << 8;
@@ -363,7 +363,7 @@ mod tests {
             .name("Sender".to_string())
             .spawn(move || {
                 let sender = Sender {
-                    bootstrap: Box::new(OTReceiver),
+                    bootstrap: Box::new(chou_orlandi::Receiver),
                 };
                 let msg = Message::from_unzipped(&[b"Hello"; N], &[b"World"; N]);
                 sender.exchange(&msg, &ch1).unwrap();
@@ -373,7 +373,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = Receiver {
-                    bootstrap: Box::new(OTSender),
+                    bootstrap: Box::new(chou_orlandi::Sender),
                 };
                 let choices = [true; N];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
