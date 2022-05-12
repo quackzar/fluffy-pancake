@@ -1,6 +1,6 @@
 use crate::circuit::*;
 use crate::common::*;
-use crate::fpake::Key;
+use crate::fpake::{HalfKey, Key};
 use crate::garble::*;
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
@@ -220,7 +220,7 @@ impl OneOfManyKey {
         threshold: u16,
         channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("Garbler: Server", E_FUNC_COLOR);
+        instrument::begin("Garbler: Server v2", E_FUNC_COLOR);
 
         let (sender, _s) = channel;
         let password_bytes = passwords[0].len();
@@ -425,7 +425,7 @@ impl OneOfManyKey {
         threshold: u16,
         channel: &Channel<Vec<u8>>,
     ) -> Result<(Self, Vec<u8>), Error> {
-        instrument::begin("Garbler: Server", E_FUNC_COLOR);
+        instrument::begin("Garbler: Server v3", E_FUNC_COLOR);
 
         let (sender, _s) = channel;
         let password_bytes = passwords[0].len();
@@ -541,7 +541,7 @@ impl OneOfManyKey {
         index: u32,
         channel: &Channel<Vec<u8>>,
     ) -> Result<(Self, Vec<u8>), Error> {
-        instrument::begin("Evaluator: Client v2", E_FUNC_COLOR);
+        instrument::begin("Evaluator: Client v3", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
         let password_bytes = password.len();
@@ -1091,7 +1091,7 @@ impl OneOfManyKey {
         mask: &[u8],
         channel: &Channel<Vec<u8>>,
     ) -> Result<Self, Error> {
-        instrument::begin("Evaluator: Server v2", E_FUNC_COLOR);
+        instrument::begin("Evaluator: Server v3", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
         let password_bytes = passwords[0].len();
@@ -1149,6 +1149,90 @@ impl OneOfManyKey {
             1u16.to_be_bytes(),
             &output[0]
         )))
+    }
+
+    // Fourth (and faster, but with restrictions) implementation of one of many fPAKE, does not
+    // require two passes like the other 3 implementations. This version only works on distance
+    // functions homomorphic under XOR
+    pub fn client_v4(
+        password: &[u8],
+        index: u32,
+        number_of_passwords: u32,
+        threshold: u16,
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<Key, Error> {
+        instrument::begin("Client v4", E_FUNC_COLOR);
+
+        let (_, receiver) = channel;
+
+        // 1. OT The a masked version of the servers version of our password
+        instrument::begin("1-to-n OT: Masked password", E_COMP_COLOR);
+        let many_receiver = ManyOTReceiver {
+            internal_receiver: OTReceiver,
+        };
+        let domain = log2(number_of_passwords);
+        let mut masked_password = many_receiver.exchange(index, domain, channel)?;
+        instrument::end();
+
+        // 2. Double mask the password and use it for fPAKE
+        instrument::begin("fPAKE with double mask", E_PROT_COLOR);
+        xor_bytes_inplace(masked_password.as_mut_slice(), password);
+
+        let k1 = HalfKey::evaluator(&masked_password, channel)?;
+        let k2 = HalfKey::garbler(&masked_password, threshold, channel)?;
+        let key = k1.combine(k2);
+        instrument::end();
+
+        instrument::end();
+
+        return Ok(key)
+    }
+    pub fn server_v4(
+        passwords: &[Vec<u8>],
+        threshold: u16,
+        channel: &Channel<Vec<u8>>,
+    ) -> Result<Key, Error> {
+        instrument::begin("Server v4", E_FUNC_COLOR);
+
+        let (sender, _) = channel;
+        let password_bytes = passwords[0].len();
+
+        // 1. Mask the passwords
+        instrument::begin("Generate mask", E_COMP_COLOR);
+        let mut mask = vec![0u8; password_bytes];
+        random_bytes(&mut mask);
+        instrument::end();
+
+        instrument::begin("Mask passwords", E_COMP_COLOR);
+        let mut masked_passwords = vec![vec![0u8; password_bytes]; passwords.len()];
+        for i in 0..passwords.len() {
+            let masked_password = masked_passwords[i].as_mut_slice();
+            xor_bytes_inplace(masked_password, mask.as_slice());
+
+            let password = passwords[i].as_slice();
+            xor_bytes_inplace(masked_password, password);
+        }
+        instrument::end();
+
+        // 2. OT the masked password(s) to the client
+        instrument::begin("1-to-n OT: Masked password", E_PROT_COLOR);
+        let many_sender = ManyOTSender {
+            interal_sender: OTSender,
+        };
+        let domain = log2(passwords.len());
+        many_sender.exchange(masked_passwords.as_slice(), domain, channel)?;
+        instrument::end();
+
+        // 3. fPAKE with our "random" input  with the client
+        instrument::begin("fPAKE with double mask", E_PROT_COLOR);
+        let k1 = HalfKey::garbler(&mask, threshold, channel)?;
+        let k2 = HalfKey::evaluator(&mask, channel)?;
+        let key = k1.combine(k2);
+        instrument::end();
+
+        instrument::end();
+
+        return Ok(key)
     }
 
     pub fn combine(self, other: Self) -> Key {
@@ -1636,8 +1720,38 @@ mod tests {
                 threshold,
                 &ch2,
             )
-            .unwrap();
+                .unwrap();
             k1.combine(k2)
+        });
+
+        let k1 = h1.join().unwrap();
+        let k2 = h2.join().unwrap();
+        assert_eq!(k1, k2);
+    }
+
+    #[test]
+    fn test_fpake_one_of_many_v4() {
+        use std::thread;
+
+        // Setup for client / server
+        let passwords = [vec![0u8; 8], vec![1u8; 8], vec![2u8; 8], vec![3u8; 8]];
+        let number_of_passwords = passwords.len() as u32;
+        let index = 1u32;
+        let password = passwords[index as usize].clone();
+        let threshold = 0;
+
+        // Do the thing
+        let (s1, r1) = new_local_channel();
+        let (s2, r2) = new_local_channel();
+        let ch1 = (s2, r1);
+        let ch2 = (s1, r2);
+
+        let h1 = thread::spawn(move || {
+            OneOfManyKey::server_v4(&passwords, threshold, &ch1).unwrap()
+        });
+
+        let h2 = thread::spawn(move || {
+            OneOfManyKey::client_v4(&password, index, number_of_passwords, threshold, &ch2).unwrap()
         });
 
         let k1 = h1.join().unwrap();

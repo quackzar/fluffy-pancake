@@ -302,6 +302,43 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
             },
         );
     }
+
+    // v4
+    for i in 8..=22u32 {
+        //for i in 8..=ITERATIONS {
+        let number_of_passwords = (1 << i) as u32;
+
+        group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
+        group.bench_with_input(
+            BenchmarkId::new("v4", number_of_passwords),
+            &number_of_passwords,
+            |b, _| {
+                b.iter(|| {
+                    let passwords = vec![vec![0u8; 2048 / 8]; number_of_passwords as usize];
+                    let index = 1;
+                    let password = passwords[index as usize].clone();
+                    let threshold = 0;
+
+                    // Do the thing
+                    let (s1, r1) = new_local_channel();
+                    let (s2, r2) = new_local_channel();
+                    let ch1 = (s2, r1);
+                    let ch2 = (s1, r2);
+
+                    let h1 = thread::spawn(move || {
+                        OneOfManyKey::server_v4(&passwords, threshold, &ch1).unwrap()
+                    });
+
+                    let h2 = thread::spawn(move || {
+                        OneOfManyKey::client_v4(&password, index, number_of_passwords, threshold, &ch2).unwrap()
+                    });
+
+                    let _k1 = h1.join().unwrap();
+                    let _k2 = h2.join().unwrap();
+                })
+            },
+        );
+    }
     group.finish();
 }
 
