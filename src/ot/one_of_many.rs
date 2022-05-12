@@ -123,10 +123,9 @@ impl ManyOTSender {
                         ()
                     });
                 }
-
-                instrument::end();
             });
         }
+        instrument::end();
 
         let (s, _r) = ch;
         instrument::begin("Send y", E_SEND_COLOR);
