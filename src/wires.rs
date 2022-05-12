@@ -56,9 +56,10 @@ impl ops::Add<&Wire> for &Wire {
     fn add(self, rhs: &Wire) -> Wire {
         match self.domain {
             Domain::Binary => self.map_with(rhs, |a, b| a ^ b),
-            Domain::U8(m) => self.map_with(rhs, |a, b| (a + b) % m),
-            Domain::U16(m) => self.map_with_as_u16(rhs, |a, b| (a + b) % m),
-            _ => panic!("Add not defined for this domain {}", self.domain()),
+            Domain::U8(m) => self.map_with(rhs, |a, b| a.wrapping_add(b) % m),
+            Domain::U8MAX => self.map_with(rhs, |a, b| a.wrapping_add(b)),
+            Domain::U16(m) => self.map_with_as_u16(rhs, |a, b| a.wrapping_add(b) % m),
+            Domain::U16MAX => self.map_with_as_u16(rhs, |a, b| a.wrapping_add(b)),
         }
     }
 }
@@ -69,8 +70,9 @@ impl ops::Sub<&Wire> for &Wire {
         match self.domain {
             Domain::Binary => self.map_with(rhs, |a, b| a ^ b),
             Domain::U8(m) => self.map_with(rhs, |a, b| (a + (m - b)) % m),
+            Domain::U8MAX => self.map_with(rhs, |a, b| a.wrapping_sub(b)),
             Domain::U16(m) => self.map_with_as_u16(rhs, |a, b| (a + (m - b)) % m),
-            _ => panic!("Sub not defined for this domain {}", self.domain()),
+            Domain::U16MAX => self.map_with_as_u16(rhs, |a, b| a.wrapping_sub(b)),
         }
     }
 }
@@ -81,8 +83,9 @@ impl ops::Neg for &Wire {
         match self.domain {
             Domain::Binary => self.map(|x: u8| 0xFF ^ x),
             Domain::U8(m) => self.map(|x: u8| (m - x) % m),
+            Domain::U8MAX => self.map(|x: u8| x.wrapping_neg()),
             Domain::U16(m) => self.map_as_u16(|x: u16| (m - x) % m),
-            _ => panic!("Neg not defined for this domain {}", self.domain()),
+            Domain::U16MAX => self.map_as_u16(|x: u16| x.wrapping_neg()),
         }
     }
 }
@@ -98,7 +101,8 @@ impl ops::Mul<u16> for &Wire {
             Domain::U16(m) => {
                 self.map_as_u16(|x| (((x as u32) * (rhs as u32)) % (m as u32)) as u16)
             }
-            _ => panic!("Mul not defined for this domain"),
+            Domain::U8MAX => self.map(|x| (rhs.wrapping_mul(x as u16)) as u8),
+            Domain::U16MAX => self.map_as_u16(|x| rhs.wrapping_mul(x)),
         }
     }
 }

@@ -216,3 +216,110 @@ pub fn verify_circuit(circuit: &Circuit) -> Result<(), CircuitError> {
     }
     Ok(())
 }
+
+pub fn build_circuit(bitsize: usize, threshold: u16) -> Circuit {
+    let mut gates: Vec<Gate> = Vec::new();
+    let comparison_domain = bitsize as u16 + 1;
+    let bitdomain = 2;
+
+    // xor gates
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i, i + bitsize],
+            output: i + 2 * bitsize,
+            kind: GateKind::Add,
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // proj gates
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i + 2 * bitsize],
+            output: i + 3 * bitsize,
+            kind: GateKind::Proj(ProjKind::Map(comparison_domain)),
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // sum
+    let gate = Gate {
+        kind: GateKind::Add,
+        inputs: (3 * bitsize..4 * bitsize).collect(),
+        output: 4 * bitsize,
+        domain: comparison_domain,
+    };
+    gates.push(gate);
+
+    // comparison
+    let gate = Gate {
+        kind: GateKind::Proj(ProjKind::Less(threshold + 1)),
+        inputs: vec![4 * bitsize],
+        output: 4 * bitsize + 1,
+        domain: comparison_domain,
+    };
+    gates.push(gate);
+    Circuit {
+        gates,
+        num_inputs: bitsize * 2,
+        num_outputs: 1,
+        num_wires: 4 * bitsize + 2,
+        input_domains: vec![bitdomain; bitsize * 2],
+    }
+}
+
+// Inputs for the circuit: masked password, mask, other password
+pub fn build_circuit_v2(bitsize: usize, threshold: u16) -> Circuit {
+    let mut gates: Vec<Gate> = Vec::new();
+    let comparison_domain = bitsize as u16 + 1;
+    let bitdomain = 2;
+
+    // xor: unmask & compare
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i, i + bitsize, i + 2 * bitsize],
+            output: i + 3 * bitsize,
+            kind: GateKind::Add,
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // proj gates
+    for i in 0..bitsize {
+        let gate = Gate {
+            inputs: vec![i + 3 * bitsize],
+            output: i + 4 * bitsize,
+            kind: GateKind::Proj(ProjKind::Map(comparison_domain)),
+            domain: bitdomain,
+        };
+        gates.push(gate);
+    }
+
+    // sum
+    let gate = Gate {
+        kind: GateKind::Add,
+        inputs: (4 * bitsize..5 * bitsize).collect(),
+        output: 5 * bitsize,
+        domain: comparison_domain,
+    };
+    gates.push(gate);
+
+    // comparison
+    let gate = Gate {
+        kind: GateKind::Proj(ProjKind::Less(threshold + 1)),
+        inputs: vec![5 * bitsize],
+        output: 5 * bitsize + 1,
+        domain: comparison_domain,
+    };
+    gates.push(gate);
+    Circuit {
+        gates,
+        num_inputs: bitsize * 3,
+        num_outputs: 1,
+        num_wires: 5 * bitsize + 2,
+        input_domains: vec![bitdomain; bitsize * 3],
+    }
+}
