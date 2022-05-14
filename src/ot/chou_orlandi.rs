@@ -29,7 +29,7 @@ pub struct Sender;
 pub struct Receiver;
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, ch: &TChannel) -> Result<(), Error> {
         let pb = TransactionProperties {
             msg_size: msg.len(),
             protocol: "Chou-Orlandi".to_string(),
@@ -103,7 +103,7 @@ impl ObliviousSender for Sender {
 }
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], ch: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+    fn exchange(&self, choices: &[bool], ch: &TChannel) -> Result<Payload, Error> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
             protocol: "Chou-Orlandi".to_string(),
@@ -248,8 +248,8 @@ mod tests {
 
     #[test]
     fn test_channel_version() {
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        let (s1, r1) = mock::new_local_channel();
+        let (s2, r2) = mock::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 

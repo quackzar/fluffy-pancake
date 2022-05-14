@@ -35,7 +35,7 @@ impl Sender {
     }
 
     #[inline(always)]
-    fn cote(&self, l: usize, channel: &Channel<Vec<u8>>) -> Result<(BitMatrix, BitVector), Error> {
+    fn cote(&self, l: usize, channel: &TChannel) -> Result<(BitMatrix, BitVector), Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
 
@@ -84,7 +84,7 @@ impl Sender {
         l: usize,
         q: &BitMatrix,
         delta: &BitVector,
-        channel: &Channel<Vec<u8>>,
+        channel: &TChannel,
     ) -> Result<(), Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
@@ -121,7 +121,7 @@ impl Sender {
         q: BitMatrix,
         delta: &BitVector,
         msg: &Message,
-        channel: &Channel<Vec<u8>>,
+        channel: &TChannel,
     ) -> Result<(), Error> {
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
@@ -171,7 +171,7 @@ impl Receiver {
     }
 
     #[inline(always)]
-    fn cote(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<BitMatrix, Error> {
+    fn cote(&self, choices: &[bool], channel: &TChannel) -> Result<BitMatrix, Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         let l = choices.len();
@@ -226,7 +226,7 @@ impl Receiver {
         &self,
         t: &BitMatrix,
         choices: &[bool],
-        channel: &Channel<Vec<u8>>,
+        channel: &TChannel,
     ) -> Result<(), Error> {
         const K: usize = COMP_SEC; // kappa
         let (s, _) = channel;
@@ -264,7 +264,7 @@ impl Receiver {
         &self,
         choices: &[bool],
         t: BitMatrix,
-        channel: &Channel<Vec<u8>>,
+        channel: &TChannel,
     ) -> Result<Payload, Error> {
         let v: Vec<Vec<u8>> = t
             .into_par_iter()
@@ -292,7 +292,7 @@ impl Receiver {
 }
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, channel: &TChannel) -> Result<(), Error> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         assert!(
@@ -318,7 +318,7 @@ impl ObliviousSender for Sender {
 }
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+    fn exchange(&self, choices: &[bool], channel: &TChannel) -> Result<Payload, Error> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
             protocol: "Apricot".to_string(),
@@ -351,8 +351,8 @@ mod tests {
     #[test]
     fn test_ot_receiver() {
         use crate::ot::chou_orlandi;
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        let (s1, r1) = mock::new_local_channel();
+        let (s2, r2) = mock::new_local_channel();
         const N: usize = 8 << 8;
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);

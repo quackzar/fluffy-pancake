@@ -1,4 +1,4 @@
-use crate::common::{Channel, Error};
+use crate::common::{TChannel, Error};
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::chou_orlandi::{Receiver, Sender};
@@ -35,7 +35,7 @@ impl ManyOTSender {
         &self,
         messages: &[Vec<u8>],
         domain: u32,
-        ch: &Channel<Vec<u8>>,
+        ch: &TChannel,
     ) -> Result<(), Error> {
         instrument::begin("1-to-n OT Sender", E_FUNC_COLOR);
         let byte_length = messages[0].len();
@@ -162,7 +162,7 @@ impl ManyOTReceiver {
         &self,
         choice: u32,
         domain: u32,
-        ch: &Channel<Vec<u8>>,
+        ch: &TChannel,
     ) -> Result<Vec<u8>, Error> {
         instrument::begin("1-to-n OT Receiver", E_FUNC_COLOR);
         let l = domain as usize;
@@ -220,6 +220,7 @@ impl ManyOTReceiver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::*;
     use crate::util::{log2, LENGTH};
 
     #[test]
@@ -232,8 +233,8 @@ mod tests {
         }
         let choice = 4;
 
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        let (s1, r1) = mock::new_local_channel();
+        let (s2, r2) = mock::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 

@@ -63,7 +63,7 @@ impl OneOfManyKey {
     pub fn garbler_server_v3(
         passwords: &[Vec<u8>],
         threshold: u16,
-        channel: &Channel<Vec<u8>>,
+        channel: &TChannel,
     ) -> Result<(Self, Vec<u8>), Error> {
         instrument::begin("Garbler: Server v3", E_FUNC_COLOR);
 
@@ -179,7 +179,7 @@ impl OneOfManyKey {
         password: &[u8],
         number_of_password: u32,
         index: u32,
-        channel: &Channel<Vec<u8>>,
+        channel: &TChannel,
     ) -> Result<(Self, Vec<u8>), Error> {
         instrument::begin("Evaluator: Client v3", E_FUNC_COLOR);
 
@@ -273,7 +273,7 @@ impl OneOfManyKey {
         index: u32,
         number_of_passwords: u32,
         threshold: u16,
-        channel: &Channel<Vec<u8>>,
+        channel: &TChannel,
     ) -> Result<Self, Error> {
         instrument::begin("Garbler: Client v3", E_FUNC_COLOR);
 
@@ -356,7 +356,7 @@ impl OneOfManyKey {
     pub fn evaluator_server_v3(
         passwords: &[Vec<u8>],
         mask: &[u8],
-        channel: &Channel<Vec<u8>>,
+        channel: &TChannel,
     ) -> Result<Self, Error> {
         instrument::begin("Evaluator: Server v3", E_FUNC_COLOR);
 
@@ -434,7 +434,7 @@ pub fn mfpake_single(
     index: u32,
     number_of_passwords: u32,
     threshold: u16,
-    channel: &Channel<Vec<u8>>,
+    channel: &TChannel,
 ) -> Result<Key, Error> {
     instrument::begin("Client v4", E_FUNC_COLOR);
 
@@ -468,7 +468,7 @@ pub fn mfpake_single(
 pub fn mfpake_many(
     passwords: &[Vec<u8>],
     threshold: u16,
-    channel: &Channel<Vec<u8>>,
+    channel: &TChannel,
 ) -> Result<Key, Error> {
     instrument::begin("Server v4", E_FUNC_COLOR);
 
@@ -516,7 +516,7 @@ pub fn mfpake_many(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ductile::new_local_channel;
+    use mock::new_local_channel;
 
     #[test]
     fn test_fpake_one_of_many_server_garbler_v3() {

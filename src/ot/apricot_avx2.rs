@@ -28,7 +28,7 @@ pub struct Receiver {
 // Sender
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, channel: &TChannel) -> Result<(), Error> {
         instrument::begin("Apricot x86 Sender", E_FUNC_COLOR);
 
         debug_assert!(
@@ -244,7 +244,7 @@ impl ObliviousSender for Sender {
 // Receiver
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+    fn exchange(&self, choices: &[bool], channel: &TChannel) -> Result<Payload, Error> {
         instrument::begin("Apricot x86 Receiver", E_FUNC_COLOR);
 
         debug_assert!(
@@ -765,8 +765,8 @@ mod tests {
     #[test]
     fn test_avx2_ot_receiver() {
         use crate::ot::chou_orlandi;
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        let (s1, r1) = mock::new_local_channel();
+        let (s2, r2) = mock::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 
@@ -799,8 +799,8 @@ mod tests {
     #[test]
     fn test_avx2_ot_receiver_many() {
         use crate::ot::chou_orlandi;
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        let (s1, r1) = mock::new_local_channel();
+        let (s2, r2) = mock::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 

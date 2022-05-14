@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::ot::one_of_many::*;
 use magic_pake::util::SECURITY_PARAM;
+use magic_pake::common::mock;
 
 fn log2(x: u32) -> u32 {
     ((std::mem::size_of::<u32>() * 8) as u32 - (x - 1).leading_zeros()) as u32
@@ -9,8 +10,8 @@ fn log2(x: u32) -> u32 {
 fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
     let choice = n / 2;
 
-    let (s1, r1) = ductile::new_local_channel();
-    let (s2, r2) = ductile::new_local_channel();
+    let (s1, r1) = mock::new_local_channel();
+    let (s2, r2) = mock::new_local_channel();
     let ch1 = (s1, r2);
     let ch2 = (s2, r1);
 

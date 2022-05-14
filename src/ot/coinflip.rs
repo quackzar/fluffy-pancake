@@ -24,7 +24,7 @@ impl std::fmt::Display for CoinFlipError {
 /// This part first randomly selects N bytes, commits to them and sends a that commit
 /// It then opens the commitment.
 /// It then receives N bytes which it then XORs with its own random bytes.
-pub fn coinflip_sender<const N: usize>((s, r): &Channel<Vec<u8>>) -> Result<[u8; N], Error> {
+pub fn coinflip_sender<const N: usize>((s, r): &TChannel) -> Result<[u8; N], Error> {
     let mut rng = rand::thread_rng();
     let v: [u8; N] = rng.gen();
     let commit = hash!(v);
@@ -46,7 +46,7 @@ pub fn coinflip_sender<const N: usize>((s, r): &Channel<Vec<u8>>) -> Result<[u8;
 /// This first waits for a sender to send a commitment,
 /// then it picks N random bytes and sends them.
 /// The commitment is then opened and XORed with the bytes.
-pub fn coinflip_receiver<const N: usize>((s, r): &Channel<Vec<u8>>) -> Result<[u8; N], Error> {
+pub fn coinflip_receiver<const N: usize>((s, r): &TChannel) -> Result<[u8; N], Error> {
     let mut rng = rand::thread_rng();
     let u: [u8; N] = rng.gen();
     let commit = r.recv_raw()?;
@@ -68,14 +68,12 @@ pub fn coinflip_receiver<const N: usize>((s, r): &Channel<Vec<u8>>) -> Result<[u
 
 #[cfg(test)]
 mod tests {
-    use crate::ot::coinflip::{coinflip_receiver, coinflip_sender};
+    use crate::{ot::coinflip::{coinflip_receiver, coinflip_sender}};
+    use crate::common::*;
 
     #[test]
     fn test_coinflip() {
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
-        let ch1 = (s1, r2);
-        let ch2 = (s2, r1);
+        let (ch1, ch2) = mock::local_channel_pair();
 
         use std::thread;
         let h1 = thread::Builder::new()

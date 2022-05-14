@@ -7,6 +7,8 @@
 // #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 
+#![feature(type_alias_impl_trait)]
+
 extern crate core;
 
 pub mod circuit;

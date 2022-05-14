@@ -16,7 +16,7 @@ pub struct HalfKey(pub WireBytes);
 pub struct Key(pub WireBytes);
 
 impl HalfKey {
-    pub fn garbler(password: &[u8], threshold: u16, ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
+    pub fn garbler(password: &[u8], threshold: u16, ch: &TChannel) -> Result<Self, Error> {
         instrument::begin("Garbler", E_PROT_COLOR);
 
         let password = u8_vec_to_bool_vec(password);
@@ -53,7 +53,7 @@ impl HalfKey {
         Ok(Self(d.hashes[0][1]))
     }
 
-    pub fn evaluator(password: &[u8], ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
+    pub fn evaluator(password: &[u8], ch: &TChannel) -> Result<Self, Error> {
         instrument::begin("Evaluator", E_PROT_COLOR);
 
         let password = u8_vec_to_bool_vec(password);
@@ -98,7 +98,7 @@ impl HalfKey {
 mod tests {
     use super::*;
     use crate::circuit::Circuit;
-    use ductile::new_local_channel;
+    use mock::new_local_channel;
 
     #[test]
     fn test_fpake_api() {

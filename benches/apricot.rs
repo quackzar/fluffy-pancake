@@ -4,12 +4,12 @@ use magic_pake::{
     garble::{self, BinaryEncodingKey},
     ot::apricot,
     ot::chou_orlandi,
-    ot::common::*,
+    ot::common::*, common::mock,
 };
 
 fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
-    let (s1, r1) = ductile::new_local_channel();
-    let (s2, r2) = ductile::new_local_channel();
+    let (s1, r1) = mock::new_local_channel();
+    let (s2, r2) = mock::new_local_channel();
     let ch1 = (s1, r2);
     let ch2 = (s2, r1);
 

@@ -1,7 +1,6 @@
 use clap::Parser;
-use ductile::{connect_channel, ChannelServer};
-use magic_pake::common::Channel;
-use magic_pake::common::Error;
+use magic_pake::common::mock::{connect_channel, ChannelServer};
+use magic_pake::common::{Error, TChannel};
 use magic_pake::fpake::HalfKey;
 use magic_pake::legacy_fpake::OneOfManyKey;
 use std::fs;
@@ -49,7 +48,7 @@ fn server(args: &Args) -> Result<(), Error> {
     let mut server = ChannelServer::bind(&args.address)?;
     println!("Listening on {}...", &args.address);
 
-    let (s, r, _addr) = server.next().unwrap();
+    let (s, r) = server.next().unwrap();
     let ch = (s, r);
 
     let hk1 = HalfKey::garbler(&pw, args.threadshold, &ch)?;
@@ -69,7 +68,7 @@ fn server_many(args: &Args) -> Result<(), Error> {
 
     let mut server = ChannelServer::bind(&args.address)?;
     println!("Listening on {}...", &args.address);
-    let (s, r, _addr) = server.next().unwrap();
+    let (s, r) = server.next().unwrap();
     let ch = (s, r);
 
     // TODO: Redo to use new one of many fPAKE.
@@ -82,7 +81,7 @@ fn server_many(args: &Args) -> Result<(), Error> {
 fn client(args: &Args) -> Result<(), Error> {
     let pw = args.password.as_bytes();
     println!("Connecting to {}...", &args.address);
-    let ch: Channel<Vec<u8>> = connect_channel(&args.address)?;
+    let ch: TChannel = connect_channel(&args.address)?;
 
     let hk2 = HalfKey::evaluator(&pw, &ch)?;
     let hk1 = HalfKey::garbler(&pw, args.threadshold, &ch)?;
@@ -93,7 +92,7 @@ fn client(args: &Args) -> Result<(), Error> {
 fn client_many(args: &Args) -> Result<(), Error> {
     let pw = args.password.as_bytes();
     println!("Connecting to {}...", &args.address);
-    let ch: Channel<Vec<u8>> = connect_channel(&args.address)?;
+    let ch: TChannel = connect_channel(&args.address)?;
 
     // TODO: Redo to use new one of many fPAKE.
     let hk2 = OneOfManyKey::evaluator_client(&pw, args.total_passwords, args.index, &ch)?;
