@@ -68,8 +68,8 @@ pub fn coinflip_receiver<const N: usize>((s, r): &TChannel) -> Result<[u8; N], E
 
 #[cfg(test)]
 mod tests {
-    use crate::{ot::coinflip::{coinflip_receiver, coinflip_sender}};
     use crate::common::*;
+    use crate::ot::coinflip::{coinflip_receiver, coinflip_sender};
 
     #[test]
     fn test_coinflip() {

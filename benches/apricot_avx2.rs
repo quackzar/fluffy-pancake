@@ -1,10 +1,11 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::{
     circuit::build_circuit,
+    common::raw,
     garble::{self, BinaryEncodingKey},
     ot::apricot_avx2,
     ot::chou_orlandi,
-    ot::common::*, common::raw,
+    ot::common::*,
 };
 
 use std::thread;

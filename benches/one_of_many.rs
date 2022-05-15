@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use magic_pake::common::raw;
 use magic_pake::ot::one_of_many::*;
 use magic_pake::util::SECURITY_PARAM;
-use magic_pake::common::raw;
 
 fn log2(x: u32) -> u32 {
     ((std::mem::size_of::<u32>() * 8) as u32 - (x - 1).leading_zeros()) as u32

@@ -260,12 +260,7 @@ impl Receiver {
     }
 
     #[inline(always)]
-    fn de_rot(
-        &self,
-        choices: &[bool],
-        t: BitMatrix,
-        channel: &TChannel,
-    ) -> Result<Payload, Error> {
+    fn de_rot(&self, choices: &[bool], t: BitMatrix, channel: &TChannel) -> Result<Payload, Error> {
         let v: Vec<Vec<u8>> = t
             .into_par_iter()
             .enumerate()

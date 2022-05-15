@@ -5,13 +5,13 @@ use crate::garble::*;
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::apricot_avx2::{Receiver, Sender};
+use crate::ot::chou_orlandi;
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::ot::one_of_many::*;
 use crate::util;
 use crate::util::*;
 use crate::wires::*;
-use crate::ot::chou_orlandi;
 
 #[inline]
 fn payload_to_encoding(payload: Payload, bit_count: usize) -> Vec<Wire> {

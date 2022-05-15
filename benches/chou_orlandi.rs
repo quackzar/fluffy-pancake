@@ -1,9 +1,10 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::{
     circuit::build_circuit,
+    common::raw,
     garble::{self, BinaryEncodingKey},
     ot::chou_orlandi::*,
-    ot::common::*, common::raw,
+    ot::common::*,
 };
 
 fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {

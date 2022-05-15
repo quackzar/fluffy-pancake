@@ -532,10 +532,7 @@ impl OneOfManyKey {
         instrument::end();
         Ok(Self(decoding.hashes[0][1]))
     }
-    pub fn evaluator_server(
-        passwords: &[Vec<u8>],
-        channel: &TChannel,
-    ) -> Result<Self, Error> {
+    pub fn evaluator_server(passwords: &[Vec<u8>], channel: &TChannel) -> Result<Self, Error> {
         instrument::begin("Evaluator: Server", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
@@ -698,10 +695,7 @@ impl OneOfManyKey {
         instrument::end();
         Ok(Self(decoding.hashes[0][1]))
     }
-    pub fn evaluator_server_v2(
-        passwords: &[Vec<u8>],
-        channel: &TChannel,
-    ) -> Result<Self, Error> {
+    pub fn evaluator_server_v2(passwords: &[Vec<u8>], channel: &TChannel) -> Result<Self, Error> {
         instrument::begin("Evaluator: Server v2", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
