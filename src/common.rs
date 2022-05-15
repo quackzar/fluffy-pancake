@@ -14,8 +14,7 @@ pub trait TChannelReceiver: Send {
 pub type TChannel = (Box<dyn TChannelSender>, Box<dyn TChannelReceiver>);
 
 
-// TODO: Make actual versions that do something.
-pub mod mock {
+pub mod raw {
     use std::net::ToSocketAddrs;
     use super::*;
 

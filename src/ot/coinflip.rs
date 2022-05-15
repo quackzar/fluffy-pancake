@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn test_coinflip() {
-        let (ch1, ch2) = mock::local_channel_pair();
+        let (ch1, ch2) = raw::local_channel_pair();
 
         use std::thread;
         let h1 = thread::Builder::new()

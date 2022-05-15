@@ -1,5 +1,5 @@
 use clap::Parser;
-use magic_pake::common::mock::{connect_channel, ChannelServer};
+use magic_pake::common::raw::{connect_channel, ChannelServer};
 use magic_pake::common::{Error, TChannel};
 use magic_pake::fpake::HalfKey;
 use magic_pake::legacy_fpake::OneOfManyKey;

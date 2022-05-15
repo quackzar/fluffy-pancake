@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use magic_pake::common::mock::new_local_channel;
+use magic_pake::common::raw::new_local_channel;
 use magic_pake::fpake::*;
 use std::thread;
 

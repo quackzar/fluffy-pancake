@@ -98,7 +98,7 @@ impl HalfKey {
 mod tests {
     use super::*;
     use crate::circuit::Circuit;
-    use mock::new_local_channel;
+    use raw::new_local_channel;
 
     #[test]
     fn test_fpake_api() {

@@ -765,8 +765,8 @@ mod tests {
     #[test]
     fn test_avx2_ot_receiver() {
         use crate::ot::chou_orlandi;
-        let (s1, r1) = mock::new_local_channel();
-        let (s2, r2) = mock::new_local_channel();
+        let (s1, r1) = raw::new_local_channel();
+        let (s2, r2) = raw::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 
@@ -799,8 +799,8 @@ mod tests {
     #[test]
     fn test_avx2_ot_receiver_many() {
         use crate::ot::chou_orlandi;
-        let (s1, r1) = mock::new_local_channel();
-        let (s2, r2) = mock::new_local_channel();
+        let (s1, r1) = raw::new_local_channel();
+        let (s2, r2) = raw::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 

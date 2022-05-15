@@ -516,7 +516,7 @@ pub fn mfpake_many(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mock::new_local_channel;
+    use raw::new_local_channel;
 
     #[test]
     fn test_fpake_one_of_many_server_garbler_v3() {
