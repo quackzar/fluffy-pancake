@@ -29,7 +29,7 @@ pub struct Sender;
 pub struct Receiver;
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, ch: &TChannel) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, ch: &TChannel) -> Result<()> {
         let pb = TransactionProperties {
             msg_size: msg.len(),
             protocol: "Chou-Orlandi".to_string(),
@@ -103,7 +103,7 @@ impl ObliviousSender for Sender {
 }
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], ch: &TChannel) -> Result<Payload, Error> {
+    fn exchange(&self, choices: &[bool], ch: &TChannel) -> Result<Payload> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
             protocol: "Chou-Orlandi".to_string(),
@@ -178,7 +178,7 @@ impl ObliviousReceiver for Receiver {
 pub struct Public(Vec<CompressedEdwardsY>);
 
 impl Serialize for Public {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
@@ -193,7 +193,7 @@ impl Serialize for Public {
 struct PublicVisitor;
 
 impl<'de> Visitor<'de> for PublicVisitor {
-    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    fn visit_bytes<E>(self, v: &[u8]) -> std::result::Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
@@ -205,7 +205,7 @@ impl<'de> Visitor<'de> for PublicVisitor {
         Ok(Public(vec))
     }
 
-    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> std::result::Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
@@ -220,7 +220,10 @@ impl<'de> Visitor<'de> for PublicVisitor {
 }
 
 impl<'de> Deserialize<'de> for Public {
-    fn deserialize_in_place<D>(deserializer: D, place: &mut Self) -> Result<(), D::Error>
+    fn deserialize_in_place<D>(
+        deserializer: D,
+        place: &mut Self,
+    ) -> std::result::Result<(), D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -229,7 +232,7 @@ impl<'de> Deserialize<'de> for Public {
         Ok(())
     }
 
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {

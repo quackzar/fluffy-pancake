@@ -1,13 +1,14 @@
 // Common functionality for all modules.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Result<T> = std::result::Result<T, Error>;
 // TODO: Make result type more pleasant and maybe switch to anyhow.
 
 pub trait TChannelSender: Send {
-    fn send(&self, data: &[u8]) -> Result<(), Error>;
+    fn send(&self, data: &[u8]) -> Result<()>;
 }
 
 pub trait TChannelReceiver: Send {
-    fn recv(&self) -> Result<Vec<u8>, Error>;
+    fn recv(&self) -> Result<Vec<u8>>;
 }
 
 pub type TChannel = (Box<dyn TChannelSender>, Box<dyn TChannelReceiver>);
@@ -21,14 +22,14 @@ pub mod raw {
     struct RawChannelReceiver(ductile::ChannelReceiver<Vec<u8>>);
 
     impl super::TChannelSender for RawChannelSender {
-        fn send(&self, data: &[u8]) -> Result<(), super::Error> {
+        fn send(&self, data: &[u8]) -> Result<()> {
             self.0.send_raw(&data)?;
             Ok(())
         }
     }
 
     impl super::TChannelReceiver for RawChannelReceiver {
-        fn recv(&self) -> Result<Vec<u8>, super::Error> {
+        fn recv(&self) -> Result<Vec<u8>> {
             let data = self.0.recv_raw()?;
             Ok(data)
         }
@@ -55,7 +56,7 @@ pub mod raw {
     pub struct ChannelServer(ductile::ChannelServer<Vec<u8>, Vec<u8>>);
 
     impl ChannelServer {
-        pub fn bind(addr: impl ToSocketAddrs) -> Result<ChannelServer, Error> {
+        pub fn bind(addr: impl ToSocketAddrs) -> Result<ChannelServer> {
             let s = ductile::ChannelServer::bind(addr)?;
             Ok(ChannelServer(s))
         }
@@ -69,7 +70,7 @@ pub mod raw {
         }
     }
 
-    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel, Error> {
+    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel> {
         let (s, r) = ductile::connect_channel(addr)?;
         Ok((
             Box::new(RawChannelSender(s)),
@@ -100,7 +101,7 @@ pub mod auth {
     }
 
     impl super::TChannelSender for AuthChannelSender {
-        fn send(&self, data: &[u8]) -> Result<(), super::Error> {
+        fn send(&self, data: &[u8]) -> Result<()> {
             let mut mac = HmacSha256::new_from_slice(&self.key).unwrap();
             mac.update(data);
             let code = mac.finalize();
@@ -112,7 +113,7 @@ pub mod auth {
     }
 
     impl super::TChannelReceiver for AuthChannelReceiver {
-        fn recv(&self) -> Result<Vec<u8>, super::Error> {
+        fn recv(&self) -> Result<Vec<u8>> {
             let mut mac = HmacSha256::new_from_slice(&self.key).unwrap();
             let data = self.r.recv_raw()?;
             let code = self.r.recv_raw()?;
@@ -148,7 +149,7 @@ pub mod auth {
     use x25519_dalek::{EphemeralSecret, PublicKey};
 
     impl ChannelServer {
-        pub fn bind(addr: impl ToSocketAddrs) -> Result<ChannelServer, Error> {
+        pub fn bind(addr: impl ToSocketAddrs) -> Result<ChannelServer> {
             let s = ductile::ChannelServer::bind(addr)?;
             Ok(ChannelServer(s))
         }
@@ -172,7 +173,7 @@ pub mod auth {
         }
     }
 
-    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel, Error> {
+    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel> {
         let (s, r) = ductile::connect_channel(addr)?;
         let secret = EphemeralSecret::new(OsRng);
         let public = PublicKey::from(&secret);
@@ -195,14 +196,14 @@ pub mod auth {
             use super::*;
             let (ch1, ch2) = local_channel_pair();
 
-            let h1 = std::thread::spawn(move || -> Result<_, Error> {
+            let h1 = std::thread::spawn(move || -> Result<_> {
                 let (s, r) = ch1;
                 s.send(&[1, 2, 3, 4])?;
                 r.recv()?;
                 Ok(())
             });
 
-            let h2 = std::thread::spawn(move || -> Result<_, Error> {
+            let h2 = std::thread::spawn(move || -> Result<_> {
                 let (s, r) = ch2;
                 s.send(&[5, 6, 7, 8])?;
                 r.recv()?;
@@ -221,7 +222,6 @@ mod signed {
     use super::*;
     use ed25519_dalek::*;
 
-
     struct SignedChannelSender {
         s: ductile::ChannelSender<Vec<u8>>,
         keypair: Keypair,
@@ -233,7 +233,7 @@ mod signed {
     }
 
     impl super::TChannelSender for SignedChannelSender {
-        fn send(&self, data: &[u8]) -> Result<(), super::Error> {
+        fn send(&self, data: &[u8]) -> Result<()> {
             let signature = self.keypair.sign(data);
             let signature = signature.to_bytes();
             self.s.send_raw(&data)?;
@@ -243,7 +243,7 @@ mod signed {
     }
 
     impl super::TChannelReceiver for SignedChannelReceiver {
-        fn recv(&self) -> Result<Vec<u8>, super::Error> {
+        fn recv(&self) -> Result<Vec<u8>> {
             let data = self.r.recv_raw()?;
             let signature = self.r.recv_raw()?;
             let signature = Signature::from_bytes(&signature).unwrap();
@@ -263,7 +263,7 @@ mod signed {
     }
 
     fn new_local_channel() -> TChannel {
-        let mut csprng = rand_old::rngs::OsRng{};
+        let mut csprng = rand_old::rngs::OsRng {};
         let keypair = Keypair::generate(&mut csprng);
         let public_key = keypair.public.clone();
 
@@ -277,7 +277,7 @@ mod signed {
     pub struct ChannelServer(ductile::ChannelServer<Vec<u8>, Vec<u8>>);
 
     impl ChannelServer {
-        pub fn bind(addr: impl ToSocketAddrs) -> Result<ChannelServer, Error> {
+        pub fn bind(addr: impl ToSocketAddrs) -> Result<ChannelServer> {
             let s = ductile::ChannelServer::bind(addr)?;
             Ok(ChannelServer(s))
         }
@@ -286,7 +286,7 @@ mod signed {
             let (s, r, _) = self.0.next()?;
 
             // generation and exchanging of public keys
-            let mut csprng = rand_old::rngs::OsRng{};
+            let mut csprng = rand_old::rngs::OsRng {};
             let keypair = Keypair::generate(&mut csprng);
             let my_public_key = keypair.public.clone();
             s.send_raw(&my_public_key.to_bytes()).unwrap();
@@ -299,11 +299,11 @@ mod signed {
         }
     }
 
-    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel, Error> {
+    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel> {
         let (s, r) = ductile::connect_channel(addr)?;
 
         // generation and exchanging of public keys
-        let mut csprng = rand_old::rngs::OsRng{};
+        let mut csprng = rand_old::rngs::OsRng {};
         let keypair = Keypair::generate(&mut csprng);
         let my_public_key = keypair.public.clone();
         let public_key = r.recv_raw()?;
@@ -321,14 +321,14 @@ mod signed {
             use super::*;
             let (ch1, ch2) = local_channel_pair();
 
-            let h1 = std::thread::spawn(move || -> Result<_, Error> {
+            let h1 = std::thread::spawn(move || -> Result<_> {
                 let (s, r) = ch1;
                 s.send(&[1, 2, 3, 4])?;
                 r.recv()?;
                 Ok(())
             });
 
-            let h2 = std::thread::spawn(move || -> Result<_, Error> {
+            let h2 = std::thread::spawn(move || -> Result<_> {
                 let (s, r) = ch2;
                 s.send(&[5, 6, 7, 8])?;
                 r.recv()?;

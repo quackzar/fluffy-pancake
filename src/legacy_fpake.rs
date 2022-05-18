@@ -64,7 +64,7 @@ impl OneOfManyKey {
         passwords: &[Vec<u8>],
         threshold: u16,
         channel: &TChannel,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         instrument::begin("Garbler: Server", E_FUNC_COLOR);
 
         let (sender, _) = channel;
@@ -149,7 +149,7 @@ impl OneOfManyKey {
         number_of_password: u32,
         index: u32,
         channel: &TChannel,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         instrument::begin("Evaluator: Client", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
@@ -217,7 +217,7 @@ impl OneOfManyKey {
         passwords: &[Vec<u8>],
         threshold: u16,
         channel: &TChannel,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         instrument::begin("Garbler: Server v2", E_FUNC_COLOR);
 
         let (sender, _s) = channel;
@@ -332,7 +332,7 @@ impl OneOfManyKey {
         number_of_password: u32,
         index: u32,
         channel: &TChannel,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         instrument::begin("Evaluator: Client v2", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
@@ -424,7 +424,7 @@ impl OneOfManyKey {
         number_of_passwords: u32,
         threshold: u16,
         channel: &TChannel,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         instrument::begin("Garbler: Client", E_FUNC_COLOR);
 
         let (sender, _) = channel;
@@ -532,7 +532,7 @@ impl OneOfManyKey {
         instrument::end();
         Ok(Self(decoding.hashes[0][1]))
     }
-    pub fn evaluator_server(passwords: &[Vec<u8>], channel: &TChannel) -> Result<Self, Error> {
+    pub fn evaluator_server(passwords: &[Vec<u8>], channel: &TChannel) -> Result<Self> {
         instrument::begin("Evaluator: Server", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
@@ -608,7 +608,7 @@ impl OneOfManyKey {
         number_of_passwords: u32,
         threshold: u16,
         channel: &TChannel,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         instrument::begin("Garbler: Client v2", E_FUNC_COLOR);
 
         let (sender, _) = channel;
@@ -695,7 +695,7 @@ impl OneOfManyKey {
         instrument::end();
         Ok(Self(decoding.hashes[0][1]))
     }
-    pub fn evaluator_server_v2(passwords: &[Vec<u8>], channel: &TChannel) -> Result<Self, Error> {
+    pub fn evaluator_server_v2(passwords: &[Vec<u8>], channel: &TChannel) -> Result<Self> {
         instrument::begin("Evaluator: Server v2", E_FUNC_COLOR);
 
         let (_, receiver) = channel;

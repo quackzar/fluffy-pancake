@@ -28,7 +28,7 @@ pub struct Receiver {
 // Sender
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &TChannel) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, channel: &TChannel) -> Result<()> {
         instrument::begin("Apricot x86 Sender", E_FUNC_COLOR);
 
         debug_assert!(
@@ -244,7 +244,7 @@ impl ObliviousSender for Sender {
 // Receiver
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], channel: &TChannel) -> Result<Payload, Error> {
+    fn exchange(&self, choices: &[bool], channel: &TChannel) -> Result<Payload> {
         instrument::begin("Apricot x86 Receiver", E_FUNC_COLOR);
 
         debug_assert!(

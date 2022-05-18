@@ -5,13 +5,13 @@ use crate::garble::*;
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::apricot_avx2::{Receiver, Sender};
+use crate::ot::chou_orlandi;
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::ot::one_of_many::*;
 use crate::util;
 use crate::util::*;
 use crate::wires::*;
-use crate::ot::chou_orlandi;
 
 #[inline]
 fn payload_to_encoding(payload: Payload, bit_count: usize) -> Vec<Wire> {
@@ -64,7 +64,7 @@ impl OneOfManyKey {
         passwords: &[Vec<u8>],
         threshold: u16,
         channel: &TChannel,
-    ) -> Result<(Self, Vec<u8>), Error> {
+    ) -> Result<(Self, Vec<u8>)> {
         instrument::begin("Garbler: Server v3", E_FUNC_COLOR);
 
         let (sender, _s) = channel;
@@ -180,7 +180,7 @@ impl OneOfManyKey {
         number_of_password: u32,
         index: u32,
         channel: &TChannel,
-    ) -> Result<(Self, Vec<u8>), Error> {
+    ) -> Result<(Self, Vec<u8>)> {
         instrument::begin("Evaluator: Client v3", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
@@ -274,7 +274,7 @@ impl OneOfManyKey {
         number_of_passwords: u32,
         threshold: u16,
         channel: &TChannel,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         instrument::begin("Garbler: Client v3", E_FUNC_COLOR);
 
         let (sender, _) = channel;
@@ -357,7 +357,7 @@ impl OneOfManyKey {
         passwords: &[Vec<u8>],
         mask: &[u8],
         channel: &TChannel,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         instrument::begin("Evaluator: Server v3", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
@@ -435,7 +435,7 @@ pub fn mfpake_single(
     number_of_passwords: u32,
     threshold: u16,
     channel: &TChannel,
-) -> Result<Key, Error> {
+) -> Result<Key> {
     instrument::begin("Client v4", E_FUNC_COLOR);
 
     let (_, receiver) = channel;
@@ -465,11 +465,7 @@ pub fn mfpake_single(
 
 /// Server version of (one-out-of)-many-fpake.
 /// Supplying a key list and an index.
-pub fn mfpake_many(
-    passwords: &[Vec<u8>],
-    threshold: u16,
-    channel: &TChannel,
-) -> Result<Key, Error> {
+pub fn mfpake_many(passwords: &[Vec<u8>], threshold: u16, channel: &TChannel) -> Result<Key> {
     instrument::begin("Server v4", E_FUNC_COLOR);
 
     let (sender, _) = channel;
