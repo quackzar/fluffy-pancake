@@ -189,3 +189,106 @@ pub mod auth {
         Ok((sender, receiver))
     }
 }
+
+mod signed {
+    use std::net::ToSocketAddrs;
+
+    use super::*;
+    use ed25519_dalek::*;
+
+
+
+    
+    struct SignedChannelSender {
+        s: ductile::ChannelSender<Vec<u8>>,
+        keypair: Keypair,
+    }
+
+    struct SignedChannelReceiver {
+        r: ductile::ChannelReceiver<Vec<u8>>,
+        public_key: PublicKey,
+    }
+
+    impl super::TChannelSender for SignedChannelSender {
+        fn send_raw(&self, data: &[u8]) -> Result<(), super::Error> {
+            let signature = self.keypair.sign(data);
+            let signature = signature.to_bytes();
+            self.s.send_raw(&data)?;
+            self.s.send_raw(&signature)?;
+            Ok(())
+        }
+    }
+
+    impl super::TChannelReceiver for SignedChannelReceiver {
+        fn recv_raw(&self) -> Result<Vec<u8>, super::Error> {
+            let data = self.r.recv_raw()?;
+            let signature = self.r.recv_raw()?;
+            let signature = Signature::from_bytes(&signature).unwrap();
+            let public_key = self.public_key;
+            public_key.verify(&data, &signature)?;
+            Ok(data)
+        }
+    }
+
+    // Local channels
+    pub fn local_channel_pair() -> (TChannel, TChannel) {
+        let (s1, r1) = new_local_channel();
+        let (s2, r2) = new_local_channel();
+        let ch1 = (s1, r2);
+        let ch2 = (s2, r1);
+        (ch1, ch2)
+    }
+
+    fn new_local_channel() -> TChannel {
+        let mut csprng = rand_old::rngs::OsRng{};
+        let keypair = Keypair::generate(&mut csprng);
+        let public_key = keypair.public.clone();
+
+        let (s, r) = ductile::new_local_channel();
+
+        let sender = SignedChannelSender { s, keypair };
+        let receiver = SignedChannelReceiver { r, public_key };
+        (Box::new(sender), Box::new(receiver))
+    }
+
+    pub struct ChannelServer(ductile::ChannelServer<Vec<u8>, Vec<u8>>);
+
+    impl ChannelServer {
+        pub fn bind(addr: impl ToSocketAddrs) -> Result<ChannelServer, Error> {
+            let s = ductile::ChannelServer::bind(addr)?;
+            Ok(ChannelServer(s))
+        }
+
+        pub fn next(&mut self) -> Option<super::TChannel> {
+            let (s, r, _) = self.0.next()?;
+
+            // generation and exchanging of public keys
+            let mut csprng = rand_old::rngs::OsRng{};
+            let keypair = Keypair::generate(&mut csprng);
+            let my_public_key = keypair.public.clone();
+            s.send_raw(&my_public_key.to_bytes()).unwrap();
+            let public_key = r.recv_raw().unwrap();
+            let public_key = PublicKey::from_bytes(&public_key).unwrap();
+
+            let sender = Box::new(SignedChannelSender { s, keypair });
+            let receiver = Box::new(SignedChannelReceiver { r, public_key });
+            Some((sender, receiver))
+        }
+    }
+
+    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel, Error> {
+        let (s, r) = ductile::connect_channel(addr)?;
+
+        // generation and exchanging of public keys
+        let mut csprng = rand_old::rngs::OsRng{};
+        let keypair = Keypair::generate(&mut csprng);
+        let my_public_key = keypair.public.clone();
+        let public_key = r.recv_raw()?;
+        let public_key = PublicKey::from_bytes(&public_key)?;
+        s.send_raw(&my_public_key.to_bytes())?;
+
+        let sender = Box::new(SignedChannelSender { s, keypair });
+        let receiver = Box::new(SignedChannelReceiver { r, public_key });
+        Ok((sender, receiver))
+    }
+}

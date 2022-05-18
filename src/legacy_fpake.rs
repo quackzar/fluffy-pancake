@@ -1,6 +1,6 @@
 use crate::circuit::*;
 use crate::common::*;
-use crate::fpake::{HalfKey, Key};
+use crate::fpake::Key;
 use crate::garble::*;
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
