@@ -50,13 +50,13 @@ impl ObliviousSender for Sender {
         // round 1
         let pbs = publics.0.iter().map(|&p| p.to_bytes());
         for pb in pbs {
-            s.send_raw(pb.as_ref())?;
+            s.send(pb.as_ref())?;
         }
 
         // round 2
         let n = msg.0.len();
         let pb = (0..n)
-            .map(|_| r.recv_raw().unwrap())
+            .map(|_| r.recv().unwrap())
             .map(|p| CompressedEdwardsY::from_slice(&p))
             .collect();
         let pb = Public(pb);
@@ -97,7 +97,7 @@ impl ObliviousSender for Sender {
             .collect();
 
         let msg = bincode::serialize(&payload)?;
-        s.send_raw(&msg)?;
+        s.send(&msg)?;
         Ok(())
     }
 }
@@ -118,7 +118,7 @@ impl ObliviousReceiver for Receiver {
 
         // round 1
         let pb = (0..n)
-            .map(|_| r.recv_raw().unwrap())
+            .map(|_| r.recv().unwrap())
             .map(|p| CompressedEdwardsY::from_slice(&p))
             .collect();
         let their_publics = Public(pb);
@@ -147,11 +147,11 @@ impl ObliviousReceiver for Receiver {
         // round 2
         let pbs = publics.0.iter().map(|&p| p.to_bytes());
         for pb in pbs {
-            s.send_raw(pb.as_ref())?;
+            s.send(pb.as_ref())?;
         }
 
         // round 3
-        let payload = r.recv_raw()?;
+        let payload = r.recv()?;
         let payload: EncryptedPayload = bincode::deserialize(&payload)?;
 
         let msg = payload

@@ -64,7 +64,7 @@ impl ObliviousSender for Sender {
         let (s, r) = channel;
 
         let msg_size = msg.0[0][0].len();
-        s.send_raw(&(msg_size as u16).to_be_bytes())?;
+        s.send(&(msg_size as u16).to_be_bytes())?;
 
         // Generate random delta
         instrument::begin("Generate delta", E_COMP_COLOR);
@@ -98,7 +98,7 @@ impl ObliviousSender for Sender {
         instrument::end();
 
         instrument::begin("Receive u", E_RECV_COLOR);
-        let u: Vec<u8> = r.recv_raw()?;
+        let u: Vec<u8> = r.recv()?;
         instrument::end();
 
         instrument::begin("Compute q", E_COMP_COLOR);
@@ -136,8 +136,8 @@ impl ObliviousSender for Sender {
         instrument::end();
 
         instrument::begin("Receive x_sum, t_sum", E_RECV_COLOR);
-        let x_sum: Vec<u8> = r.recv_raw()?;
-        let t_sum: Vec<u8> = r.recv_raw()?;
+        let x_sum: Vec<u8> = r.recv()?;
+        let t_sum: Vec<u8> = r.recv()?;
         instrument::end();
 
         instrument::begin("Compare correlation sums", E_COMP_COLOR);
@@ -231,7 +231,7 @@ impl ObliviousSender for Sender {
         instrument::end();
 
         instrument::begin("Send d", E_SEND_COLOR);
-        s.send_raw(d.as_slice())?;
+        s.send(d.as_slice())?;
         instrument::end();
         instrument::end();
         instrument::end();
@@ -285,7 +285,7 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Receive msg_size", E_COMP_COLOR);
-        let msg_size_bytes = r.recv_raw()?;
+        let msg_size_bytes = r.recv()?;
         let msg_size = ((msg_size_bytes[0] as u16) << 8) | (msg_size_bytes[1] as u16);
         instrument::end();
 
@@ -341,7 +341,7 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Send u", E_SEND_COLOR);
-        s.send_raw(u.as_slice())?;
+        s.send(u.as_slice())?;
         instrument::end();
 
         instrument::begin("Transpose t0 -> t", E_COMP_COLOR);
@@ -374,8 +374,8 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Send x_sum, t_sum", E_SEND_COLOR);
-        s.send_raw(x_sum.as_slice())?;
-        s.send_raw(t_sum.as_slice())?;
+        s.send(x_sum.as_slice())?;
+        s.send(t_sum.as_slice())?;
         instrument::end();
         instrument::end();
 
@@ -427,7 +427,7 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Receive d", E_RECV_COLOR);
-        let d: Vec<u8> = r.recv_raw()?;
+        let d: Vec<u8> = r.recv()?;
         instrument::end();
 
         instrument::begin("De-randomize", E_COMP_COLOR);

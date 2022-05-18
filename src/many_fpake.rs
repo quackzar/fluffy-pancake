@@ -5,13 +5,13 @@ use crate::garble::*;
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::apricot_avx2::{Receiver, Sender};
-use crate::ot::chou_orlandi;
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::ot::one_of_many::*;
 use crate::util;
 use crate::util::*;
 use crate::wires::*;
+use crate::ot::chou_orlandi;
 
 #[inline]
 fn payload_to_encoding(payload: Payload, bit_count: usize) -> Vec<Wire> {
@@ -82,7 +82,7 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("S: garbled circuit", E_SEND_COLOR);
-        sender.send_raw(&bincode::serialize(&garbled_circuit)?)?;
+        sender.send(&bincode::serialize(&garbled_circuit)?)?;
         instrument::end();
 
         // 2. OT for encoding of client password
@@ -126,7 +126,7 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("S: Encoded mask", E_SEND_COLOR);
-        sender.send_raw(&encoded_mask)?;
+        sender.send(&encoded_mask)?;
         instrument::end();
 
         // 4. Mask all passwords
@@ -189,7 +189,7 @@ impl OneOfManyKey {
 
         // 1. Receive the garbled circuit from the other party
         instrument::begin("R: garbled circuit", E_RECV_COLOR);
-        let gc = bincode::deserialize(&receiver.recv_raw()?)?;
+        let gc = bincode::deserialize(&receiver.recv()?)?;
         instrument::end();
 
         // 2. OT Encoding of client password
@@ -210,7 +210,7 @@ impl OneOfManyKey {
 
         // 3. Receive encoded mask
         instrument::begin("Receive encoded mask", E_RECV_COLOR);
-        let encoded_mask_bytes = receiver.recv_raw()?;
+        let encoded_mask_bytes = receiver.recv()?;
         instrument::end();
 
         // 4. Receive masked server password
@@ -305,11 +305,11 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("S: garbled circuit", E_SEND_COLOR);
-        sender.send_raw(&bincode::serialize(&garbled_circuit)?)?;
+        sender.send(&bincode::serialize(&garbled_circuit)?)?;
         instrument::end();
 
         instrument::begin("S: Encoded password", E_SEND_COLOR);
-        sender.send_raw(&bincode::serialize(&garbler_input)?)?;
+        sender.send(&bincode::serialize(&garbler_input)?)?;
         instrument::end();
 
         // 2. OT Encoding of the mask
@@ -347,7 +347,7 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("S: Masked password", E_SEND_COLOR);
-        sender.send_raw(evaluator_encoding.as_slice())?;
+        sender.send(evaluator_encoding.as_slice())?;
         instrument::end();
 
         instrument::end();
@@ -366,11 +366,11 @@ impl OneOfManyKey {
 
         // 1. Get the garbled circuit and input from the client
         instrument::begin("R: Garbled circuit", E_RECV_COLOR);
-        let garbled_circuit = bincode::deserialize(&receiver.recv_raw()?)?;
+        let garbled_circuit = bincode::deserialize(&receiver.recv()?)?;
         instrument::end();
 
         instrument::begin("R: Client password", E_RECV_COLOR);
-        let client_encoding: Vec<Wire> = bincode::deserialize(&receiver.recv_raw()?)?;
+        let client_encoding: Vec<Wire> = bincode::deserialize(&receiver.recv()?)?;
         instrument::end();
 
         // 3. Get encoding of mask
@@ -390,7 +390,7 @@ impl OneOfManyKey {
         instrument::end();
 
         instrument::begin("R: Encoded masked password", E_RECV_COLOR);
-        let server_encoded = receiver.recv_raw()?;
+        let server_encoded = receiver.recv()?;
         instrument::end();
 
         //

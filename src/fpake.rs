@@ -42,12 +42,12 @@ impl HalfKey {
         let (s, _) = ch;
 
         // send garbled circuit.
-        s.send_raw(&bincode::serialize(&gc)?)?;
+        s.send(&bincode::serialize(&gc)?)?;
 
         let e_own = BinaryEncodingKey::unzipped(&e_own);
         let enc_password = e_own.encode(&password);
         // send garbled password.
-        s.send_raw(&bincode::serialize(&enc_password)?)?;
+        s.send(&bincode::serialize(&enc_password)?)?;
 
         instrument::end();
         Ok(Self(d.hashes[0][1]))
@@ -71,9 +71,9 @@ impl HalfKey {
 
         let our_password = enc_password;
         // receive garbled circuit.
-        let gc = bincode::deserialize(&r.recv_raw()?)?;
+        let gc = bincode::deserialize(&r.recv()?)?;
         // receive garbled password.
-        let their_password: Vec<Wire> = bincode::deserialize(&r.recv_raw()?)?;
+        let their_password: Vec<Wire> = bincode::deserialize(&r.recv()?)?;
 
         // eval circuit
         let mut input = Vec::<Wire>::new();

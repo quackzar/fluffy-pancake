@@ -13,8 +13,8 @@ pub(crate) fn validate_properties(
     pb: &TransactionProperties,
     (s, r): &TChannel,
 ) -> Result<(), Error> {
-    s.send_raw(&bincode::serialize(pb)?)?;
-    let pb2 = r.recv_raw()?;
+    s.send(&bincode::serialize(pb)?)?;
+    let pb2 = r.recv()?;
     let pb2 = bincode::deserialize(&pb2)?;
     if pb2 != *pb {
         Err(Box::new(OTError::BadProperties(pb.clone(), pb2)))

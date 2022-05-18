@@ -1,4 +1,4 @@
-use crate::common::{Error, TChannel};
+use crate::common::{TChannel, Error};
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::chou_orlandi::{Receiver, Sender};
@@ -31,7 +31,12 @@ pub struct ManyOTSender {
 }
 
 impl ManyOTSender {
-    pub fn exchange(&self, messages: &[Vec<u8>], domain: u32, ch: &TChannel) -> Result<(), Error> {
+    pub fn exchange(
+        &self,
+        messages: &[Vec<u8>],
+        domain: u32,
+        ch: &TChannel,
+    ) -> Result<(), Error> {
         instrument::begin("1-to-n OT Sender", E_FUNC_COLOR);
         let byte_length = messages[0].len();
 
@@ -124,7 +129,7 @@ impl ManyOTSender {
 
         let (s, _r) = ch;
         instrument::begin("Send y", E_SEND_COLOR);
-        s.send_raw(y.as_mut_slice())?;
+        s.send(y.as_mut_slice())?;
         instrument::end();
 
         // 2. Initiate 1-out-of-2 OTs by sending challenges
@@ -153,7 +158,12 @@ pub struct ManyOTReceiver {
 }
 
 impl ManyOTReceiver {
-    pub fn exchange(&self, choice: u32, domain: u32, ch: &TChannel) -> Result<Vec<u8>, Error> {
+    pub fn exchange(
+        &self,
+        choice: u32,
+        domain: u32,
+        ch: &TChannel,
+    ) -> Result<Vec<u8>, Error> {
         instrument::begin("1-to-n OT Receiver", E_FUNC_COLOR);
         let l = domain as usize;
 
@@ -168,7 +178,7 @@ impl ManyOTReceiver {
 
         let (_s, r) = ch;
         instrument::begin("Receive y", E_RECV_COLOR);
-        let mut y: Vec<u8> = r.recv_raw()?;
+        let mut y: Vec<u8> = r.recv()?;
         instrument::end();
 
         instrument::begin("Bootstrap", E_PROT_COLOR);

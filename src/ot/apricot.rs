@@ -66,7 +66,7 @@ impl Sender {
             .collect();
 
         let (_, r) = channel;
-        let u: BitMatrix = bincode::deserialize(&r.recv_raw()?)?;
+        let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
 
         let q: BitMatrix = u8_vec_to_bool_vec(delta.as_bytes())
             .into_par_iter()
@@ -104,8 +104,8 @@ impl Sender {
 
             q_sum.mul_add_assign(q, chi);
         }
-        let x_sum: Polynomial = bincode::deserialize(&r.recv_raw()?)?;
-        let t_sum: Polynomial = bincode::deserialize(&r.recv_raw()?)?;
+        let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+        let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
         let delta_ = <&Polynomial>::from(delta);
         q_sum.mul_add_assign(&x_sum, delta_);
 
@@ -157,8 +157,8 @@ impl Sender {
         let (s, _) = channel;
         let d0 = bincode::serialize(&d0)?;
         let d1 = bincode::serialize(&d1)?;
-        s.send_raw(&d0)?;
-        s.send_raw(&d1)?;
+        s.send(&d0)?;
+        s.send(&d1)?;
 
         Ok(())
     }
@@ -215,7 +215,7 @@ impl Receiver {
 
         let (s, _) = channel;
         let u = bincode::serialize(&u)?;
-        s.send_raw(&u)?;
+        s.send(&u)?;
 
         let t = t0.transpose();
         Ok(t)
@@ -254,13 +254,18 @@ impl Receiver {
             t_sum.mul_add_assign(t, chi);
         }
 
-        s.send_raw(&bincode::serialize(&x_sum)?)?;
-        s.send_raw(&bincode::serialize(&t_sum)?)?;
+        s.send(&bincode::serialize(&x_sum)?)?;
+        s.send(&bincode::serialize(&t_sum)?)?;
         Ok(())
     }
 
     #[inline(always)]
-    fn de_rot(&self, choices: &[bool], t: BitMatrix, channel: &TChannel) -> Result<Payload, Error> {
+    fn de_rot(
+        &self,
+        choices: &[bool],
+        t: BitMatrix,
+        channel: &TChannel,
+    ) -> Result<Payload, Error> {
         let v: Vec<Vec<u8>> = t
             .into_par_iter()
             .enumerate()
@@ -269,8 +274,8 @@ impl Receiver {
 
         // -- DeROT --
         let (_, r) = channel;
-        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
-        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
+        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
         // PERF: parallelize
         let y = izip!(v, choices, d0, d1)

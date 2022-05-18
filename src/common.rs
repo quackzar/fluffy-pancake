@@ -1,13 +1,13 @@
 // Common functionality for all modules.
-pub type Error = Box<dyn std::error::Error>;
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
 // TODO: Make result type more pleasant and maybe switch to anyhow.
 
 pub trait TChannelSender: Send {
-    fn send_raw(&self, data: &[u8]) -> Result<(), Error>;
+    fn send(&self, data: &[u8]) -> Result<(), Error>;
 }
 
 pub trait TChannelReceiver: Send {
-    fn recv_raw(&self) -> Result<Vec<u8>, Error>;
+    fn recv(&self) -> Result<Vec<u8>, Error>;
 }
 
 pub type TChannel = (Box<dyn TChannelSender>, Box<dyn TChannelReceiver>);
@@ -21,14 +21,14 @@ pub mod raw {
     struct RawChannelReceiver(ductile::ChannelReceiver<Vec<u8>>);
 
     impl super::TChannelSender for RawChannelSender {
-        fn send_raw(&self, data: &[u8]) -> Result<(), super::Error> {
+        fn send(&self, data: &[u8]) -> Result<(), super::Error> {
             self.0.send_raw(&data)?;
             Ok(())
         }
     }
 
     impl super::TChannelReceiver for RawChannelReceiver {
-        fn recv_raw(&self) -> Result<Vec<u8>, super::Error> {
+        fn recv(&self) -> Result<Vec<u8>, super::Error> {
             let data = self.0.recv_raw()?;
             Ok(data)
         }
@@ -100,7 +100,7 @@ pub mod auth {
     }
 
     impl super::TChannelSender for AuthChannelSender {
-        fn send_raw(&self, data: &[u8]) -> Result<(), super::Error> {
+        fn send(&self, data: &[u8]) -> Result<(), super::Error> {
             let mut mac = HmacSha256::new_from_slice(&self.key).unwrap();
             mac.update(data);
             let code = mac.finalize();
@@ -112,7 +112,7 @@ pub mod auth {
     }
 
     impl super::TChannelReceiver for AuthChannelReceiver {
-        fn recv_raw(&self) -> Result<Vec<u8>, super::Error> {
+        fn recv(&self) -> Result<Vec<u8>, super::Error> {
             let mut mac = HmacSha256::new_from_slice(&self.key).unwrap();
             let data = self.r.recv_raw()?;
             let code = self.r.recv_raw()?;
@@ -188,6 +188,31 @@ pub mod auth {
         let receiver = Box::new(AuthChannelReceiver { r, key });
         Ok((sender, receiver))
     }
+
+    mod tests {
+        #[test]
+        fn test_auth_channel() {
+            use super::*;
+            let (ch1, ch2) = local_channel_pair();
+
+            let h1 = std::thread::spawn(move || -> Result<_, Error> {
+                let (s, r) = ch1;
+                s.send(&[1, 2, 3, 4])?;
+                r.recv()?;
+                Ok(())
+            });
+
+            let h2 = std::thread::spawn(move || -> Result<_, Error> {
+                let (s, r) = ch2;
+                s.send(&[5, 6, 7, 8])?;
+                r.recv()?;
+                Ok(())
+            });
+
+            h1.join().unwrap().unwrap();
+            h2.join().unwrap().unwrap();
+        }
+    }
 }
 
 mod signed {
@@ -197,8 +222,6 @@ mod signed {
     use ed25519_dalek::*;
 
 
-
-    
     struct SignedChannelSender {
         s: ductile::ChannelSender<Vec<u8>>,
         keypair: Keypair,
@@ -210,7 +233,7 @@ mod signed {
     }
 
     impl super::TChannelSender for SignedChannelSender {
-        fn send_raw(&self, data: &[u8]) -> Result<(), super::Error> {
+        fn send(&self, data: &[u8]) -> Result<(), super::Error> {
             let signature = self.keypair.sign(data);
             let signature = signature.to_bytes();
             self.s.send_raw(&data)?;
@@ -220,7 +243,7 @@ mod signed {
     }
 
     impl super::TChannelReceiver for SignedChannelReceiver {
-        fn recv_raw(&self) -> Result<Vec<u8>, super::Error> {
+        fn recv(&self) -> Result<Vec<u8>, super::Error> {
             let data = self.r.recv_raw()?;
             let signature = self.r.recv_raw()?;
             let signature = Signature::from_bytes(&signature).unwrap();
@@ -290,5 +313,30 @@ mod signed {
         let sender = Box::new(SignedChannelSender { s, keypair });
         let receiver = Box::new(SignedChannelReceiver { r, public_key });
         Ok((sender, receiver))
+    }
+
+    mod tests {
+        #[test]
+        fn test_auth_channel() {
+            use super::*;
+            let (ch1, ch2) = local_channel_pair();
+
+            let h1 = std::thread::spawn(move || -> Result<_, Error> {
+                let (s, r) = ch1;
+                s.send(&[1, 2, 3, 4])?;
+                r.recv()?;
+                Ok(())
+            });
+
+            let h2 = std::thread::spawn(move || -> Result<_, Error> {
+                let (s, r) = ch2;
+                s.send(&[5, 6, 7, 8])?;
+                r.recv()?;
+                Ok(())
+            });
+
+            h1.join().unwrap().unwrap();
+            h2.join().unwrap().unwrap();
+        }
     }
 }
