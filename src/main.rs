@@ -51,8 +51,8 @@ fn server(args: &Args) -> Result<(), Error> {
     let (s, r) = server.next().unwrap();
     let ch = (s, r);
 
-    let hk1 = HalfKey::garbler(&pw, args.threadshold, &ch)?;
-    let hk2 = HalfKey::evaluator(&pw, &ch)?;
+    let hk1 = HalfKey::garbler(pw, args.threadshold, &ch)?;
+    let hk2 = HalfKey::evaluator(pw, &ch)?;
     println!("Derived Key: {:?}", hk1.combine(hk2));
     Ok(())
 }
@@ -83,8 +83,8 @@ fn client(args: &Args) -> Result<(), Error> {
     println!("Connecting to {}...", &args.address);
     let ch: TChannel = connect_channel(&args.address)?;
 
-    let hk2 = HalfKey::evaluator(&pw, &ch)?;
-    let hk1 = HalfKey::garbler(&pw, args.threadshold, &ch)?;
+    let hk2 = HalfKey::evaluator(pw, &ch)?;
+    let hk1 = HalfKey::garbler(pw, args.threadshold, &ch)?;
     println!("Derived Key: {:?}", hk1.combine(hk2));
     Ok(())
 }
@@ -95,9 +95,9 @@ fn client_many(args: &Args) -> Result<(), Error> {
     let ch: TChannel = connect_channel(&args.address)?;
 
     // TODO: Redo to use new one of many fPAKE.
-    let hk2 = OneOfManyKey::evaluator_client(&pw, args.total_passwords, args.index, &ch)?;
+    let hk2 = OneOfManyKey::evaluator_client(pw, args.total_passwords, args.index, &ch)?;
     let hk1 =
-        OneOfManyKey::garbler_client(&pw, args.index, args.total_passwords, args.threadshold, &ch)?;
+        OneOfManyKey::garbler_client(pw, args.index, args.total_passwords, args.threadshold, &ch)?;
     println!("Derived Key: {:?}", hk1.combine(hk2));
     Ok(())
 }

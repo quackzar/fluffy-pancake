@@ -1,3 +1,7 @@
+// Common functionality for all modules.
+pub type Error = Box<dyn std::error::Error>;
+// TODO: Make result type more pleasant and maybe switch to anyhow.
+
 pub trait TChannelSender: Send {
     fn send_raw(&self, data: &[u8]) -> Result<(), Error>;
 }
@@ -74,6 +78,7 @@ pub mod raw {
     }
 }
 
+/// Module for channels in which messages are authenticated.
 pub mod auth {
     // TODO: Test this module.
     use std::net::ToSocketAddrs;
@@ -184,5 +189,3 @@ pub mod auth {
         Ok((sender, receiver))
     }
 }
-
-pub type Error = Box<dyn std::error::Error>;

@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::common::raw::new_local_channel;
 use magic_pake::legacy_fpake as legacy;
 use magic_pake::many_fpake::*;
@@ -61,8 +61,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -122,8 +122,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -182,8 +182,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -243,8 +243,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -304,8 +304,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
