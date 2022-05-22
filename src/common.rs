@@ -3,15 +3,15 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 // TODO: Make result type more pleasant and maybe switch to anyhow.
 
-pub trait TChannelSender: Send {
+pub trait ChannelSender: Send {
     fn send(&self, data: &[u8]) -> Result<()>;
 }
 
-pub trait TChannelReceiver: Send {
+pub trait ChannelReceiver: Send {
     fn recv(&self) -> Result<Vec<u8>>;
 }
 
-pub type TChannel = (Box<dyn TChannelSender>, Box<dyn TChannelReceiver>);
+pub type TChannel = (Box<dyn ChannelSender>, Box<dyn ChannelReceiver>);
 
 pub mod raw {
     use super::*;
@@ -21,14 +21,14 @@ pub mod raw {
 
     struct RawChannelReceiver(ductile::ChannelReceiver<Vec<u8>>);
 
-    impl super::TChannelSender for RawChannelSender {
+    impl super::ChannelSender for RawChannelSender {
         fn send(&self, data: &[u8]) -> Result<()> {
             self.0.send_raw(&data)?;
             Ok(())
         }
     }
 
-    impl super::TChannelReceiver for RawChannelReceiver {
+    impl super::ChannelReceiver for RawChannelReceiver {
         fn recv(&self) -> Result<Vec<u8>> {
             let data = self.0.recv_raw()?;
             Ok(data)
@@ -100,7 +100,7 @@ pub mod auth {
         key: [u8; 32],
     }
 
-    impl super::TChannelSender for AuthChannelSender {
+    impl super::ChannelSender for AuthChannelSender {
         fn send(&self, data: &[u8]) -> Result<()> {
             let mut mac = HmacSha256::new_from_slice(&self.key).unwrap();
             mac.update(data);
@@ -112,7 +112,7 @@ pub mod auth {
         }
     }
 
-    impl super::TChannelReceiver for AuthChannelReceiver {
+    impl super::ChannelReceiver for AuthChannelReceiver {
         fn recv(&self) -> Result<Vec<u8>> {
             let mut mac = HmacSha256::new_from_slice(&self.key).unwrap();
             let data = self.r.recv_raw()?;
@@ -232,7 +232,7 @@ mod signed {
         public_key: PublicKey,
     }
 
-    impl super::TChannelSender for SignedChannelSender {
+    impl super::ChannelSender for SignedChannelSender {
         fn send(&self, data: &[u8]) -> Result<()> {
             let signature = self.keypair.sign(data);
             let signature = signature.to_bytes();
@@ -242,7 +242,7 @@ mod signed {
         }
     }
 
-    impl super::TChannelReceiver for SignedChannelReceiver {
+    impl super::ChannelReceiver for SignedChannelReceiver {
         fn recv(&self) -> Result<Vec<u8>> {
             let data = self.r.recv_raw()?;
             let signature = self.r.recv_raw()?;
