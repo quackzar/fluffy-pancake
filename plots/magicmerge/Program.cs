@@ -77,6 +77,7 @@ internal static class Program
         var inputFolder = args[0];
         var dataFolder = args[1];
         var plotsFolder = args[2];
+        var outputFolder = Path.Combine(plotsFolder, "out");
         
         if (!Directory.Exists(dataFolder))
         {
@@ -86,6 +87,11 @@ internal static class Program
         if (!Directory.Exists(plotsFolder))
         {
             Directory.CreateDirectory(plotsFolder);
+        }
+        
+        if (!Directory.Exists(outputFolder))
+        {
+            Directory.CreateDirectory(outputFolder);
         }
 
         // Find the files with data to be plotted
@@ -176,69 +182,48 @@ internal static class Program
                 benchmark.Entries = benchmark.Entries.OrderBy(entry => entry.Elements).ToList();
                 benchmark.DataFile = dataFileName;
 
-                dataFile.WriteLine("#Input Size\tAverage Time (ns)\tThroughput (elements/s)");
+                dataFile.WriteLine("#Input Size\tAverage Time (ms)\tThroughput (elements/s)");
                 foreach(var entry in benchmark.Entries)
                 {
-                    dataFile.WriteLine($"{Math.Floor(entry.Elements).ToString(outputCulture)}\t{entry.TimeSpan.TotalMilliseconds.ToString(outputCulture)}\t{entry.Throughput.ToString(outputCulture)}");
+                    var elements = (long) Math.Floor(entry.Elements);
+                    var totalTime = entry.TimeSpan.TotalMilliseconds;
+                    var throughput = entry.Throughput;
+                    
+                    dataFile.WriteLine($"{elements.ToString(outputCulture)}\t{totalTime.ToString(outputCulture)}\t{throughput.ToString(outputCulture)}");
                 }
 
                 dataFile.Close();
             }
         }
         
+        
+        var makeFile = File.CreateText(Path.Combine(plotsFolder, "makefile"));
+        makeFile.WriteLine("plots:");
+        
         // Generate plots for each group
         foreach (var group in groups.Values)
         {
             var entry = group.Benchmarks.Values.First().Entries.First();
+
+            var benches = group.Benchmarks.Values.ToArray();
             
-            // Time plot
-            {
-                var plotFileName = Path.Combine(plotsFolder, NormalizeName(group.Name) + ".plt");
-                using var plotFile = File.CreateText(plotFileName);
-
-                plotFile.WriteLine(@"set timestamp");
-                plotFile.WriteLine(@$"set title ""{group.Name}""");
-                plotFile.WriteLine(@"set key default");
-                plotFile.WriteLine(@$"set xlabel ""Number of {entry.ElementUnit}s""");
-                plotFile.WriteLine(@"set logscale x 2");
-                plotFile.WriteLine(@$"set ylabel ""Runtime (ms)""");
-                plotFile.WriteLine(@"set logscale y 2");
-                plotFile.WriteLine();
-
-                var benches = group.Benchmarks.Values.AsEnumerable();
-                var plotFiles = from bench in benches
-                    let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile).Replace("\\", "/")
-                    select @$"""{relativePath}"" using 1:2 title ""{bench.Name}"" with lines";
-                var plotLine = string.Join(',', plotFiles);
-                plotFile.WriteLine(@"plot " + plotLine);
-
-                plotFile.Close();
-            }
+            var plotFile = GenerateTimePlot(plotsFolder, outputFolder, group.Name, entry.ElementUnit, benches);
+            makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
             
-            // Throughput plot
+            plotFile = GenerateThroughputPlot(plotsFolder, outputFolder, group.Name, entry.ElementUnit, benches);
+            makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
+
+            foreach (var (benchName, bench) in group.Benchmarks)
             {
-                var plotFileName = Path.Combine(plotsFolder, NormalizeName(group.Name) + "_throughput.plt");
-                using var plotFile = File.CreateText(plotFileName);
-
-                plotFile.WriteLine(@"set timestamp");
-                plotFile.WriteLine(@$"set title ""{group.Name}""");
-                plotFile.WriteLine(@"set key default");
-                plotFile.WriteLine(@$"set xlabel ""Number of {entry.ElementUnit}s""");
-                plotFile.WriteLine(@"set logscale x 2");
-                plotFile.WriteLine(@$"set ylabel ""Throughput in {entry.ElementUnit}/s""");
-                plotFile.WriteLine(@"set logscale y 2");
-                plotFile.WriteLine();
-
-                var benches = group.Benchmarks.Values.AsEnumerable();
-                var plotFiles = from bench in benches
-                    let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile).Replace("\\", "/")
-                    select @$"""{relativePath}"" using 1:3 title ""{bench.Name}"" with lines";
-                var plotLine = string.Join(',', plotFiles);
-                plotFile.WriteLine(@"plot " + plotLine);
-
-                plotFile.Close();
+                plotFile = GenerateTimePlot(plotsFolder, outputFolder, benchName, bench.Entries.First().ElementUnit, bench);
+                makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
+                
+                plotFile = GenerateThroughputPlot(plotsFolder, outputFolder, benchName, bench.Entries.First().ElementUnit, bench);
+                makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
             }
         }
+        
+        makeFile.Close();
         
         // Write aggregated results to the console
         foreach (var group in groups.Values)
@@ -253,5 +238,72 @@ internal static class Program
                 Console.WriteLine();
             }
         }
+    }
+
+    private static void PlotOptions(StreamWriter plotFile, string plotsFolder, string outputFolder, string name, string elementUnit, string yLabel)
+    {
+        plotFile.WriteLine(@"set timestamp");
+        plotFile.WriteLine(@$"set title ""{name}""");
+        plotFile.WriteLine(@"set key default");
+        plotFile.WriteLine(@$"set xlabel ""Number of {elementUnit}s""");
+        plotFile.WriteLine(@"set logscale x 2");
+        plotFile.WriteLine(@$"set ylabel ""{yLabel}""");
+        plotFile.WriteLine(@"set logscale y 2");
+        plotFile.WriteLine(@"set term pdf");
+    }
+    private static string GenerateTimePlot(string plotsFolder, string outputFolder, string name, string elementUnit, params Benchmark[] benches)
+    {
+        var plotFileName = Path.Combine(plotsFolder, NormalizeName(name) + ".plt");
+        using var plotFile = File.CreateText(plotFileName);
+
+        PlotOptions(plotFile, plotsFolder, outputFolder, name, elementUnit, "Runtime (ms)");
+        
+        var outputFileName = Path.Combine(outputFolder, NormalizeName(name) + ".pdf");
+        outputFileName = Path.GetRelativePath(plotsFolder, outputFileName).Replace('\\', '/');
+        plotFile.WriteLine(@$"set output ""{outputFileName}""");
+        
+        plotFile.WriteLine();
+
+        var xTics = string.Join(", ", Enumerable.Range(1, 30).Select(i => $"\"2^{{{i}}}\" {(long) Math.Pow(2, i)}"));
+        plotFile.WriteLine($@"set xtics ({xTics})");
+        plotFile.WriteLine();
+
+        var plotFiles = from bench in benches
+            let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile).Replace("\\", "/")
+            select @$"""{relativePath}"" using 1:2 title ""{name}"" with lines";
+        var plotLine = string.Join(',', plotFiles);
+        plotFile.WriteLine(@"plot " + plotLine);
+
+        plotFile.Close();
+
+        return plotFileName;
+    }
+    
+    private static string GenerateThroughputPlot(string plotsFolder, string outputFolder, string name, string elementUnit, params Benchmark[] benches)
+    {
+        var plotFileName = Path.Combine(plotsFolder, NormalizeName(name) + "_throughput.plt");
+        using var plotFile = File.CreateText(plotFileName);
+
+        PlotOptions(plotFile, plotsFolder, outputFolder, name, elementUnit, $"Throughput in {elementUnit}/s");
+        
+        var outputFileName = Path.Combine(outputFolder, NormalizeName(name) + "_throughput.pdf");
+        outputFileName = Path.GetRelativePath(plotsFolder, outputFileName).Replace('\\', '/');
+        plotFile.WriteLine(@$"set output ""{outputFileName}""");
+        
+        plotFile.WriteLine();
+
+        var xTics = string.Join(", ", Enumerable.Range(1, 30).Select(i => $"\"2^{{{i}}}\" {(long) Math.Pow(2, i)}"));
+        plotFile.WriteLine($@"set xtics ({xTics})");
+        plotFile.WriteLine();
+
+        var plotFiles = from bench in benches
+            let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile).Replace("\\", "/")
+            select @$"""{relativePath}"" using 1:3 title ""{name}"" with lines";
+        var plotLine = string.Join(',', plotFiles);
+        plotFile.WriteLine(@"plot " + plotLine);
+
+        plotFile.Close();
+
+        return plotFileName;
     }
 }
