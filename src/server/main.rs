@@ -1,10 +1,8 @@
 // server main for mfpake
 use clap::Parser;
-use magic_pake::common::auth::{ChannelServer};
+use magic_pake::common::auth::ChannelServer;
 use magic_pake::common::Result;
-
-
-use magic_pake::many_fpake::{mfpake_many};
+use magic_pake::many_fpake::mfpake_many;
 use std::fs;
 
 #[derive(Parser, Debug)]

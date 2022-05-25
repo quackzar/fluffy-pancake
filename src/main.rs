@@ -9,20 +9,20 @@ use magic_pake::fpake::HalfKey;
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// Address of where to connect.
-    #[clap(short, long, default_value = "localhost:8080")]
+    #[clap(short, long, default_value = "localhost:4321")]
     address: String,
 
-    /// Run in server mode (garbler first).
+    /// Run in server mode (first to garble).
     #[clap(short, long)]
     server: bool,
 
-    /// Password as bitstring, incompatible with `--oblvious` option.
+    /// Password as bitstring
     #[clap(short, long)]
     password: String,
 
     /// Threadshold used.
     #[clap(short, long, default_value_t = 0)]
-    threadshold: u16,
+    threshold: u16,
 }
 
 fn main() -> Result<()> {
@@ -34,7 +34,7 @@ fn main() -> Result<()> {
         let (s, r) = server.next().unwrap();
         let ch = (s, r);
 
-        let hk1 = HalfKey::garbler(pw, args.threadshold, &ch)?;
+        let hk1 = HalfKey::garbler(pw, args.threshold, &ch)?;
         let hk2 = HalfKey::evaluator(pw, &ch)?;
         hk1.combine(hk2)
     } else {
@@ -42,7 +42,7 @@ fn main() -> Result<()> {
         let ch = connect_channel(&args.address)?;
 
         let hk2 = HalfKey::evaluator(pw, &ch)?;
-        let hk1 = HalfKey::garbler(pw, args.threadshold, &ch)?;
+        let hk1 = HalfKey::garbler(pw, args.threshold, &ch)?;
         hk1.combine(hk2)
     };
     println!("Derived Key: {:?}", key);

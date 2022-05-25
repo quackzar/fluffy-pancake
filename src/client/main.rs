@@ -1,8 +1,6 @@
 // client binary for mfpake
 use clap::Parser;
-use magic_pake::common::{auth::{connect_channel}, Result};
-use magic_pake::common::{TChannel};
-
+use magic_pake::common::{auth::connect_channel, Result};
 use magic_pake::many_fpake::mfpake_single;
 
 
@@ -33,7 +31,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let pw = args.password.as_bytes();
     println!("Connecting to {}...", &args.address);
-    let ch: TChannel = connect_channel(&args.address)?;
+    let ch = connect_channel(&args.address)?;
     let key = mfpake_single(pw, args.index, args.total_passwords, args.threshold, &ch)?;
     println!("Derived Key: {:?}", key);
     Ok(())
