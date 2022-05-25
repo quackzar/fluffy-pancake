@@ -35,7 +35,7 @@ impl Sender {
     }
 
     #[inline(always)]
-    fn cote(&self, l: usize, channel: &TChannel) -> Result<(BitMatrix, BitVector)> {
+    fn cote(&self, l: usize, channel: &Channel) -> Result<(BitMatrix, BitVector)> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
 
@@ -84,7 +84,7 @@ impl Sender {
         l: usize,
         q: &BitMatrix,
         delta: &BitVector,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<()> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
@@ -121,7 +121,7 @@ impl Sender {
         q: BitMatrix,
         delta: &BitVector,
         msg: &Message,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<()> {
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
@@ -171,7 +171,7 @@ impl Receiver {
     }
 
     #[inline(always)]
-    fn cote(&self, choices: &[bool], channel: &TChannel) -> Result<BitMatrix> {
+    fn cote(&self, choices: &[bool], channel: &Channel) -> Result<BitMatrix> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         let l = choices.len();
@@ -222,7 +222,7 @@ impl Receiver {
     }
 
     #[inline(always)]
-    fn correlation_check(&self, t: &BitMatrix, choices: &[bool], channel: &TChannel) -> Result<()> {
+    fn correlation_check(&self, t: &BitMatrix, choices: &[bool], channel: &Channel) -> Result<()> {
         const K: usize = COMP_SEC; // kappa
         let (s, _) = channel;
         let l = choices.len();
@@ -255,7 +255,7 @@ impl Receiver {
     }
 
     #[inline(always)]
-    fn de_rot(&self, choices: &[bool], t: BitMatrix, channel: &TChannel) -> Result<Payload> {
+    fn de_rot(&self, choices: &[bool], t: BitMatrix, channel: &Channel) -> Result<Payload> {
         let v: Vec<Vec<u8>> = t
             .into_par_iter()
             .enumerate()
@@ -282,7 +282,7 @@ impl Receiver {
 }
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &TChannel) -> Result<()> {
+    fn exchange(&self, msg: &Message, channel: &Channel) -> Result<()> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         assert!(
@@ -308,7 +308,7 @@ impl ObliviousSender for Sender {
 }
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], channel: &TChannel) -> Result<Payload> {
+    fn exchange(&self, choices: &[bool], channel: &Channel) -> Result<Payload> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
             protocol: "Apricot".to_string(),

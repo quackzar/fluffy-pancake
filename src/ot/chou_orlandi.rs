@@ -29,7 +29,7 @@ pub struct Sender;
 pub struct Receiver;
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, ch: &TChannel) -> Result<()> {
+    fn exchange(&self, msg: &Message, ch: &Channel) -> Result<()> {
         let pb = TransactionProperties {
             msg_size: msg.len(),
             protocol: "Chou-Orlandi".to_string(),
@@ -103,7 +103,7 @@ impl ObliviousSender for Sender {
 }
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], ch: &TChannel) -> Result<Payload> {
+    fn exchange(&self, choices: &[bool], ch: &Channel) -> Result<Payload> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
             protocol: "Chou-Orlandi".to_string(),
