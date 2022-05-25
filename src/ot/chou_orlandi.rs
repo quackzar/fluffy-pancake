@@ -11,7 +11,7 @@ use curve25519_dalek::scalar::Scalar;
 
 use itertools::Itertools;
 use rand::{Rng, SeedableRng};
-use rand_chacha::{ChaCha12Rng, ChaCha20Rng};
+use rand_chacha::{ChaCha20Rng, ChaCha20Rng};
 use serde::de::Visitor;
 
 use crate::hash;
@@ -38,7 +38,7 @@ impl ObliviousSender for OTSender {
         let (s, r) = ch;
 
         let n = msg.0.len();
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha20Rng::from_entropy();
         let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
         let publics = secrets
             .par_iter()
@@ -112,7 +112,7 @@ impl ObliviousReceiver for OTReceiver {
         let (s, r) = ch;
 
         let n = choices.len();
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha20Rng::from_entropy();
         let secrets = (0..n).map(|_| Scalar::random(&mut rng)).collect::<Vec<_>>();
         let choices = choices.to_vec();
 
@@ -274,7 +274,7 @@ mod tests {
     #[allow(non_snake_case)]
     #[test]
     fn oblivious_transfer() {
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha20Rng::from_entropy();
         let m0 = vec![0; 8];
         let m1 = vec![1; 8];
         let c = 0; // Choice
@@ -317,7 +317,7 @@ mod tests {
     #[allow(non_snake_case)]
     #[test]
     fn diffie_hellman() {
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha20Rng::from_entropy();
         let g = &ED25519_BASEPOINT_TABLE;
         let a = Scalar::random(&mut rng);
         let b = Scalar::random(&mut rng);
