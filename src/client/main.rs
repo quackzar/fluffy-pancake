@@ -1,11 +1,11 @@
 // client binary for mfpake
 use clap::Parser;
-use magic_pake::common::raw::{connect_channel, ChannelServer};
+use magic_pake::common::raw::{connect_channel};
 use magic_pake::common::Result;
-use magic_pake::common::{Error, TChannel};
-use magic_pake::legacy_fpake::OneOfManyKey;
+use magic_pake::common::{TChannel};
+
 use magic_pake::many_fpake::mfpake_single;
-use std::fs;
+
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]

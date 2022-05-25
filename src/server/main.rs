@@ -1,10 +1,10 @@
 // server main for mfpake
 use clap::Parser;
-use magic_pake::common::raw::{connect_channel, ChannelServer};
+use magic_pake::common::raw::{ChannelServer};
 use magic_pake::common::Result;
-use magic_pake::common::{Error, TChannel};
-use magic_pake::legacy_fpake::OneOfManyKey;
-use magic_pake::many_fpake::{self, mfpake_many};
+
+
+use magic_pake::many_fpake::{mfpake_many};
 use std::fs;
 
 #[derive(Parser, Debug)]
