@@ -657,7 +657,7 @@ pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
     let c = x3 >> 57;
     let d = x2 ^ a ^ b ^ c;
 
-    let x3d = _mm_set_epi64x(x3 as i64, d as i64); // maybe here?
+    let x3d = _mm_set_epi64x(x3 as i64, d as i64);
     let e = _mm_slli_si128_1(x3d);
     let f = _mm_slli_si128_2(x3d);
     let g = _mm_slli_si128_7(x3d);

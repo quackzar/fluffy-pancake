@@ -75,3 +75,7 @@ harness = false
 [[bench]]
 name = "many_fpake"
 harness = false
+
+[[bench]]
+name = "polynomial"
+harness = false

@@ -246,7 +246,7 @@ pub unsafe fn polynomial_gf128_reduce(x32: __m128i, x10: __m128i) -> __m128i {
 
 #[inline]
 #[cfg(target_arch = "x86_64")]
-fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
+pub fn polynomial_mul_acc_x86(destination: &mut BitVector, left: &BitVector, right: &BitVector) {
     use std::arch::x86_64::*;
     unsafe {
         let left_bytes = left.as_bytes().as_ptr() as *const __m128i;
