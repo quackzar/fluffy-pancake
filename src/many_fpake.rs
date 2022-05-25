@@ -54,6 +54,8 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
     wires
 }
 
+// TODO: Simplify or move v3
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct OneOfManyKey(WireBytes);
 
