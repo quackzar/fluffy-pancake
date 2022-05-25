@@ -1,9 +1,8 @@
 use clap::Parser;
-use ductile::{connect_channel, ChannelServer};
-use magic_pake::common::Channel;
-use magic_pake::common::Error;
+use magic_pake::common::raw::{connect_channel, ChannelServer};
+use magic_pake::common::{Error, TChannel};
 use magic_pake::fpake::HalfKey;
-use magic_pake::many_fpake::OneOfManyKey;
+use magic_pake::legacy_fpake::OneOfManyKey;
 use std::fs;
 
 /// Simple program to greet a person
@@ -49,11 +48,11 @@ fn server(args: &Args) -> Result<(), Error> {
     let mut server = ChannelServer::bind(&args.address)?;
     println!("Listening on {}...", &args.address);
 
-    let (s, r, _addr) = server.next().unwrap();
+    let (s, r) = server.next().unwrap();
     let ch = (s, r);
 
-    let hk1 = HalfKey::garbler(&pw, args.threadshold, &ch)?;
-    let hk2 = HalfKey::evaluator(&pw, &ch)?;
+    let hk1 = HalfKey::garbler(pw, args.threadshold, &ch)?;
+    let hk2 = HalfKey::evaluator(pw, &ch)?;
     println!("Derived Key: {:?}", hk1.combine(hk2));
     Ok(())
 }
@@ -69,7 +68,7 @@ fn server_many(args: &Args) -> Result<(), Error> {
 
     let mut server = ChannelServer::bind(&args.address)?;
     println!("Listening on {}...", &args.address);
-    let (s, r, _addr) = server.next().unwrap();
+    let (s, r) = server.next().unwrap();
     let ch = (s, r);
 
     // TODO: Redo to use new one of many fPAKE.
@@ -82,10 +81,10 @@ fn server_many(args: &Args) -> Result<(), Error> {
 fn client(args: &Args) -> Result<(), Error> {
     let pw = args.password.as_bytes();
     println!("Connecting to {}...", &args.address);
-    let ch: Channel<Vec<u8>> = connect_channel(&args.address)?;
+    let ch: TChannel = connect_channel(&args.address)?;
 
-    let hk2 = HalfKey::evaluator(&pw, &ch)?;
-    let hk1 = HalfKey::garbler(&pw, args.threadshold, &ch)?;
+    let hk2 = HalfKey::evaluator(pw, &ch)?;
+    let hk1 = HalfKey::garbler(pw, args.threadshold, &ch)?;
     println!("Derived Key: {:?}", hk1.combine(hk2));
     Ok(())
 }
@@ -93,12 +92,12 @@ fn client(args: &Args) -> Result<(), Error> {
 fn client_many(args: &Args) -> Result<(), Error> {
     let pw = args.password.as_bytes();
     println!("Connecting to {}...", &args.address);
-    let ch: Channel<Vec<u8>> = connect_channel(&args.address)?;
+    let ch: TChannel = connect_channel(&args.address)?;
 
     // TODO: Redo to use new one of many fPAKE.
-    let hk2 = OneOfManyKey::evaluator_client(&pw, args.total_passwords, args.index, &ch)?;
+    let hk2 = OneOfManyKey::evaluator_client(pw, args.total_passwords, args.index, &ch)?;
     let hk1 =
-        OneOfManyKey::garbler_client(&pw, args.index, args.total_passwords, args.threadshold, &ch)?;
+        OneOfManyKey::garbler_client(pw, args.index, args.total_passwords, args.threadshold, &ch)?;
     println!("Derived Key: {:?}", hk1.combine(hk2));
     Ok(())
 }

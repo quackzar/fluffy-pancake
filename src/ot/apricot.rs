@@ -35,7 +35,7 @@ impl Sender {
     }
 
     #[inline(always)]
-    fn cote(&self, l: usize, channel: &Channel<Vec<u8>>) -> Result<(BitMatrix, BitVector), Error> {
+    fn cote(&self, l: usize, channel: &TChannel) -> Result<(BitMatrix, BitVector)> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
 
@@ -66,7 +66,7 @@ impl Sender {
             .collect();
 
         let (_, r) = channel;
-        let u: BitMatrix = bincode::deserialize(&r.recv_raw()?)?;
+        let u: BitMatrix = bincode::deserialize(&r.recv()?)?;
 
         let q: BitMatrix = u8_vec_to_bool_vec(delta.as_bytes())
             .into_par_iter()
@@ -84,8 +84,8 @@ impl Sender {
         l: usize,
         q: &BitMatrix,
         delta: &BitVector,
-        channel: &Channel<Vec<u8>>,
-    ) -> Result<(), Error> {
+        channel: &TChannel,
+    ) -> Result<()> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         let (_, r) = channel;
@@ -104,8 +104,8 @@ impl Sender {
 
             q_sum.mul_add_assign(q, chi);
         }
-        let x_sum: Polynomial = bincode::deserialize(&r.recv_raw()?)?;
-        let t_sum: Polynomial = bincode::deserialize(&r.recv_raw()?)?;
+        let x_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
+        let t_sum: Polynomial = bincode::deserialize(&r.recv()?)?;
         let delta_ = <&Polynomial>::from(delta);
         q_sum.mul_add_assign(&x_sum, delta_);
 
@@ -121,8 +121,8 @@ impl Sender {
         q: BitMatrix,
         delta: &BitVector,
         msg: &Message,
-        channel: &Channel<Vec<u8>>,
-    ) -> Result<(), Error> {
+        channel: &TChannel,
+    ) -> Result<()> {
         // -- Randomize --
         let (v0, v1): (Vec<Vec<u8>>, Vec<Vec<u8>>) = q[..msg.len()]
             .par_iter()
@@ -157,8 +157,8 @@ impl Sender {
         let (s, _) = channel;
         let d0 = bincode::serialize(&d0)?;
         let d1 = bincode::serialize(&d1)?;
-        s.send_raw(&d0)?;
-        s.send_raw(&d1)?;
+        s.send(&d0)?;
+        s.send(&d1)?;
 
         Ok(())
     }
@@ -171,7 +171,7 @@ impl Receiver {
     }
 
     #[inline(always)]
-    fn cote(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<BitMatrix, Error> {
+    fn cote(&self, choices: &[bool], channel: &TChannel) -> Result<BitMatrix> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         let l = choices.len();
@@ -215,19 +215,14 @@ impl Receiver {
 
         let (s, _) = channel;
         let u = bincode::serialize(&u)?;
-        s.send_raw(&u)?;
+        s.send(&u)?;
 
         let t = t0.transpose();
         Ok(t)
     }
 
     #[inline(always)]
-    fn correlation_check(
-        &self,
-        t: &BitMatrix,
-        choices: &[bool],
-        channel: &Channel<Vec<u8>>,
-    ) -> Result<(), Error> {
+    fn correlation_check(&self, t: &BitMatrix, choices: &[bool], channel: &TChannel) -> Result<()> {
         const K: usize = COMP_SEC; // kappa
         let (s, _) = channel;
         let l = choices.len();
@@ -254,18 +249,13 @@ impl Receiver {
             t_sum.mul_add_assign(t, chi);
         }
 
-        s.send_raw(&bincode::serialize(&x_sum)?)?;
-        s.send_raw(&bincode::serialize(&t_sum)?)?;
+        s.send(&bincode::serialize(&x_sum)?)?;
+        s.send(&bincode::serialize(&t_sum)?)?;
         Ok(())
     }
 
     #[inline(always)]
-    fn de_rot(
-        &self,
-        choices: &[bool],
-        t: BitMatrix,
-        channel: &Channel<Vec<u8>>,
-    ) -> Result<Payload, Error> {
+    fn de_rot(&self, choices: &[bool], t: BitMatrix, channel: &TChannel) -> Result<Payload> {
         let v: Vec<Vec<u8>> = t
             .into_par_iter()
             .enumerate()
@@ -274,8 +264,8 @@ impl Receiver {
 
         // -- DeROT --
         let (_, r) = channel;
-        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
-        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv_raw()?)?;
+        let d0: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
+        let d1: Vec<Vec<u8>> = bincode::deserialize(&r.recv()?)?;
 
         // PERF: parallelize
         let y = izip!(v, choices, d0, d1)
@@ -292,7 +282,7 @@ impl Receiver {
 }
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, channel: &TChannel) -> Result<()> {
         const K: usize = COMP_SEC; // kappa
         const S: usize = STAT_SEC;
         assert!(
@@ -318,7 +308,7 @@ impl ObliviousSender for Sender {
 }
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+    fn exchange(&self, choices: &[bool], channel: &TChannel) -> Result<Payload> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
             protocol: "Apricot".to_string(),
@@ -350,9 +340,9 @@ mod tests {
 
     #[test]
     fn test_ot_receiver() {
-        use crate::ot::chou_orlandi::{OTReceiver, OTSender};
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        use crate::ot::chou_orlandi;
+        let (s1, r1) = raw::new_local_channel();
+        let (s2, r2) = raw::new_local_channel();
         const N: usize = 8 << 8;
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
@@ -363,7 +353,7 @@ mod tests {
             .name("Sender".to_string())
             .spawn(move || {
                 let sender = Sender {
-                    bootstrap: Box::new(OTReceiver),
+                    bootstrap: Box::new(chou_orlandi::Receiver),
                 };
                 let msg = Message::from_unzipped(&[b"Hello"; N], &[b"World"; N]);
                 sender.exchange(&msg, &ch1).unwrap();
@@ -373,7 +363,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = Receiver {
-                    bootstrap: Box::new(OTSender),
+                    bootstrap: Box::new(chou_orlandi::Sender),
                 };
                 let choices = [true; N];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();

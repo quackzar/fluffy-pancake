@@ -14,6 +14,7 @@ pub mod common;
 pub mod fpake;
 pub mod garble;
 mod instrument;
+pub mod legacy_fpake;
 pub mod many_fpake;
 pub mod ot;
 pub mod util;

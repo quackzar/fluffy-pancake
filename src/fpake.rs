@@ -3,8 +3,8 @@ use crate::common::*;
 use crate::garble::*;
 use crate::instrument;
 use crate::instrument::E_PROT_COLOR;
-use crate::ot::apricot_avx2::{Receiver, Sender};
-use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+use crate::ot::apricot_avx2 as apricot;
+use crate::ot::chou_orlandi;
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;
 use crate::util::*;
@@ -16,7 +16,7 @@ pub struct HalfKey(pub WireBytes);
 pub struct Key(pub WireBytes);
 
 impl HalfKey {
-    pub fn garbler(password: &[u8], threshold: u16, ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
+    pub fn garbler(password: &[u8], threshold: u16, ch: &TChannel) -> Result<Self> {
         instrument::begin("Garbler", E_PROT_COLOR);
 
         let password = u8_vec_to_bool_vec(password);
@@ -35,30 +35,30 @@ impl HalfKey {
             .collect();
 
         let msg = MessagePair::from_zipped(&e_theirs);
-        let ot = Sender {
-            bootstrap: Box::new(OTReceiver),
+        let ot = apricot::Sender {
+            bootstrap: Box::new(chou_orlandi::Receiver),
         };
         ot.exchange(&msg, ch)?;
         let (s, _) = ch;
 
         // send garbled circuit.
-        s.send_raw(&bincode::serialize(&gc)?)?;
+        s.send(&bincode::serialize(&gc)?)?;
 
         let e_own = BinaryEncodingKey::unzipped(&e_own);
         let enc_password = e_own.encode(&password);
         // send garbled password.
-        s.send_raw(&bincode::serialize(&enc_password)?)?;
+        s.send(&bincode::serialize(&enc_password)?)?;
 
         instrument::end();
         Ok(Self(d.hashes[0][1]))
     }
 
-    pub fn evaluator(password: &[u8], ch: &Channel<Vec<u8>>) -> Result<Self, Error> {
+    pub fn evaluator(password: &[u8], ch: &TChannel) -> Result<Self> {
         instrument::begin("Evaluator", E_PROT_COLOR);
 
         let password = u8_vec_to_bool_vec(password);
-        let ot = Receiver {
-            bootstrap: Box::new(OTSender),
+        let ot = apricot::Receiver {
+            bootstrap: Box::new(chou_orlandi::Sender),
         };
         let enc_password = ot.exchange(&password, ch)?;
         let (_, r) = ch;
@@ -71,9 +71,9 @@ impl HalfKey {
 
         let our_password = enc_password;
         // receive garbled circuit.
-        let gc = bincode::deserialize(&r.recv_raw()?)?;
+        let gc = bincode::deserialize(&r.recv()?)?;
         // receive garbled password.
-        let their_password: Vec<Wire> = bincode::deserialize(&r.recv_raw()?)?;
+        let their_password: Vec<Wire> = bincode::deserialize(&r.recv()?)?;
 
         // eval circuit
         let mut input = Vec::<Wire>::new();
@@ -98,7 +98,7 @@ impl HalfKey {
 mod tests {
     use super::*;
     use crate::circuit::Circuit;
-    use ductile::new_local_channel;
+    use raw::new_local_channel;
 
     #[test]
     fn test_fpake_api() {

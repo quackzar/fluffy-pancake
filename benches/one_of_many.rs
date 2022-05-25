@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use magic_pake::common::raw;
 use magic_pake::ot::one_of_many::*;
 use magic_pake::util::SECURITY_PARAM;
 
@@ -9,8 +10,8 @@ fn log2(x: u32) -> u32 {
 fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
     let choice = n / 2;
 
-    let (s1, r1) = ductile::new_local_channel();
-    let (s2, r2) = ductile::new_local_channel();
+    let (s1, r1) = raw::new_local_channel();
+    let (s2, r2) = raw::new_local_channel();
     let ch1 = (s1, r2);
     let ch2 = (s2, r1);
 
@@ -19,7 +20,7 @@ fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
         .name("Sender".to_string())
         .spawn(move || {
             let sender = ManyOTSender {
-                interal_sender: magic_pake::ot::chou_orlandi::OTSender,
+                interal_sender: magic_pake::ot::chou_orlandi::Sender,
             };
             sender.exchange(&messages, domain, &ch1).unwrap();
         });
@@ -28,7 +29,7 @@ fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
         .name("Receiver".to_string())
         .spawn(move || {
             let receiver = ManyOTReceiver {
-                internal_receiver: magic_pake::ot::chou_orlandi::OTReceiver,
+                internal_receiver: magic_pake::ot::chou_orlandi::Receiver,
             };
             receiver.exchange(choice, domain, &ch2).unwrap()
         });

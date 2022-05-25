@@ -9,12 +9,9 @@ pub struct TransactionProperties {
     pub protocol: String,
 }
 
-pub(crate) fn validate_properties(
-    pb: &TransactionProperties,
-    (s, r): &Channel<Vec<u8>>,
-) -> Result<(), Error> {
-    s.send_raw(&bincode::serialize(pb)?)?;
-    let pb2 = r.recv_raw()?;
+pub(crate) fn validate_properties(pb: &TransactionProperties, (s, r): &TChannel) -> Result<()> {
+    s.send(&bincode::serialize(pb)?)?;
+    let pb2 = r.recv()?;
     let pb2 = bincode::deserialize(&pb2)?;
     if pb2 != *pb {
         Err(Box::new(OTError::BadProperties(pb.clone(), pb2)))
@@ -71,11 +68,11 @@ impl<'a> Message<'a> {
 }
 
 pub trait ObliviousSender {
-    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error>;
+    fn exchange(&self, msg: &Message, channel: &TChannel) -> Result<()>;
 }
 
 pub type Payload = Vec<Vec<u8>>;
 
 pub trait ObliviousReceiver {
-    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error>;
+    fn exchange(&self, choices: &[bool], channel: &TChannel) -> Result<Payload>;
 }

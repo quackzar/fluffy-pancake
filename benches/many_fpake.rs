@@ -1,6 +1,6 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use ductile::new_local_channel;
-use magic_pake::garble::encode;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use magic_pake::common::raw::new_local_channel;
+use magic_pake::legacy_fpake as legacy;
 use magic_pake::many_fpake::*;
 use std::thread;
 
@@ -34,21 +34,23 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
                     let h1 = thread::spawn(move || {
                         // Party 1
-                        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-                        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
+                        let k1 = legacy::OneOfManyKey::garbler_server(&passwords, threshold, &ch1)
+                            .unwrap();
+                        let k2 =
+                            legacy::OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
                     let h2 = thread::spawn(move || {
                         // Party 1
-                        let k1 = OneOfManyKey::evaluator_client(
+                        let k1 = legacy::OneOfManyKey::evaluator_client(
                             &password_2,
                             number_of_passwords,
                             index,
                             &ch2,
                         )
                         .unwrap();
-                        let k2 = OneOfManyKey::garbler_client(
+                        let k2 = legacy::OneOfManyKey::garbler_client(
                             &password,
                             index,
                             number_of_passwords,
@@ -59,8 +61,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -93,21 +95,23 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                     let h1 = thread::spawn(move || {
                         // Party 1
                         let k1 =
-                            OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1).unwrap();
-                        let k2 = OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
+                            legacy::OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1)
+                                .unwrap();
+                        let k2 =
+                            legacy::OneOfManyKey::evaluator_server(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
                     let h2 = thread::spawn(move || {
                         // Party 1
-                        let k1 = OneOfManyKey::evaluator_client_v2(
+                        let k1 = legacy::OneOfManyKey::evaluator_client_v2(
                             &password_2,
                             number_of_passwords,
                             index,
                             &ch2,
                         )
                         .unwrap();
-                        let k2 = OneOfManyKey::garbler_client(
+                        let k2 = legacy::OneOfManyKey::garbler_client(
                             &password,
                             index,
                             number_of_passwords,
@@ -118,8 +122,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -151,21 +155,23 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
                     let h1 = thread::spawn(move || {
                         // Party 1
-                        let k1 = OneOfManyKey::garbler_server(&passwords, threshold, &ch1).unwrap();
-                        let k2 = OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
+                        let k1 = legacy::OneOfManyKey::garbler_server(&passwords, threshold, &ch1)
+                            .unwrap();
+                        let k2 =
+                            legacy::OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
                     let h2 = thread::spawn(move || {
                         // Party 1
-                        let k1 = OneOfManyKey::evaluator_client(
+                        let k1 = legacy::OneOfManyKey::evaluator_client(
                             &password_2,
                             number_of_passwords,
                             index,
                             &ch2,
                         )
                         .unwrap();
-                        let k2 = OneOfManyKey::garbler_client_v2(
+                        let k2 = legacy::OneOfManyKey::garbler_client_v2(
                             &password,
                             index,
                             number_of_passwords,
@@ -176,8 +182,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -210,21 +216,23 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                     let h1 = thread::spawn(move || {
                         // Party 1
                         let k1 =
-                            OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1).unwrap();
-                        let k2 = OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
+                            legacy::OneOfManyKey::garbler_server_v2(&passwords, threshold, &ch1)
+                                .unwrap();
+                        let k2 =
+                            legacy::OneOfManyKey::evaluator_server_v2(&passwords_2, &ch1).unwrap();
                         k1.combine(k2);
                     });
 
                     let h2 = thread::spawn(move || {
                         // Party 1
-                        let k1 = OneOfManyKey::evaluator_client_v2(
+                        let k1 = legacy::OneOfManyKey::evaluator_client_v2(
                             &password_2,
                             number_of_passwords,
                             index,
                             &ch2,
                         )
                         .unwrap();
-                        let k2 = OneOfManyKey::garbler_client_v2(
+                        let k2 = legacy::OneOfManyKey::garbler_client_v2(
                             &password,
                             index,
                             number_of_passwords,
@@ -235,8 +243,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -296,8 +304,8 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                         k1.combine(k2);
                     });
 
-                    let _k1 = h1.join().unwrap();
-                    let _k2 = h2.join().unwrap();
+                    h1.join().unwrap();
+                    h2.join().unwrap();
                 })
             },
         );
@@ -325,12 +333,12 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
                     let ch1 = (s2, r1);
                     let ch2 = (s1, r2);
 
-                    let h1 = thread::spawn(move || {
-                        OneOfManyKey::server_v4(&passwords, threshold, &ch1).unwrap()
-                    });
+                    let h1 =
+                        thread::spawn(move || mfpake_many(&passwords, threshold, &ch1).unwrap());
 
                     let h2 = thread::spawn(move || {
-                        OneOfManyKey::client_v4(&password, index, number_of_passwords, threshold, &ch2).unwrap()
+                        mfpake_single(&password, index, number_of_passwords, threshold, &ch2)
+                            .unwrap()
                     });
 
                     let _k1 = h1.join().unwrap();

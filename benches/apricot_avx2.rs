@@ -1,17 +1,18 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::{
     circuit::build_circuit,
+    common::raw,
     garble::{self, BinaryEncodingKey},
-    ot::apricot_avx2::{Receiver, Sender},
+    ot::apricot_avx2,
+    ot::chou_orlandi,
     ot::common::*,
 };
 
 use std::thread;
 
 fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
-    use magic_pake::ot::chou_orlandi::{OTReceiver, OTSender};
-    let (s1, r1) = ductile::new_local_channel();
-    let (s2, r2) = ductile::new_local_channel();
+    let (s1, r1) = raw::new_local_channel();
+    let (s2, r2) = raw::new_local_channel();
     let ch1 = (s1, r2);
     let ch2 = (s2, r1);
 
@@ -19,8 +20,8 @@ fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
         .name("Sender".to_string())
         .spawn(move || {
             let msg = Message::from_zipped(&msg);
-            let sender = Sender {
-                bootstrap: Box::new(OTReceiver),
+            let sender = apricot_avx2::Sender {
+                bootstrap: Box::new(chou_orlandi::Receiver),
             };
             sender.exchange(&msg, &ch1).unwrap();
         });
@@ -28,8 +29,8 @@ fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
     let h2 = thread::Builder::new()
         .name("Receiver".to_string())
         .spawn(move || {
-            let receiver = Receiver {
-                bootstrap: Box::new(OTSender),
+            let receiver = apricot_avx2::Receiver {
+                bootstrap: Box::new(chou_orlandi::Sender),
             };
             let _ = receiver.exchange(&choices, &ch2).unwrap();
         });

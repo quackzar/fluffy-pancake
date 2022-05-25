@@ -11,7 +11,7 @@ use curve25519_dalek::scalar::Scalar;
 
 use itertools::Itertools;
 use rand::{Rng, SeedableRng};
-use rand_chacha::{ChaCha20Rng, ChaCha20Rng};
+use rand_chacha::ChaCha20Rng;
 use serde::de::Visitor;
 
 use crate::hash;
@@ -25,11 +25,11 @@ use crate::common::*;
 use crate::ot::common::*;
 
 // Channel Impl.
-pub struct OTSender;
-pub struct OTReceiver;
+pub struct Sender;
+pub struct Receiver;
 
-impl ObliviousSender for OTSender {
-    fn exchange(&self, msg: &Message, ch: &Channel<Vec<u8>>) -> Result<(), Error> {
+impl ObliviousSender for Sender {
+    fn exchange(&self, msg: &Message, ch: &TChannel) -> Result<()> {
         let pb = TransactionProperties {
             msg_size: msg.len(),
             protocol: "Chou-Orlandi".to_string(),
@@ -50,13 +50,13 @@ impl ObliviousSender for OTSender {
         // round 1
         let pbs = publics.0.iter().map(|&p| p.to_bytes());
         for pb in pbs {
-            s.send_raw(pb.as_ref())?;
+            s.send(pb.as_ref())?;
         }
 
         // round 2
         let n = msg.0.len();
         let pb = (0..n)
-            .map(|_| r.recv_raw().unwrap())
+            .map(|_| r.recv().unwrap())
             .map(|p| CompressedEdwardsY::from_slice(&p))
             .collect();
         let pb = Public(pb);
@@ -97,13 +97,13 @@ impl ObliviousSender for OTSender {
             .collect();
 
         let msg = bincode::serialize(&payload)?;
-        s.send_raw(&msg)?;
+        s.send(&msg)?;
         Ok(())
     }
 }
 
-impl ObliviousReceiver for OTReceiver {
-    fn exchange(&self, choices: &[bool], ch: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+impl ObliviousReceiver for Receiver {
+    fn exchange(&self, choices: &[bool], ch: &TChannel) -> Result<Payload> {
         let pb = TransactionProperties {
             msg_size: choices.len(),
             protocol: "Chou-Orlandi".to_string(),
@@ -118,7 +118,7 @@ impl ObliviousReceiver for OTReceiver {
 
         // round 1
         let pb = (0..n)
-            .map(|_| r.recv_raw().unwrap())
+            .map(|_| r.recv().unwrap())
             .map(|p| CompressedEdwardsY::from_slice(&p))
             .collect();
         let their_publics = Public(pb);
@@ -147,11 +147,11 @@ impl ObliviousReceiver for OTReceiver {
         // round 2
         let pbs = publics.0.iter().map(|&p| p.to_bytes());
         for pb in pbs {
-            s.send_raw(pb.as_ref())?;
+            s.send(pb.as_ref())?;
         }
 
         // round 3
-        let payload = r.recv_raw()?;
+        let payload = r.recv()?;
         let payload: EncryptedPayload = bincode::deserialize(&payload)?;
 
         let msg = payload
@@ -178,7 +178,7 @@ impl ObliviousReceiver for OTReceiver {
 pub struct Public(Vec<CompressedEdwardsY>);
 
 impl Serialize for Public {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
@@ -193,7 +193,7 @@ impl Serialize for Public {
 struct PublicVisitor;
 
 impl<'de> Visitor<'de> for PublicVisitor {
-    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    fn visit_bytes<E>(self, v: &[u8]) -> std::result::Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
@@ -205,7 +205,7 @@ impl<'de> Visitor<'de> for PublicVisitor {
         Ok(Public(vec))
     }
 
-    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> std::result::Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
@@ -220,7 +220,10 @@ impl<'de> Visitor<'de> for PublicVisitor {
 }
 
 impl<'de> Deserialize<'de> for Public {
-    fn deserialize_in_place<D>(deserializer: D, place: &mut Self) -> Result<(), D::Error>
+    fn deserialize_in_place<D>(
+        deserializer: D,
+        place: &mut Self,
+    ) -> std::result::Result<(), D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -229,7 +232,7 @@ impl<'de> Deserialize<'de> for Public {
         Ok(())
     }
 
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -248,20 +251,20 @@ mod tests {
 
     #[test]
     fn test_channel_version() {
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        let (s1, r1) = raw::new_local_channel();
+        let (s2, r2) = raw::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 
         use std::thread;
         let h1 = thread::spawn(move || {
-            let sender = OTSender;
+            let sender = Sender;
             let msg = Message::from_unzipped(&[b"Hello"], &[b"World"]);
             sender.exchange(&msg, &ch1).unwrap();
         });
 
         let h2 = thread::spawn(move || {
-            let receiver = OTReceiver;
+            let receiver = Receiver;
             let choices = [true];
             let msg = receiver.exchange(&choices, &ch2).unwrap();
             assert_eq!(msg[0], b"World");

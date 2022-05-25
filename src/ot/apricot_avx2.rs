@@ -28,7 +28,7 @@ pub struct Receiver {
 // Sender
 
 impl ObliviousSender for Sender {
-    fn exchange(&self, msg: &Message, channel: &Channel<Vec<u8>>) -> Result<(), Error> {
+    fn exchange(&self, msg: &Message, channel: &TChannel) -> Result<()> {
         instrument::begin("Apricot x86 Sender", E_FUNC_COLOR);
 
         debug_assert!(
@@ -64,7 +64,7 @@ impl ObliviousSender for Sender {
         let (s, r) = channel;
 
         let msg_size = msg.0[0][0].len();
-        s.send_raw(&(msg_size as u16).to_be_bytes())?;
+        s.send(&(msg_size as u16).to_be_bytes())?;
 
         // Generate random delta
         instrument::begin("Generate delta", E_COMP_COLOR);
@@ -98,7 +98,7 @@ impl ObliviousSender for Sender {
         instrument::end();
 
         instrument::begin("Receive u", E_RECV_COLOR);
-        let u: Vec<u8> = r.recv_raw()?;
+        let u: Vec<u8> = r.recv()?;
         instrument::end();
 
         instrument::begin("Compute q", E_COMP_COLOR);
@@ -136,8 +136,8 @@ impl ObliviousSender for Sender {
         instrument::end();
 
         instrument::begin("Receive x_sum, t_sum", E_RECV_COLOR);
-        let x_sum: Vec<u8> = r.recv_raw()?;
-        let t_sum: Vec<u8> = r.recv_raw()?;
+        let x_sum: Vec<u8> = r.recv()?;
+        let t_sum: Vec<u8> = r.recv()?;
         instrument::end();
 
         instrument::begin("Compare correlation sums", E_COMP_COLOR);
@@ -231,7 +231,7 @@ impl ObliviousSender for Sender {
         instrument::end();
 
         instrument::begin("Send d", E_SEND_COLOR);
-        s.send_raw(d.as_slice())?;
+        s.send(d.as_slice())?;
         instrument::end();
         instrument::end();
         instrument::end();
@@ -244,7 +244,7 @@ impl ObliviousSender for Sender {
 // Receiver
 
 impl ObliviousReceiver for Receiver {
-    fn exchange(&self, choices: &[bool], channel: &Channel<Vec<u8>>) -> Result<Payload, Error> {
+    fn exchange(&self, choices: &[bool], channel: &TChannel) -> Result<Payload> {
         instrument::begin("Apricot x86 Receiver", E_FUNC_COLOR);
 
         debug_assert!(
@@ -285,7 +285,7 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Receive msg_size", E_COMP_COLOR);
-        let msg_size_bytes = r.recv_raw()?;
+        let msg_size_bytes = r.recv()?;
         let msg_size = ((msg_size_bytes[0] as u16) << 8) | (msg_size_bytes[1] as u16);
         instrument::end();
 
@@ -341,7 +341,7 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Send u", E_SEND_COLOR);
-        s.send_raw(u.as_slice())?;
+        s.send(u.as_slice())?;
         instrument::end();
 
         instrument::begin("Transpose t0 -> t", E_COMP_COLOR);
@@ -374,8 +374,8 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Send x_sum, t_sum", E_SEND_COLOR);
-        s.send_raw(x_sum.as_slice())?;
-        s.send_raw(t_sum.as_slice())?;
+        s.send(x_sum.as_slice())?;
+        s.send(t_sum.as_slice())?;
         instrument::end();
         instrument::end();
 
@@ -427,7 +427,7 @@ impl ObliviousReceiver for Receiver {
         instrument::end();
 
         instrument::begin("Receive d", E_RECV_COLOR);
-        let d: Vec<u8> = r.recv_raw()?;
+        let d: Vec<u8> = r.recv()?;
         instrument::end();
 
         instrument::begin("De-randomize", E_COMP_COLOR);
@@ -759,13 +759,14 @@ fn polynomial_mul_acc(destination: &mut [u8], left: &[u8], right: &[u8]) {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
     fn test_avx2_ot_receiver() {
-        use crate::ot::chou_orlandi::{OTReceiver, OTSender};
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        use crate::ot::chou_orlandi;
+        let (s1, r1) = raw::new_local_channel();
+        let (s2, r2) = raw::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 
@@ -774,7 +775,7 @@ mod tests {
             .name("Sender".to_string())
             .spawn(move || {
                 let sender = Sender {
-                    bootstrap: Box::new(OTReceiver),
+                    bootstrap: Box::new(chou_orlandi::Receiver),
                 };
                 let msg = Message::from_unzipped(&[b"Hello"; 8 << 2], &[b"World"; 8 << 2]);
                 sender.exchange(&msg, &ch1).unwrap();
@@ -784,7 +785,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = Receiver {
-                    bootstrap: Box::new(OTSender),
+                    bootstrap: Box::new(chou_orlandi::Sender),
                 };
                 let choices = [true; 8 << 2];
                 let msg = receiver.exchange(&choices, &ch2).unwrap();
@@ -797,9 +798,9 @@ mod tests {
 
     #[test]
     fn test_avx2_ot_receiver_many() {
-        use crate::ot::chou_orlandi::{OTReceiver, OTSender};
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        use crate::ot::chou_orlandi;
+        let (s1, r1) = raw::new_local_channel();
+        let (s2, r2) = raw::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 
@@ -822,7 +823,7 @@ mod tests {
             .name("Sender".to_string())
             .spawn(move || {
                 let sender = Sender {
-                    bootstrap: Box::new(OTReceiver),
+                    bootstrap: Box::new(chou_orlandi::Receiver),
                 };
 
                 let mut m0 = [[0u8; 8]; CASES];
@@ -848,7 +849,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = Receiver {
-                    bootstrap: Box::new(OTSender),
+                    bootstrap: Box::new(chou_orlandi::Sender),
                 };
                 let mut choices = vec![true; CASES];
                 for i in 0..CASES {

@@ -1,14 +1,15 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::{
     circuit::build_circuit,
+    common::raw,
     garble::{self, BinaryEncodingKey},
     ot::chou_orlandi::*,
     ot::common::*,
 };
 
 fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
-    let (s1, r1) = ductile::new_local_channel();
-    let (s2, r2) = ductile::new_local_channel();
+    let (s1, r1) = raw::new_local_channel();
+    let (s2, r2) = raw::new_local_channel();
     let ch1 = (s1, r2);
     let ch2 = (s2, r1);
     let choices = choices.to_vec();
@@ -18,14 +19,14 @@ fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
         .name("Sender".to_string())
         .spawn(move || {
             let msg = Message::from_zipped(&msg);
-            let sender = OTSender;
+            let sender = Sender;
             sender.exchange(&msg, &ch1).unwrap();
         });
 
     let h2 = thread::Builder::new()
         .name("Receiver".to_string())
         .spawn(move || {
-            let receiver = OTReceiver;
+            let receiver = Receiver;
             let _ = receiver.exchange(&choices, &ch2).unwrap();
         });
 

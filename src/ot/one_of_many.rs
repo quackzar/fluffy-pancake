@@ -1,7 +1,7 @@
-use crate::common::{Channel, Error};
+use crate::common::{Error, TChannel};
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
-use crate::ot::chou_orlandi::{OTReceiver, OTSender};
+use crate::ot::chou_orlandi::{Receiver, Sender};
 use crate::ot::common::*;
 use crate::util::*;
 use rand::RngCore;
@@ -27,16 +27,11 @@ fn fk(key: &[u8], choice: u32, length: usize, buffer: &mut [u8]) {
 }
 
 pub struct ManyOTSender {
-    pub interal_sender: OTSender,
+    pub interal_sender: Sender,
 }
 
 impl ManyOTSender {
-    pub fn exchange(
-        &self,
-        messages: &[Vec<u8>],
-        domain: u32,
-        ch: &Channel<Vec<u8>>,
-    ) -> Result<(), Error> {
+    pub fn exchange(&self, messages: &[Vec<u8>], domain: u32, ch: &TChannel) -> Result<(), Error> {
         instrument::begin("1-to-n OT Sender", E_FUNC_COLOR);
         let byte_length = messages[0].len();
 
@@ -129,7 +124,7 @@ impl ManyOTSender {
 
         let (s, _r) = ch;
         instrument::begin("Send y", E_SEND_COLOR);
-        s.send_raw(y.as_mut_slice())?;
+        s.send(y.as_mut_slice())?;
         instrument::end();
 
         // 2. Initiate 1-out-of-2 OTs by sending challenges
@@ -154,16 +149,11 @@ impl ManyOTSender {
 }
 
 pub struct ManyOTReceiver {
-    pub internal_receiver: OTReceiver,
+    pub internal_receiver: Receiver,
 }
 
 impl ManyOTReceiver {
-    pub fn exchange(
-        &self,
-        choice: u32,
-        domain: u32,
-        ch: &Channel<Vec<u8>>,
-    ) -> Result<Vec<u8>, Error> {
+    pub fn exchange(&self, choice: u32, domain: u32, ch: &TChannel) -> Result<Vec<u8>, Error> {
         instrument::begin("1-to-n OT Receiver", E_FUNC_COLOR);
         let l = domain as usize;
 
@@ -178,7 +168,7 @@ impl ManyOTReceiver {
 
         let (_s, r) = ch;
         instrument::begin("Receive y", E_RECV_COLOR);
-        let mut y: Vec<u8> = r.recv_raw()?;
+        let mut y: Vec<u8> = r.recv()?;
         instrument::end();
 
         instrument::begin("Bootstrap", E_PROT_COLOR);
@@ -220,6 +210,7 @@ impl ManyOTReceiver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::*;
     use crate::util::{log2, LENGTH};
 
     #[test]
@@ -232,8 +223,8 @@ mod tests {
         }
         let choice = 4;
 
-        let (s1, r1) = ductile::new_local_channel();
-        let (s2, r2) = ductile::new_local_channel();
+        let (s1, r1) = raw::new_local_channel();
+        let (s2, r2) = raw::new_local_channel();
         let ch1 = (s1, r2);
         let ch2 = (s2, r1);
 
@@ -243,7 +234,7 @@ mod tests {
             .name("Sender".to_string())
             .spawn(move || {
                 let sender = ManyOTSender {
-                    interal_sender: crate::ot::chou_orlandi::OTSender,
+                    interal_sender: crate::ot::chou_orlandi::Sender,
                 };
                 sender.exchange(&messages, domain, &ch1).unwrap();
             });
@@ -252,7 +243,7 @@ mod tests {
             .name("Receiver".to_string())
             .spawn(move || {
                 let receiver = ManyOTReceiver {
-                    internal_receiver: crate::ot::chou_orlandi::OTReceiver,
+                    internal_receiver: crate::ot::chou_orlandi::Receiver,
                 };
                 receiver.exchange(choice, domain, &ch2).unwrap()
             });
