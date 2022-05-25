@@ -1,4 +1,4 @@
-use crate::common::{Error, TChannel};
+use crate::common::{Error, Channel};
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
 use crate::ot::chou_orlandi::{Receiver, Sender};
@@ -31,7 +31,7 @@ pub struct ManyOTSender {
 }
 
 impl ManyOTSender {
-    pub fn exchange(&self, messages: &[Vec<u8>], domain: u32, ch: &TChannel) -> Result<(), Error> {
+    pub fn exchange(&self, messages: &[Vec<u8>], domain: u32, ch: &Channel) -> Result<(), Error> {
         instrument::begin("1-to-n OT Sender", E_FUNC_COLOR);
         let byte_length = messages[0].len();
 
@@ -153,7 +153,7 @@ pub struct ManyOTReceiver {
 }
 
 impl ManyOTReceiver {
-    pub fn exchange(&self, choice: u32, domain: u32, ch: &TChannel) -> Result<Vec<u8>, Error> {
+    pub fn exchange(&self, choice: u32, domain: u32, ch: &Channel) -> Result<Vec<u8>, Error> {
         instrument::begin("1-to-n OT Receiver", E_FUNC_COLOR);
         let l = domain as usize;
 

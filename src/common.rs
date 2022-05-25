@@ -11,7 +11,7 @@ pub trait ChannelReceiver: Send {
     fn recv(&self) -> Result<Vec<u8>>;
 }
 
-pub type TChannel = (Box<dyn ChannelSender>, Box<dyn ChannelReceiver>);
+pub type Channel = (Box<dyn ChannelSender>, Box<dyn ChannelReceiver>);
 
 pub mod raw {
     use super::*;
@@ -36,7 +36,7 @@ pub mod raw {
     }
 
     // Local channels
-    pub fn local_channel_pair() -> (TChannel, TChannel) {
+    pub fn local_channel_pair() -> (Channel, Channel) {
         let (s1, r1) = new_local_channel();
         let (s2, r2) = new_local_channel();
         let ch1 = (s1, r2);
@@ -44,7 +44,7 @@ pub mod raw {
         (ch1, ch2)
     }
 
-    pub fn new_local_channel() -> TChannel {
+    pub fn new_local_channel() -> Channel {
         let (s, r) = ductile::new_local_channel();
         (
             Box::new(RawChannelSender(s)),
@@ -61,7 +61,7 @@ pub mod raw {
             Ok(ChannelServer(s))
         }
 
-        pub fn next(&mut self) -> Option<super::TChannel> {
+        pub fn next(&mut self) -> Option<super::Channel> {
             let (s, r, _) = self.0.next()?;
             Some((
                 Box::new(RawChannelSender(s)),
@@ -70,7 +70,7 @@ pub mod raw {
         }
     }
 
-    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel> {
+    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<Channel> {
         let (s, r) = ductile::connect_channel(addr)?;
         Ok((
             Box::new(RawChannelSender(s)),
@@ -124,7 +124,7 @@ pub mod auth {
     }
 
     // Local channels
-    pub fn local_channel_pair() -> (TChannel, TChannel) {
+    pub fn local_channel_pair() -> (Channel, Channel) {
         let (s1, r1) = new_local_channel();
         let (s2, r2) = new_local_channel();
         let ch1 = (s1, r2);
@@ -132,7 +132,7 @@ pub mod auth {
         (ch1, ch2)
     }
 
-    fn new_local_channel() -> TChannel {
+    fn new_local_channel() -> Channel {
         let key: [u8; 32] = rand::random();
         let (s, r) = ductile::new_local_channel();
         let sender = AuthChannelSender {
@@ -154,7 +154,7 @@ pub mod auth {
             Ok(ChannelServer(s))
         }
 
-        pub fn next(&mut self) -> Option<super::TChannel> {
+        pub fn next(&mut self) -> Option<super::Channel> {
             let (s, r, _) = self.0.next()?;
             let secret = EphemeralSecret::new(OsRng);
             let public = PublicKey::from(&secret);
@@ -173,7 +173,7 @@ pub mod auth {
         }
     }
 
-    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel> {
+    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<Channel> {
         let (s, r) = ductile::connect_channel(addr)?;
         let secret = EphemeralSecret::new(OsRng);
         let public = PublicKey::from(&secret);
@@ -254,7 +254,7 @@ mod signed {
     }
 
     // Local channels
-    pub fn local_channel_pair() -> (TChannel, TChannel) {
+    pub fn local_channel_pair() -> (Channel, Channel) {
         let (s1, r1) = new_local_channel();
         let (s2, r2) = new_local_channel();
         let ch1 = (s1, r2);
@@ -262,7 +262,7 @@ mod signed {
         (ch1, ch2)
     }
 
-    fn new_local_channel() -> TChannel {
+    fn new_local_channel() -> Channel {
         let mut csprng = rand_old::rngs::OsRng {};
         let keypair = Keypair::generate(&mut csprng);
         let public_key = keypair.public.clone();
@@ -282,7 +282,7 @@ mod signed {
             Ok(ChannelServer(s))
         }
 
-        pub fn next(&mut self) -> Option<super::TChannel> {
+        pub fn next(&mut self) -> Option<super::Channel> {
             let (s, r, _) = self.0.next()?;
 
             // generation and exchanging of public keys
@@ -299,7 +299,7 @@ mod signed {
         }
     }
 
-    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<TChannel> {
+    pub fn connect_channel(addr: impl ToSocketAddrs) -> Result<Channel> {
         let (s, r) = ductile::connect_channel(addr)?;
 
         // generation and exchanging of public keys

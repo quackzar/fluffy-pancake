@@ -55,15 +55,17 @@ fn wires_from_bytes(bytes: &[u8], domain: Domain) -> Vec<Wire> {
     wires
 }
 
+#[deprecated]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct OneOfManyKey(WireBytes);
 
+#[allow(deprecated)]
 impl OneOfManyKey {
     // First (and slow) implementation of garbler_server and evaluator_client
     pub fn garbler_server(
         passwords: &[Vec<u8>],
         threshold: u16,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<Self> {
         instrument::begin("Garbler: Server", E_FUNC_COLOR);
 
@@ -148,7 +150,7 @@ impl OneOfManyKey {
         password: &[u8],
         number_of_password: u32,
         index: u32,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<Self> {
         instrument::begin("Evaluator: Client", E_FUNC_COLOR);
 
@@ -216,7 +218,7 @@ impl OneOfManyKey {
     pub fn garbler_server_v2(
         passwords: &[Vec<u8>],
         threshold: u16,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<Self> {
         instrument::begin("Garbler: Server v2", E_FUNC_COLOR);
 
@@ -331,7 +333,7 @@ impl OneOfManyKey {
         password: &[u8],
         number_of_password: u32,
         index: u32,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<Self> {
         instrument::begin("Evaluator: Client v2", E_FUNC_COLOR);
 
@@ -423,7 +425,7 @@ impl OneOfManyKey {
         index: u32,
         number_of_passwords: u32,
         threshold: u16,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<Self> {
         instrument::begin("Garbler: Client", E_FUNC_COLOR);
 
@@ -532,7 +534,7 @@ impl OneOfManyKey {
         instrument::end();
         Ok(Self(decoding.hashes[0][1]))
     }
-    pub fn evaluator_server(passwords: &[Vec<u8>], channel: &TChannel) -> Result<Self> {
+    pub fn evaluator_server(passwords: &[Vec<u8>], channel: &Channel) -> Result<Self> {
         instrument::begin("Evaluator: Server", E_FUNC_COLOR);
 
         let (_, receiver) = channel;
@@ -607,7 +609,7 @@ impl OneOfManyKey {
         index: u32,
         number_of_passwords: u32,
         threshold: u16,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<Self> {
         instrument::begin("Garbler: Client v2", E_FUNC_COLOR);
 
@@ -695,7 +697,7 @@ impl OneOfManyKey {
         instrument::end();
         Ok(Self(decoding.hashes[0][1]))
     }
-    pub fn evaluator_server_v2(passwords: &[Vec<u8>], channel: &TChannel) -> Result<Self> {
+    pub fn evaluator_server_v2(passwords: &[Vec<u8>], channel: &Channel) -> Result<Self> {
         instrument::begin("Evaluator: Server v2", E_FUNC_COLOR);
 
         let (_, receiver) = channel;

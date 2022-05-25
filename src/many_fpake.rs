@@ -65,7 +65,7 @@ impl OneOfManyKey {
     pub fn garbler_server_v3(
         passwords: &[Vec<u8>],
         threshold: u16,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<(Self, Vec<u8>)> {
         instrument::begin("Garbler: Server v3", E_FUNC_COLOR);
 
@@ -181,7 +181,7 @@ impl OneOfManyKey {
         password: &[u8],
         number_of_password: u32,
         index: u32,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<(Self, Vec<u8>)> {
         instrument::begin("Evaluator: Client v3", E_FUNC_COLOR);
 
@@ -275,7 +275,7 @@ impl OneOfManyKey {
         index: u32,
         number_of_passwords: u32,
         threshold: u16,
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<Self> {
         instrument::begin("Garbler: Client v3", E_FUNC_COLOR);
 
@@ -358,7 +358,7 @@ impl OneOfManyKey {
     pub fn evaluator_server_v3(
         passwords: &[Vec<u8>],
         mask: &[u8],
-        channel: &TChannel,
+        channel: &Channel,
     ) -> Result<Self> {
         instrument::begin("Evaluator: Server v3", E_FUNC_COLOR);
 
@@ -436,7 +436,7 @@ pub fn mfpake_single(
     index: u32,
     number_of_passwords: u32,
     threshold: u16,
-    channel: &TChannel,
+    channel: &Channel,
 ) -> Result<Key> {
     instrument::begin("Client v4", E_FUNC_COLOR);
 
@@ -467,7 +467,7 @@ pub fn mfpake_single(
 
 /// Server version of (one-out-of)-many-fpake.
 /// Supplying a key list and an index.
-pub fn mfpake_many(passwords: &[Vec<u8>], threshold: u16, channel: &TChannel) -> Result<Key> {
+pub fn mfpake_many(passwords: &[Vec<u8>], threshold: u16, channel: &Channel) -> Result<Key> {
     instrument::begin("Server v4", E_FUNC_COLOR);
 
     let (sender, _) = channel;
