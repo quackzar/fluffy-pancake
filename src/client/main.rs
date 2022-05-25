@@ -1,7 +1,6 @@
 // client binary for mfpake
 use clap::Parser;
-use magic_pake::common::raw::{connect_channel};
-use magic_pake::common::Result;
+use magic_pake::common::{auth::{connect_channel}, Result};
 use magic_pake::common::{TChannel};
 
 use magic_pake::many_fpake::mfpake_single;

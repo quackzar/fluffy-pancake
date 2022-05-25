@@ -1,6 +1,6 @@
 // server main for mfpake
 use clap::Parser;
-use magic_pake::common::raw::{ChannelServer};
+use magic_pake::common::auth::{ChannelServer};
 use magic_pake::common::Result;
 
 
