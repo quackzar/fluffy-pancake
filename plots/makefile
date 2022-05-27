@@ -19,12 +19,14 @@ plots:
 	gnuplot one_of_many_fpake_mfpake_throughput.plt
 	gnuplot one_of_many_fpake_mfpake_hd.plt
 	gnuplot one_of_many_fpake_mfpake_hd_throughput.plt
+	gnuplot one_of_many_fpake_baseline.plt
+	gnuplot one_of_many_fpake_with_ot.plt
 	gnuplot ot.plt
 	gnuplot ot_throughput.plt
 	gnuplot ot_apricot.plt
 	gnuplot ot_apricot_throughput.plt
-	gnuplot ot_apricot__legacy_.plt
-	gnuplot ot_apricot__legacy__throughput.plt
+	gnuplot ot_apricot_classic.plt
+	gnuplot ot_apricot_classic_throughput.plt
 	gnuplot ot_chou_orlandi.plt
 	gnuplot ot_chou_orlandi_throughput.plt
 	gnuplot polynomial_multiply_reduce.plt

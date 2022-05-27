@@ -259,7 +259,7 @@ internal static class Program
         plotFile.WriteLine(@"set logscale x 2");
         plotFile.WriteLine(@$"set ylabel ""{yLabel}""");
         plotFile.WriteLine(@"set logscale y 2");
-        plotFile.WriteLine(@"set term pdf");
+        plotFile.WriteLine(@"set term pdf font ""Computer Modern,10""");
     }
     private static string GenerateTimePlot(string plotsFolder, string outputFolder, string name, string fileName, string elementUnit, params Benchmark[] benches)
     {
