@@ -5,9 +5,10 @@ use magic_pake::many_fpake::*;
 use std::thread;
 
 fn bench_fpake_one_of_many(c: &mut Criterion) {
-    let mut group = c.benchmark_group("One-of-many fPAKE");
+    let mut group = c.benchmark_group("One-of-many fPAKE|Passwords");
     group.sample_size(10);
 
+    /*
     // v1, v1
     for i in 8..=15u32 {
         //for i in 8..=ITERATIONS {
@@ -249,6 +250,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
             },
         );
     }
+    */
 
     // v3
     for i in 8..=22u32 {
@@ -257,7 +259,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
         group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
         group.bench_with_input(
-            BenchmarkId::new("v3", number_of_passwords),
+            BenchmarkId::new("mfPAKE", number_of_passwords),
             &number_of_passwords,
             |b, _| {
                 b.iter(|| {
@@ -318,7 +320,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
         group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
         group.bench_with_input(
-            BenchmarkId::new("v4", number_of_passwords),
+            BenchmarkId::new("mfPAKE,hd", number_of_passwords),
             &number_of_passwords,
             |b, _| {
                 b.iter(|| {

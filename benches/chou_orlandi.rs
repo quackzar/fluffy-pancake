@@ -35,7 +35,7 @@ fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
 }
 
 fn bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("OT");
+    let mut group = c.benchmark_group("OT|Messages");
     group.sample_size(10);
 
     // Local

@@ -38,7 +38,7 @@ fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
 }
 
 fn bench_1_of_n_ot(c: &mut Criterion) {
-    let mut group = c.benchmark_group("1-to-n OT");
+    let mut group = c.benchmark_group("1-to-n OT|Messages");
     group.sample_size(10);
 
     for i in 2..=20u32 {
@@ -51,7 +51,7 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
         }
 
         group.throughput(criterion::Throughput::Elements(n as u64));
-        group.bench_with_input(BenchmarkId::new("Chou-Orlandi", n), &n, |b, _| {
+        group.bench_with_input(BenchmarkId::new("Chou-Orlandi Based", n), &n, |b, _| {
             b.iter(|| {
                 one_of_many_chour_orlandi(n, domain, messages.clone());
             })

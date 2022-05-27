@@ -31,7 +31,7 @@ fn fpake(password_size: usize) {
 }
 
 fn bench_fpake(c: &mut Criterion) {
-    let mut group = c.benchmark_group("fPAKE");
+    let mut group = c.benchmark_group("fPAKE|Password bits");
     group.sample_size(10);
 
     for i in 6..=12 {

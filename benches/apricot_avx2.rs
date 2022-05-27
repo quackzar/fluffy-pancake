@@ -40,7 +40,7 @@ fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
 }
 
 fn bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("OT");
+    let mut group = c.benchmark_group("OT|Messages");
     group.sample_size(10);
 
     // Local
@@ -58,7 +58,7 @@ fn bench(c: &mut Criterion) {
         let choices = vec![false; n];
 
         group.throughput(criterion::Throughput::Elements(n as u64));
-        group.bench_with_input(BenchmarkId::new("Apricot x86", n), &n, |b, _| {
+        group.bench_with_input(BenchmarkId::new("Apricot", n), &n, |b, _| {
             b.iter(|| run_ot(enc.clone(), choices.clone()))
         });
     }

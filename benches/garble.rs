@@ -4,7 +4,7 @@ use magic_pake::circuit::build_circuit;
 use magic_pake::garble::{encode, evaluate, garble};
 
 fn bench_garble_eval(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Garbled Circuits");
+    let mut group = c.benchmark_group("Garbled Circuits|Password bits");
     group.sample_size(100);
 
     for i in 1..=16 {

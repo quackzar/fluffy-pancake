@@ -142,6 +142,14 @@ internal static class Program
             var columns = data.ToString().Split(',');
 
             var groupName = columns[0].Replace(";", ",");
+            var barIdx = groupName.LastIndexOf('|');
+            var elementUnit = "Element";
+            if (barIdx != -1)
+            {
+                groupName = groupName[..barIdx];
+                elementUnit = groupName[(barIdx + 1)..];
+            }
+            
             var benchmarkName = columns[1].Replace(";", ",");
             var elements = double.Parse(columns[2]);
             var throughputValue = columns[3];
@@ -157,7 +165,7 @@ internal static class Program
             {
                 Name = benchmarkName,
                 Elements = elements,
-                ElementUnit = "Element",
+                ElementUnit = elementUnit,
                 Throughput = throughput,
                 Time = average,
                 TimeSpan = span
@@ -181,7 +189,7 @@ internal static class Program
                 benchmark.Entries = benchmark.Entries.OrderBy(entry => entry.Elements).ToList();
                 benchmark.DataFile = dataFileName;
 
-                dataFile.WriteLine("#Input Size\tAverage Time (ms)\tThroughput (elements/s)");
+                dataFile.WriteLine($"#Input Size\tAverage Time (ms)\tThroughput ({benchmark.Entries.First().ElementUnit}/s)");
                 foreach(var entry in benchmark.Entries)
                 {
                     var elements = (long) Math.Floor(entry.Elements);
@@ -244,7 +252,7 @@ internal static class Program
         plotFile.WriteLine(@"set timestamp");
         plotFile.WriteLine(@$"set title ""{name}""");
         plotFile.WriteLine(@"set key default");
-        plotFile.WriteLine(@$"set xlabel ""Number of {elementUnit}s""");
+        plotFile.WriteLine(@$"set xlabel ""Number of {elementUnit}""");
         plotFile.WriteLine(@"set logscale x 2");
         plotFile.WriteLine(@$"set ylabel ""{yLabel}""");
         plotFile.WriteLine(@"set logscale y 2");
