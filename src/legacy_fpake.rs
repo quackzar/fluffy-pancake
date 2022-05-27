@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::circuit::*;
 use crate::common::*;
 use crate::fpake::Key;

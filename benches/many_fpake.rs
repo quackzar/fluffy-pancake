@@ -1,6 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use magic_pake::common::raw::new_local_channel;
-use magic_pake::legacy_fpake as legacy;
 use magic_pake::many_fpake::*;
 use std::thread;
 
