@@ -8,13 +8,14 @@ use magic_pake::{
     ot::common::*,
 };
 
+use std::thread;
+
 fn run_ot(msg: Vec<[Vec<u8>; 2]>, choices: Vec<bool>) {
     let (s1, r1) = raw::new_local_channel();
     let (s2, r2) = raw::new_local_channel();
     let ch1 = (s1, r2);
     let ch2 = (s2, r1);
 
-    use std::thread;
     let h1 = thread::Builder::new()
         .name("Sender".to_string())
         .spawn(move || {
@@ -43,7 +44,7 @@ fn bench(c: &mut Criterion) {
     group.sample_size(10);
 
     // Local
-    for i in 8..=20 {
+    for i in 3..=20 {
         let n = 1 << i;
         //let name: String = format!("Local, {} messages", n);
         let circuit = build_circuit(n / 2, 0);
@@ -57,7 +58,7 @@ fn bench(c: &mut Criterion) {
         let choices = vec![false; n];
 
         group.throughput(criterion::Throughput::Elements(n as u64));
-        group.bench_with_input(BenchmarkId::new("Apricot (legacy)", n), &n, |b, _| {
+        group.bench_with_input(BenchmarkId::new("Apricot", n), &n, |b, _| {
             b.iter(|| run_ot(enc.clone(), choices.clone()))
         });
     }

@@ -54,10 +54,10 @@ name = "chou_orlandi"
 harness = false
 
 [[bench]]
-name = "apricot"
+name = "apricot_classic"
 harness = false
 [[bench]]
-name = "apricot_avx2"
+name = "apricot"
 harness = false
 
 [[bench]]

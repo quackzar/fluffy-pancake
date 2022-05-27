@@ -4,7 +4,7 @@ use crate::fpake::Key;
 use crate::garble::*;
 use crate::instrument;
 use crate::instrument::{E_COMP_COLOR, E_FUNC_COLOR, E_PROT_COLOR, E_RECV_COLOR, E_SEND_COLOR};
-use crate::ot::apricot_avx2::{Receiver, Sender};
+use crate::ot::apricot::{Receiver, Sender};
 use crate::ot::chou_orlandi::Receiver as OTReceiver;
 use crate::ot::chou_orlandi::Sender as OTSender;
 use crate::ot::common::Message as MessagePair;

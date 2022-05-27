@@ -3,7 +3,7 @@ use crate::common::*;
 use crate::garble::*;
 use crate::instrument;
 use crate::instrument::E_PROT_COLOR;
-use crate::ot::apricot_avx2 as apricot;
+use crate::ot::apricot as apricot;
 use crate::ot::chou_orlandi;
 use crate::ot::common::Message as MessagePair;
 use crate::ot::common::*;

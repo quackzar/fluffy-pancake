@@ -6,7 +6,7 @@ fn log2(x: u32) -> u32 {
     ((std::mem::size_of::<u32>() * 8) as u32 - (x - 1).leading_zeros()) as u32
 }
 
-fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
+fn one_of_many_chou_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
     let choice = n / 2;
 
     let (s1, r1) = raw::new_local_channel();
@@ -53,7 +53,7 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
         group.throughput(criterion::Throughput::Elements(n as u64));
         group.bench_with_input(BenchmarkId::new("Chou-Orlandi Based", n), &n, |b, _| {
             b.iter(|| {
-                one_of_many_chour_orlandi(n, domain, messages.clone());
+                one_of_many_chou_orlandi(n, domain, messages.clone());
             })
         });
     }
