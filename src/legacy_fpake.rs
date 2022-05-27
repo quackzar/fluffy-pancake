@@ -134,7 +134,7 @@ impl OneOfManyKey {
         // 5. Send 1-to-n challenge and Y to s and get response
         instrument::begin("1-to-n OT: Server password", E_PROT_COLOR);
         let server_password_ot = ManyOTSender {
-            interal_sender: OTSender,
+            interal_sender: Box::new(OTSender),
         };
         server_password_ot.exchange(&server_encodings, domain, channel)?;
         instrument::end();
@@ -182,7 +182,7 @@ impl OneOfManyKey {
         // 4. Receive and respond to the 1-to-n challenge from the r
         instrument::begin("1-to-n OT: Server password", E_PROT_COLOR);
         let many_receiver = ManyOTReceiver {
-            internal_receiver: OTReceiver,
+            internal_receiver: Box::new(OTReceiver),
         };
         let domain = log2(number_of_password);
         let server_password_ot = many_receiver.exchange(index, domain, channel)?;
@@ -298,7 +298,7 @@ impl OneOfManyKey {
         // 5. 1-n-OT masked server password to client
         instrument::begin("OT: Masked password", E_PROT_COLOR);
         let masked_passwords_ot = ManyOTSender {
-            interal_sender: OTSender,
+            interal_sender: Box::new(OTSender),
         };
         masked_passwords_ot.exchange(&masked_passwords, domain, channel)?;
         instrument::end();
@@ -370,7 +370,7 @@ impl OneOfManyKey {
         // 4. Receive masked server password
         instrument::begin("OT: Masked password", E_PROT_COLOR);
         let many_receiver = ManyOTReceiver {
-            internal_receiver: OTReceiver,
+            internal_receiver: Box::new(OTReceiver),
         };
         let domain = log2(number_of_password);
         let masked_password = many_receiver.exchange(index, domain, channel)?;
@@ -671,7 +671,7 @@ impl OneOfManyKey {
         // 3. Do a 1-to-n OT to get a masked version of the servers password corresponding to this client
         instrument::begin("1-to-n OT: Masked password", E_COMP_COLOR);
         let many_receiver = ManyOTReceiver {
-            internal_receiver: OTReceiver,
+            internal_receiver: Box::new(OTReceiver),
         };
         let domain = log2(number_of_passwords);
         let masked_password = many_receiver.exchange(index, domain, channel)?;
@@ -750,7 +750,7 @@ impl OneOfManyKey {
         // 4. 1-to-n OT the masked password to the client
         instrument::begin("1-to-n OT: Masked password", E_PROT_COLOR);
         let many_sender = ManyOTSender {
-            interal_sender: OTSender,
+            interal_sender: Box::new(OTSender),
         };
         let domain = log2(passwords.len());
         many_sender.exchange(masked_passwords.as_slice(), domain, channel)?;

@@ -19,7 +19,7 @@ fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
         .name("Sender".to_string())
         .spawn(move || {
             let sender = ManyOTSender {
-                interal_sender: magic_pake::ot::chou_orlandi::Sender,
+                interal_sender: Box::new(magic_pake::ot::chou_orlandi::Sender),
             };
             sender.exchange(&messages, domain, &ch1).unwrap();
         });
@@ -28,7 +28,7 @@ fn one_of_many_chour_orlandi(n: u32, domain: u32, messages: Vec<Vec<u8>>) {
         .name("Receiver".to_string())
         .spawn(move || {
             let receiver = ManyOTReceiver {
-                internal_receiver: magic_pake::ot::chou_orlandi::Receiver,
+                internal_receiver: Box::new(magic_pake::ot::chou_orlandi::Receiver),
             };
             receiver.exchange(choice, domain, &ch2).unwrap()
         });
