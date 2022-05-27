@@ -10,7 +10,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
     /*
     // v1, v1
-    for i in 8..=15u32 {
+    for i in 4..=15u32 {
         //for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
@@ -71,7 +71,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
 
     // v2, v1
     for i in 8..=15u32 {
-        //for i in 8..=ITERATIONSu32 {
+        //for i in 4..=ITERATIONSu32 {
         let number_of_passwords = (1 << i) as u32;
 
         group.throughput(criterion::Throughput::Elements(number_of_passwords as u64));
@@ -253,7 +253,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
     */
 
     // v3
-    for i in 8..=22u32 {
+    for i in 4..=22u32 {
         //for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
@@ -314,7 +314,7 @@ fn bench_fpake_one_of_many(c: &mut Criterion) {
     }
 
     // v4
-    for i in 8..=22u32 {
+    for i in 4..=22u32 {
         //for i in 8..=ITERATIONS {
         let number_of_passwords = (1 << i) as u32;
 
