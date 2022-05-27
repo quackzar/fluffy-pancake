@@ -117,7 +117,6 @@ internal static class Program
             return group;
         }
 
-        var entries = new Dictionary<string, List<Result>>();
         foreach (var (file, lines) in files)
         {
             var line = lines.Last()!;
@@ -207,18 +206,18 @@ internal static class Program
 
             var benches = group.Benchmarks.Values.ToArray();
             
-            var plotFile = GenerateTimePlot(plotsFolder, outputFolder, group.Name, entry.ElementUnit, benches);
+            var plotFile = GenerateTimePlot(plotsFolder, outputFolder, group.Name, group.Name, entry.ElementUnit, benches);
             makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
             
-            plotFile = GenerateThroughputPlot(plotsFolder, outputFolder, group.Name, entry.ElementUnit, benches);
+            plotFile = GenerateThroughputPlot(plotsFolder, outputFolder, group.Name, group.Name, entry.ElementUnit, benches);
             makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
 
             foreach (var (benchName, bench) in group.Benchmarks)
             {
-                plotFile = GenerateTimePlot(plotsFolder, outputFolder, benchName, bench.Entries.First().ElementUnit, bench);
+                plotFile = GenerateTimePlot(plotsFolder, outputFolder, benchName, $"{group.Name}_{benchName}", bench.Entries.First().ElementUnit, bench);
                 makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
                 
-                plotFile = GenerateThroughputPlot(plotsFolder, outputFolder, benchName, bench.Entries.First().ElementUnit, bench);
+                plotFile = GenerateThroughputPlot(plotsFolder, outputFolder, benchName, $"{group.Name}_{benchName}", bench.Entries.First().ElementUnit, bench);
                 makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
             }
         }
@@ -251,14 +250,14 @@ internal static class Program
         plotFile.WriteLine(@"set logscale y 2");
         plotFile.WriteLine(@"set term pdf");
     }
-    private static string GenerateTimePlot(string plotsFolder, string outputFolder, string name, string elementUnit, params Benchmark[] benches)
+    private static string GenerateTimePlot(string plotsFolder, string outputFolder, string name, string fileName, string elementUnit, params Benchmark[] benches)
     {
-        var plotFileName = Path.Combine(plotsFolder, NormalizeName(name) + ".plt");
+        var plotFileName = Path.Combine(plotsFolder, NormalizeName(fileName) + ".plt");
         using var plotFile = File.CreateText(plotFileName);
 
         PlotOptions(plotFile, plotsFolder, outputFolder, name, elementUnit, "Runtime (ms)");
         
-        var outputFileName = Path.Combine(outputFolder, NormalizeName(name) + ".pdf");
+        var outputFileName = Path.Combine(outputFolder, NormalizeName(fileName) + ".pdf");
         outputFileName = Path.GetRelativePath(plotsFolder, outputFileName).Replace('\\', '/');
         plotFile.WriteLine(@$"set output ""{outputFileName}""");
         
@@ -279,14 +278,14 @@ internal static class Program
         return plotFileName;
     }
     
-    private static string GenerateThroughputPlot(string plotsFolder, string outputFolder, string name, string elementUnit, params Benchmark[] benches)
+    private static string GenerateThroughputPlot(string plotsFolder, string outputFolder, string name, string fileName, string elementUnit, params Benchmark[] benches)
     {
-        var plotFileName = Path.Combine(plotsFolder, NormalizeName(name) + "_throughput.plt");
+        var plotFileName = Path.Combine(plotsFolder, NormalizeName(fileName) + "_throughput.plt");
         using var plotFile = File.CreateText(plotFileName);
 
         PlotOptions(plotFile, plotsFolder, outputFolder, name, elementUnit, $"Throughput in {elementUnit}/s");
         
-        var outputFileName = Path.Combine(outputFolder, NormalizeName(name) + "_throughput.pdf");
+        var outputFileName = Path.Combine(outputFolder, NormalizeName(fileName) + "_throughput.pdf");
         outputFileName = Path.GetRelativePath(plotsFolder, outputFileName).Replace('\\', '/');
         plotFile.WriteLine(@$"set output ""{outputFileName}""");
         

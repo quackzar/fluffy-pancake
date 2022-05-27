@@ -1,37 +1,29 @@
 plots:
 	gnuplot 1_to_n_ot.plt
 	gnuplot 1_to_n_ot_throughput.plt
-	gnuplot chou_orlandi.plt
-	gnuplot chou_orlandi_throughput.plt
-	gnuplot fpake.plt
-	gnuplot fpake_throughput.plt
-	gnuplot password.plt
-	gnuplot password_throughput.plt
-	gnuplot garbled_circuits.plt
-	gnuplot garbled_circuits_throughput.plt
-	gnuplot evaluate.plt
-	gnuplot evaluate_throughput.plt
-	gnuplot garble.plt
-	gnuplot garble_throughput.plt
+	gnuplot 1_to_n_ot_chou_orlandi.plt
+	gnuplot 1_to_n_ot_chou_orlandi_throughput.plt
 	gnuplot one_of_many_fpake.plt
 	gnuplot one_of_many_fpake_throughput.plt
-	gnuplot v1_v1.plt
-	gnuplot v1_v1_throughput.plt
-	gnuplot v1_v2.plt
-	gnuplot v1_v2_throughput.plt
-	gnuplot v2_v1.plt
-	gnuplot v2_v1_throughput.plt
-	gnuplot v2_v2.plt
-	gnuplot v2_v2_throughput.plt
-	gnuplot v3.plt
-	gnuplot v3_throughput.plt
-	gnuplot v4.plt
-	gnuplot v4_throughput.plt
+	gnuplot one_of_many_fpake_v1_v1.plt
+	gnuplot one_of_many_fpake_v1_v1_throughput.plt
+	gnuplot one_of_many_fpake_v1_v2.plt
+	gnuplot one_of_many_fpake_v1_v2_throughput.plt
+	gnuplot one_of_many_fpake_v2_v1.plt
+	gnuplot one_of_many_fpake_v2_v1_throughput.plt
+	gnuplot one_of_many_fpake_v2_v2.plt
+	gnuplot one_of_many_fpake_v2_v2_throughput.plt
+	gnuplot one_of_many_fpake_v3.plt
+	gnuplot one_of_many_fpake_v3_throughput.plt
+	gnuplot one_of_many_fpake_v4.plt
+	gnuplot one_of_many_fpake_v4_throughput.plt
 	gnuplot ot.plt
 	gnuplot ot_throughput.plt
-	gnuplot apricot.plt
-	gnuplot apricot_throughput.plt
-	gnuplot apricot_x86.plt
-	gnuplot apricot_x86_throughput.plt
-	gnuplot chou_orlandi.plt
-	gnuplot chou_orlandi_throughput.plt
+	gnuplot ot_chou_orlandi.plt
+	gnuplot ot_chou_orlandi_throughput.plt
+	gnuplot polynomial_multiply_reduce.plt
+	gnuplot polynomial_multiply_reduce_throughput.plt
+	gnuplot polynomial_multiply_reduce_generic_implementation.plt
+	gnuplot polynomial_multiply_reduce_generic_implementation_throughput.plt
+	gnuplot polynomial_multiply_reduce_x86_implementation.plt
+	gnuplot polynomial_multiply_reduce_x86_implementation_throughput.plt
