@@ -65,6 +65,8 @@ internal static class Program
                 ' ' => '_',
                 ',' => '_',
                 '-' => '_',
+                '(' => '_',
+                ')' => '_',
                 _ => char.ToLower(c)
             });
         }
@@ -146,8 +148,8 @@ internal static class Program
             var elementUnit = "Element";
             if (barIdx != -1)
             {
-                groupName = groupName[..barIdx];
                 elementUnit = groupName[(barIdx + 1)..];
+                groupName = groupName[..barIdx];
             }
             
             var benchmarkName = columns[1].Replace(";", ",");
@@ -222,10 +224,10 @@ internal static class Program
 
             foreach (var (benchName, bench) in group.Benchmarks)
             {
-                plotFile = GenerateTimePlot(plotsFolder, outputFolder, benchName, $"{group.Name}_{benchName}", bench.Entries.First().ElementUnit, bench);
+                plotFile = GenerateTimePlot(plotsFolder, outputFolder, group.Name, $"{group.Name}_{benchName}", bench.Entries.First().ElementUnit, bench);
                 makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
                 
-                plotFile = GenerateThroughputPlot(plotsFolder, outputFolder, benchName, $"{group.Name}_{benchName}", bench.Entries.First().ElementUnit, bench);
+                plotFile = GenerateThroughputPlot(plotsFolder, outputFolder, group.Name, $"{group.Name}_{benchName}", bench.Entries.First().ElementUnit, bench);
                 makeFile.WriteLine($"\tgnuplot {Path.GetRelativePath(plotsFolder, plotFile)}");
             }
         }
@@ -247,9 +249,10 @@ internal static class Program
         }
     }
 
+    private static readonly CultureInfo _culture = CultureInfo.GetCultureInfo("en-US");
     private static void PlotOptions(StreamWriter plotFile, string plotsFolder, string outputFolder, string name, string elementUnit, string yLabel)
     {
-        plotFile.WriteLine(@"set timestamp");
+        //plotFile.WriteLine(@"set timestamp");
         plotFile.WriteLine(@$"set title ""{name}""");
         plotFile.WriteLine(@"set key default");
         plotFile.WriteLine(@$"set xlabel ""Number of {elementUnit}""");
@@ -263,7 +266,7 @@ internal static class Program
         var plotFileName = Path.Combine(plotsFolder, NormalizeName(fileName) + ".plt");
         using var plotFile = File.CreateText(plotFileName);
 
-        PlotOptions(plotFile, plotsFolder, outputFolder, name, elementUnit, "Runtime (ms)");
+        PlotOptions(plotFile, plotsFolder, outputFolder, name, elementUnit, "Runtime");
         
         var outputFileName = Path.Combine(outputFolder, NormalizeName(fileName) + ".pdf");
         outputFileName = Path.GetRelativePath(plotsFolder, outputFileName).Replace('\\', '/');
@@ -275,9 +278,25 @@ internal static class Program
         plotFile.WriteLine($@"set xtics ({xTics})");
         plotFile.WriteLine();
 
+        string FormatTime(double time, int i)
+        {
+            var value = 1L << i;
+
+            if (time < 1000d)
+            {
+                return $"\"{time.ToString("N0", _culture)} ms\" {value}";
+            }
+
+            var seconds = time / 1000;
+            return $"\"{seconds.ToString("N2", _culture)} s\" {value}";
+        }
+        var yTics = string.Join(", ", Enumerable.Range(0, 30).Select(i => FormatTime(Math.Pow(2, i), i)));
+        plotFile.WriteLine($@"set ytics ({yTics})");
+        plotFile.WriteLine();
+
         var plotFiles = from bench in benches
             let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile).Replace("\\", "/")
-            select @$"""{relativePath}"" using 1:2 title ""{name}"" with lines";
+            select @$"""{relativePath}"" using 1:2 title ""{bench.Name}"" with lines";
         var plotLine = string.Join(',', plotFiles);
         plotFile.WriteLine(@"plot " + plotLine);
 
@@ -305,7 +324,7 @@ internal static class Program
 
         var plotFiles = from bench in benches
             let relativePath = Path.GetRelativePath(plotsFolder, bench.DataFile).Replace("\\", "/")
-            select @$"""{relativePath}"" using 1:3 title ""{name}"" with lines";
+            select @$"""{relativePath}"" using 1:3 title ""{bench.Name}"" with lines";
         var plotLine = string.Join(',', plotFiles);
         plotFile.WriteLine(@"plot " + plotLine);
 

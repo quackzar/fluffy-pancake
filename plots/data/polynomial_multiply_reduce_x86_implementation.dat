@@ -1,2 +1,2 @@
-#Input Size	Average Time (ms)	Throughput (elements/s)
-1	0	12878529.736080907
+#Input Size	Average Time (ms)	Throughput (Element/s)
+1	0.0001	7493008.121622408

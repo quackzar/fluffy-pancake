@@ -39,7 +39,7 @@ fn bench_fpake(c: &mut Criterion) {
         let bytes = bits / 8;
 
         group.throughput(Throughput::Bytes(bytes as u64));
-        let id = BenchmarkId::new("Password", bits);
+        let id = BenchmarkId::new("Hamming Distance", bits);
         group.bench_with_input(id, &bits, |b, _| b.iter(|| fpake(bytes)));
     }
 

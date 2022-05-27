@@ -1,9 +1,8 @@
-set timestamp
-set title "Evaluate"
+set title "Garbled Circuits"
 set key default
-set xlabel "Number of Elements"
+set xlabel "Number of Password bits"
 set logscale x 2
-set ylabel "Throughput in Element/s"
+set ylabel "Throughput in Password bits/s"
 set logscale y 2
 set term pdf
 set output "out/garbled_circuits_evaluate_throughput.pdf"

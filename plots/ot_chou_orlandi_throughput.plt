@@ -1,9 +1,8 @@
-set timestamp
-set title "Chou-Orlandi"
+set title "OT"
 set key default
-set xlabel "Number of Elements"
+set xlabel "Number of Messages"
 set logscale x 2
-set ylabel "Throughput in Element/s"
+set ylabel "Throughput in Messages/s"
 set logscale y 2
 set term pdf
 set output "out/ot_chou_orlandi_throughput.pdf"

@@ -1,7 +1,6 @@
-set timestamp
-set title "x86 Implementation"
+set title "Polynomial Multiply Reduce"
 set key default
-set xlabel "Number of Elements"
+set xlabel "Number of Element"
 set logscale x 2
 set ylabel "Throughput in Element/s"
 set logscale y 2
