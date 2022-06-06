@@ -19,8 +19,6 @@ plots:
 	gnuplot one_of_many_fpake_mfpake_throughput.plt
 	gnuplot one_of_many_fpake_mfpake_hd.plt
 	gnuplot one_of_many_fpake_mfpake_hd_throughput.plt
-	gnuplot one_of_many_fpake_baseline.plt
-	gnuplot one_of_many_fpake_with_ot.plt
 	gnuplot ot.plt
 	gnuplot ot_throughput.plt
 	gnuplot ot_apricot.plt
@@ -35,3 +33,9 @@ plots:
 	gnuplot polynomial_multiply_reduce_generic_implementation_throughput.plt
 	gnuplot polynomial_multiply_reduce_x86_implementation.plt
 	gnuplot polynomial_multiply_reduce_x86_implementation_throughput.plt
+
+clean:
+	rm -rf *.plt
+	rm -rf data/*.dat
+	rm -rf out/*.pdf
+	rm -rf out/*.tex
