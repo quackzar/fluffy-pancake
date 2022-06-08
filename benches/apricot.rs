@@ -53,7 +53,7 @@ fn bench(c: &mut Criterion) {
         let enc: Vec<_> = enc
             .zipped()
             .iter()
-            .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+            .map(|[w0, w1]| [w0.as_bytes().to_vec(), w1.as_bytes().to_vec()])
             .collect();
         let choices = vec![false; n];
 
