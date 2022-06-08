@@ -41,7 +41,7 @@ fn bench_1_of_n_ot(c: &mut Criterion) {
     let mut group = c.benchmark_group("1-to-n OT|Messages");
     group.sample_size(10);
 
-    for i in 2..=20u32 {
+    for i in 2..=22u32 {
         let n = 1 << i;
         let domain = log2(n);
 
