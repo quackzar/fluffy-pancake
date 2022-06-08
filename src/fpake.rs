@@ -34,11 +34,11 @@ impl HalfKey {
         let (gc, e, d) = garble(&circuit);
 
         let e = BinaryEncodingKey::from(e).zipped();
-        let e_own = e[..n].to_vec(); //.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
-        let e_theirs = e[n..].to_vec(); // encoding for receiver's password'
+        let e_own = &e[..n]; //.iter().map(|[w0, w1]| [w0.as_ref(), w1.as_ref()]).collect();
+        let e_theirs = &e[n..]; // encoding for receiver's password'
         let e_theirs: Vec<_> = e_theirs
             .iter()
-            .map(|[w0, w1]| [w0.to_bytes().to_vec(), w1.to_bytes().to_vec()])
+            .map(|[w0, w1]| [w0.as_bytes(), w1.as_bytes()])
             .collect();
 
         let msg = MessagePair::from_zipped(&e_theirs);

@@ -271,7 +271,7 @@ impl Wire {
         }
     }
 
-    pub const fn to_bytes(&self) -> WireBytes {
+    pub const fn as_bytes(&self) -> WireBytes {
         self.values
     }
 }

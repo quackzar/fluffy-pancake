@@ -1,4 +1,6 @@
-﻿using System.Globalization;
+﻿#define LATEX
+
+using System.Globalization;
 using System.Text;
 
 namespace magic;
@@ -232,6 +234,13 @@ internal static class Program
             }
         }
         
+        makeFile.WriteLine(@"
+clean:
+	rm -rf *.plt
+	rm -rf data/*.dat
+	rm -rf out/*.pdf
+	rm -rf out/*.tex");
+        
         makeFile.Close();
         
         // Write aggregated results to the console
@@ -259,7 +268,11 @@ internal static class Program
         plotFile.WriteLine(@"set logscale x 2");
         plotFile.WriteLine(@$"set ylabel ""{yLabel}""");
         plotFile.WriteLine(@"set logscale y 2");
-        plotFile.WriteLine(@"set term pdf");
+#if LATEX
+        plotFile.WriteLine(@"set term latex");
+#else
+        plotFile.WriteLine(@"set term pdf font ""Computer Modern,10""");
+#endif
     }
     private static string GenerateTimePlot(string plotsFolder, string outputFolder, string name, string fileName, string elementUnit, params Benchmark[] benches)
     {
@@ -268,7 +281,11 @@ internal static class Program
 
         PlotOptions(plotFile, plotsFolder, outputFolder, name, elementUnit, "Runtime");
         
+#if LATEX
+        var outputFileName = Path.Combine(outputFolder, NormalizeName(fileName) + ".tex");
+#else
         var outputFileName = Path.Combine(outputFolder, NormalizeName(fileName) + ".pdf");
+#endif
         outputFileName = Path.GetRelativePath(plotsFolder, outputFileName).Replace('\\', '/');
         plotFile.WriteLine(@$"set output ""{outputFileName}""");
         
@@ -312,7 +329,11 @@ internal static class Program
 
         PlotOptions(plotFile, plotsFolder, outputFolder, name, elementUnit, $"Throughput in {elementUnit}/s");
         
+#if LATEX
+        var outputFileName = Path.Combine(outputFolder, NormalizeName(fileName) + "_throughput.tex");
+#else
         var outputFileName = Path.Combine(outputFolder, NormalizeName(fileName) + "_throughput.pdf");
+#endif
         outputFileName = Path.GetRelativePath(plotsFolder, outputFileName).Replace('\\', '/');
         plotFile.WriteLine(@$"set output ""{outputFileName}""");
         

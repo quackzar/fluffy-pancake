@@ -92,8 +92,8 @@ impl OneOfManyKey {
         let mut client_password_encoding = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
             client_password_encoding.push([
-                encoding[i][0].to_bytes().to_vec(),
-                encoding[i][1].to_bytes().to_vec(),
+                encoding[i][0].as_bytes().to_vec(),
+                encoding[i][1].as_bytes().to_vec(),
             ])
         }
         let client_encoding_message = MessagePair::from_zipped(client_password_encoding.as_slice());
@@ -119,7 +119,7 @@ impl OneOfManyKey {
             for b in 0..8 {
                 let bit_idx = i * 8 + b;
                 let mask_bit = ((mask_byte >> b) & 1) as usize;
-                let key = &encoding[password_bits + bit_idx][mask_bit].to_bytes();
+                let key = &encoding[password_bits + bit_idx][mask_bit].as_bytes();
 
                 let mut encoded = unsafe { vector_row_mut(&mut encoded_mask, bit_idx, LENGTH) };
                 xor_bytes_inplace(&mut encoded, key);
@@ -155,8 +155,8 @@ impl OneOfManyKey {
         let mut masked_password_encoding = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
             masked_password_encoding.push([
-                encoding[password_bits * 2 + i][0].to_bytes().to_vec(),
-                encoding[password_bits * 2 + i][1].to_bytes().to_vec(),
+                encoding[password_bits * 2 + i][0].as_bytes().to_vec(),
+                encoding[password_bits * 2 + i][1].as_bytes().to_vec(),
             ])
         }
         let masked_encoding_message = MessagePair::from_zipped(masked_password_encoding.as_slice());
@@ -319,8 +319,8 @@ impl OneOfManyKey {
         let mut mask_encoding = Vec::with_capacity(password_bits);
         for i in 0..password_bits {
             let bit_encoding = [
-                encoding[password_bits + i][0].to_bytes().to_vec(),
-                encoding[password_bits + i][1].to_bytes().to_vec(),
+                encoding[password_bits + i][0].as_bytes().to_vec(),
+                encoding[password_bits + i][1].as_bytes().to_vec(),
             ];
             mask_encoding.push(bit_encoding);
         }
@@ -336,7 +336,7 @@ impl OneOfManyKey {
 
         // 3. Encode the masked password
         instrument::begin("Encode masked password", E_COMP_COLOR);
-        let encoding_length = encoding[0][0].to_bytes().len();
+        let encoding_length = encoding[0][0].as_bytes().len();
         let mut evaluator_encoding = vec![0u8; password_bits * encoding_length];
         for i in 0..password_bits {
             let byte = masked_password[i / 8];
@@ -344,7 +344,7 @@ impl OneOfManyKey {
 
             let encoded_row =
                 unsafe { vector_row_mut(&mut evaluator_encoding, i, encoding_length) };
-            xor_bytes_inplace(encoded_row, encoding[i][bit as usize].to_bytes().as_slice());
+            xor_bytes_inplace(encoded_row, encoding[i][bit as usize].as_bytes().as_slice());
         }
         instrument::end();
 

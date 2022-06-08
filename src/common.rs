@@ -1,7 +1,6 @@
 // Common functionality for all modules.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
-// TODO: Make result type more pleasant and maybe switch to anyhow.
 
 pub trait ChannelSender: Send {
     fn send(&self, data: &[u8]) -> Result<()>;

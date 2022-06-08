@@ -23,8 +23,8 @@ plots:
 	gnuplot ot_throughput.plt
 	gnuplot ot_apricot.plt
 	gnuplot ot_apricot_throughput.plt
-	gnuplot ot_apricot__legacy_.plt
-	gnuplot ot_apricot__legacy__throughput.plt
+	gnuplot ot_apricot_classic.plt
+	gnuplot ot_apricot_classic_throughput.plt
 	gnuplot ot_chou_orlandi.plt
 	gnuplot ot_chou_orlandi_throughput.plt
 	gnuplot polynomial_multiply_reduce.plt
@@ -33,3 +33,9 @@ plots:
 	gnuplot polynomial_multiply_reduce_generic_implementation_throughput.plt
 	gnuplot polynomial_multiply_reduce_x86_implementation.plt
 	gnuplot polynomial_multiply_reduce_x86_implementation_throughput.plt
+
+clean:
+	rm -rf *.plt
+	rm -rf data/*.dat
+	rm -rf out/*.pdf
+	rm -rf out/*.tex
