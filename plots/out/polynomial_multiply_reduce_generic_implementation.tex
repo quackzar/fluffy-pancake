@@ -1,24 +1,29 @@
-% GNUPLOT: LaTeX picture
-\setlength{\unitlength}{0.240900pt}
+% GNUPLOT: LaTeX2e picture (pict2e)
+\setlength{\unitlength}{0.120450pt}
 \ifx\plotpoint\undefined\newsavebox{\plotpoint}\fi
-\sbox{\plotpoint}{\rule[-0.200pt]{0.400pt}{0.400pt}}%
-\begin{picture}(1500,900)(0,0)
-\sbox{\plotpoint}{\rule[-0.200pt]{0.400pt}{0.400pt}}%
-\put(191.0,775.0){\rule[-0.200pt]{4.818pt}{0.400pt}}
-\put(171,775){\makebox(0,0)[r]{4 µs}}
-\put(1085.0,775.0){\rule[-0.200pt]{4.818pt}{0.400pt}}
-\put(191.0,131.0){\rule[-0.200pt]{0.400pt}{155.380pt}}
-\put(191.0,131.0){\rule[-0.200pt]{220.183pt}{0.400pt}}
-\put(1105.0,131.0){\rule[-0.200pt]{0.400pt}{155.380pt}}
-\put(191.0,776.0){\rule[-0.200pt]{220.183pt}{0.400pt}}
-\put(30,453){\makebox(0,0){Runtime}}
-\put(648,29){\makebox(0,0){Number of Element}}
-\put(648,838){\makebox(0,0){Polynomial Multiply Reduce}}
-\put(945,735){\makebox(0,0)[r]{Generic Implementation}}
-\put(965.0,735.0){\rule[-0.200pt]{24.090pt}{0.400pt}}
-\put(650,700){\usebox{\plotpoint}}
-\put(191.0,131.0){\rule[-0.200pt]{0.400pt}{155.380pt}}
-\put(191.0,131.0){\rule[-0.200pt]{220.183pt}{0.400pt}}
-\put(1105.0,131.0){\rule[-0.200pt]{0.400pt}{155.380pt}}
-\put(191.0,776.0){\rule[-0.200pt]{220.183pt}{0.400pt}}
+\ifx\transparent\undefined%
+    \providecommand{\gpopaque}{}%
+    \providecommand{\gptransparent}[2]{\color{.!#2}}%
+\else%
+    \providecommand{\gpopaque}{\transparent{1.0}}%
+    \providecommand{\gptransparent}[2]{\transparent{#1}}%
+\fi%
+\begin{picture}(3000,1800)(0,0)
+\miterjoin\buttcap
+\color{black}
+\sbox{\plotpoint}{\rule[-0.400pt]{0.800pt}{0.800pt}}%
+\linethickness{0.8pt}%
+\Line(390,1547)(431,1547)
+\Line(2209,1547)(2168,1547)
+\put(349,1547){\makebox(0,0)[r]{4 µs}}
+\polygon(390,1550)(390,265)(2209,265)(2209,1550)
+\put(72,907){\rotatebox{-270}{\makebox(0,0){Runtime}}}
+\put(1299,58){\makebox(0,0){Number of Element}}
+\put(1881,1467){\makebox(0,0)[r]{Generic Implementation}}
+\color[rgb]{0.58,0.00,0.83}
+\Line(1922,1467)(2127,1467)
+\Line(1304,1399)(1304,1399)
+\color{black}
+\polygon(390,1550)(390,265)(2209,265)(2209,1550)
+\put(1299,1674){\makebox(0,0){Polynomial Multiply Reduce}}
 \end{picture}

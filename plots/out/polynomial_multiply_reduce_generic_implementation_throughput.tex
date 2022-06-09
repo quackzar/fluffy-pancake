@@ -1,27 +1,32 @@
-% GNUPLOT: LaTeX picture
-\setlength{\unitlength}{0.240900pt}
+% GNUPLOT: LaTeX2e picture (pict2e)
+\setlength{\unitlength}{0.120450pt}
 \ifx\plotpoint\undefined\newsavebox{\plotpoint}\fi
-\sbox{\plotpoint}{\rule[-0.200pt]{0.400pt}{0.400pt}}%
-\begin{picture}(1500,900)(0,0)
-\sbox{\plotpoint}{\rule[-0.200pt]{0.400pt}{0.400pt}}%
-\put(211.0,131.0){\rule[-0.200pt]{4.818pt}{0.400pt}}
-\put(191,131){\makebox(0,0)[r]{$262144$}}
-\put(1085.0,131.0){\rule[-0.200pt]{4.818pt}{0.400pt}}
-\put(211.0,776.0){\rule[-0.200pt]{4.818pt}{0.400pt}}
-\put(191,776){\makebox(0,0)[r]{$524288$}}
-\put(1085.0,776.0){\rule[-0.200pt]{4.818pt}{0.400pt}}
-\put(211.0,131.0){\rule[-0.200pt]{0.400pt}{155.380pt}}
-\put(211.0,131.0){\rule[-0.200pt]{215.365pt}{0.400pt}}
-\put(1105.0,131.0){\rule[-0.200pt]{0.400pt}{155.380pt}}
-\put(211.0,776.0){\rule[-0.200pt]{215.365pt}{0.400pt}}
-\put(30,453){\makebox(0,0){Throughput in Element/s}}
-\put(658,29){\makebox(0,0){Number of Element}}
-\put(658,838){\makebox(0,0){Polynomial Multiply Reduce}}
-\put(945,735){\makebox(0,0)[r]{Generic Implementation}}
-\put(965.0,735.0){\rule[-0.200pt]{24.090pt}{0.400pt}}
-\put(660,179){\usebox{\plotpoint}}
-\put(211.0,131.0){\rule[-0.200pt]{0.400pt}{155.380pt}}
-\put(211.0,131.0){\rule[-0.200pt]{215.365pt}{0.400pt}}
-\put(1105.0,131.0){\rule[-0.200pt]{0.400pt}{155.380pt}}
-\put(211.0,776.0){\rule[-0.200pt]{215.365pt}{0.400pt}}
+\ifx\transparent\undefined%
+    \providecommand{\gpopaque}{}%
+    \providecommand{\gptransparent}[2]{\color{.!#2}}%
+\else%
+    \providecommand{\gpopaque}{\transparent{1.0}}%
+    \providecommand{\gptransparent}[2]{\transparent{#1}}%
+\fi%
+\begin{picture}(3000,1800)(0,0)
+\miterjoin\buttcap
+\color{black}
+\sbox{\plotpoint}{\rule[-0.400pt]{0.800pt}{0.800pt}}%
+\linethickness{0.8pt}%
+\Line(431,265)(472,265)
+\Line(2209,265)(2168,265)
+\put(390,265){\makebox(0,0)[r]{$262144$}}
+\Line(431,1550)(472,1550)
+\Line(2209,1550)(2168,1550)
+\put(390,1550){\makebox(0,0)[r]{$524288$}}
+\polygon(431,1550)(431,265)(2209,265)(2209,1550)
+\put(72,907){\rotatebox{-270}{\makebox(0,0){Throughput in Element/s}}}
+\put(1320,58){\makebox(0,0){Number of Element}}
+\put(1881,1467){\makebox(0,0)[r]{Generic Implementation}}
+\color[rgb]{0.58,0.00,0.83}
+\Line(1922,1467)(2127,1467)
+\Line(1324,360)(1324,360)
+\color{black}
+\polygon(431,1550)(431,265)(2209,265)(2209,1550)
+\put(1320,1674){\makebox(0,0){Polynomial Multiply Reduce}}
 \end{picture}

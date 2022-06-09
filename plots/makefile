@@ -14,6 +14,7 @@ plots:
 	gnuplot garbled_circuits_garble.plt
 	gnuplot garbled_circuits_garble_throughput.plt
 	gnuplot one_of_many_fpake.plt
+	gnuplot one_of_many_mfpake_comparison.plt
 	gnuplot one_of_many_fpake_throughput.plt
 	gnuplot one_of_many_fpake_mfpake.plt
 	gnuplot one_of_many_fpake_mfpake_throughput.plt

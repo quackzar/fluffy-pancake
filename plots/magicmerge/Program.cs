@@ -269,7 +269,7 @@ clean:
         plotFile.WriteLine(@$"set ylabel ""{yLabel}""");
         plotFile.WriteLine(@"set logscale y 2");
 #if LATEX
-        plotFile.WriteLine(@"set term latex");
+        plotFile.WriteLine(@"set term pict2e color linewidth 2");
 #else
         plotFile.WriteLine(@"set term pdf font ""Computer Modern,10""");
 #endif
