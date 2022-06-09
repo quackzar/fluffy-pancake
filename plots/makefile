@@ -18,7 +18,12 @@ plots:
 	gnuplot one_of_many_fpake_mfpake.plt
 	gnuplot one_of_many_fpake_mfpake_throughput.plt
 	gnuplot one_of_many_fpake_mfpake_hd.plt
+	gnuplot one_of_many_fpake_mfpake_hd_comparison.plt
 	gnuplot one_of_many_fpake_mfpake_hd_throughput.plt
+	gnuplot one_of_many_fpake_v1_v1.plt
+	gnuplot one_of_many_fpake_v1_v1_throughput.plt
+	gnuplot one_of_many_fpake_v2_v2.plt
+	gnuplot one_of_many_fpake_v2_v2_throughput.plt
 	gnuplot ot.plt
 	gnuplot ot_throughput.plt
 	gnuplot ot_apricot.plt

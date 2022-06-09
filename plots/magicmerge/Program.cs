@@ -299,6 +299,12 @@ clean:
         {
             var value = 1L << i;
 
+            if (time < 1d)
+            {
+                var valueMicroseconds = time * 1000d;
+                return $"\"{valueMicroseconds.ToString("N0", _culture)} µs\" {time.ToString("N4", _culture)}";
+            }
+
             if (time < 1000d)
             {
                 return $"\"{time.ToString("N0", _culture)} ms\" {value}";
@@ -307,7 +313,7 @@ clean:
             var seconds = time / 1000;
             return $"\"{seconds.ToString("N2", _culture)} s\" {value}";
         }
-        var yTics = string.Join(", ", Enumerable.Range(0, 30).Select(i => FormatTime(Math.Pow(2, i), i)));
+        var yTics = string.Join(", ", Enumerable.Range(-8, 30).Select(i => FormatTime(Math.Pow(2, i), i)));
         plotFile.WriteLine($@"set ytics ({yTics})");
         plotFile.WriteLine();
 
