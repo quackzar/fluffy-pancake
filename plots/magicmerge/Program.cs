@@ -291,7 +291,7 @@ clean:
         
         plotFile.WriteLine();
 
-        var xTics = string.Join(", ", Enumerable.Range(1, 30).Select(i => $"\"2^{{{i}}}\" {(long) Math.Pow(2, i)}"));
+        var xTics = string.Join(", ", Enumerable.Range(1, 30).Select(i => $"\"$2^{{{i}}}$\" {(long) Math.Pow(2, i)}"));
         plotFile.WriteLine($@"set xtics ({xTics})");
         plotFile.WriteLine();
 
@@ -345,7 +345,7 @@ clean:
         
         plotFile.WriteLine();
 
-        var xTics = string.Join(", ", Enumerable.Range(1, 30).Select(i => $"\"2^{{{i}}}\" {(long) Math.Pow(2, i)}"));
+        var xTics = string.Join(", ", Enumerable.Range(1, 30).Select(i => $"\"$2^{{{i}}}\" {(long) Math.Pow(2, i)}"));
         plotFile.WriteLine($@"set xtics ({xTics})");
         plotFile.WriteLine();
 
