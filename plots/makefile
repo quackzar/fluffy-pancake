@@ -18,6 +18,7 @@ plots:
 	gnuplot one_of_many_fpake_throughput.plt
 	gnuplot one_of_many_fpake_mfpake.plt
 	gnuplot one_of_many_fpake_mfpake_throughput.plt
+	gnuplot one_of_many_fpake_mfpake_og_comparison.plt
 	gnuplot one_of_many_fpake_mfpake_hd.plt
 	gnuplot one_of_many_fpake_mfpake_hd_comparison.plt
 	gnuplot one_of_many_fpake_mfpake_hd_throughput.plt
