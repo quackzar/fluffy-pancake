@@ -78,6 +78,8 @@ internal static class Program
 
     internal static void Main(string[] args)
     {
+        var outputCulture = CultureInfo.GetCultureInfo("en-US");
+        
         var inputFolder = args[0];
         var dataFolder = args[1];
         var plotsFolder = args[2];
@@ -158,12 +160,12 @@ internal static class Program
             var elements = double.Parse(columns[2]);
             var throughputValue = columns[3];
             var throughputType = columns[4];
-            var time = double.Parse(columns[5]);
+            var time = double.Parse(columns[5], outputCulture);
             var count = double.Parse(columns[7]);
 
             var average = time / count;
             var throughput = elements / (average / 1_000_000_000d);
-            var span = TimeSpan.FromMilliseconds(average / (1000d * 1000d));
+            var span = TimeSpan.FromMilliseconds(average / 1000d / 1000d);
 
             var entry = new BenchmarkEntry
             {
@@ -181,7 +183,6 @@ internal static class Program
         }
 
         // Output the data as .dat files
-        var outputCulture = CultureInfo.GetCultureInfo("en-US");
         foreach (var group in groups.Values)
         {
             foreach (var benchmark in group.Benchmarks.Values)
