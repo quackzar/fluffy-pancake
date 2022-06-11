@@ -12,4 +12,4 @@ set xtics ("$2^{1}$" 2, "$2^{2}$" 4, "$2^{3}$" 8, "$2^{4}$" 16, "$2^{5}$" 32, "$
 
 set ytics ("1 µs" 0.0010, "2 µs" 0.0020, "4 µs" 0.0039, "8 µs" 0.0078, "16 µs" 0.0156, "31 µs" 0.0312, "62 µs" 0.0625, "125 µs" 0.1250, "250 µs" 0.2500, "500 µs" 0.5000, "1 ms" 1, "2 ms" 2, "4 ms" 4, "8 ms" 8, "16 ms" 16, "32 ms" 32, "64 ms" 64, "128 ms" 128, "256 ms" 256, "512 ms" 512, "1.02 s" 1024, "2.05 s" 2048, "4.10 s" 4096, "8.19 s" 8192, "16.38 s" 16384, "32.77 s" 32768, "65.54 s" 65536, "131.07 s" 131072, "262.14 s" 262144, "524.29 s" 524288)
 
-plot "data/one_of_many_fpake_mfpake.dat" using 1:2 title "mfPAKE" with lines,"data/one_of_many_fpake_mfpake_hd.dat" using 1:2 title "mfPAKE,hd" with lines, 230.2858 title "fPAKE" with lines dashtype 2
+plot "data/one_of_many_fpake_mfpake.dat" using 1:2 title "mfPAKE" with lines,"data/one_of_many_fpake_mfpake_hd.dat" using 1:2 title "mfPAKE,hd" with lines, 23.02858 title "fPAKE" with lines dashtype 2
